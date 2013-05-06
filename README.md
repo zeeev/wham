@@ -12,7 +12,8 @@ Output:
 
 A tab delimited text file.
 Columns:
-1. Seqid
+
+1. Seqid.
 2. Position in the pileup. 
 3. Number of "bad reads" covering the position in the pileup.
 4. Number of reads covering the position in the pileup.
