@@ -31,7 +31,7 @@ Boost - functions should be stable, but built on 1.42
 
 g++ -o wham -I ../bamtools-1.0.2/include/ \
 -L $PATH/bamtools-1.0.2/lib/ -I ../zk_lib/ -I $PATH/boost/1.42.0/include/ \
--lbamtools wham.cpp ../whamlib/*cpp
+-lbamtools wham.cpp ../lib/*cpp
 
 Details:
 
