@@ -24,7 +24,9 @@ Columns:
 Installing
 
 Dependencies:
+
 Bamtools 
+
 Boost - functions should be stable, but built on 1.42 
 
 g++ -o wham -I ../bamtools-1.0.2/include/ \
