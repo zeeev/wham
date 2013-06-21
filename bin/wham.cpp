@@ -6,7 +6,7 @@
 //  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
 //
 
-//g++ -o read_oddity -I ../bamtools-1.0.2/include/ -L ../bamtools-1.0.2/lib/ -I ../zk_lib/ -I /uufs/chpc.utah.edu/sys/pkg/boost/1.42.0/include/ -lbamtools wham.cpp ../zk_lib/*cpp
+//g++ -o read_oddity -I ../bamtools-1.0.2/include/ -L ../bamtools-1.0.2/lib/ -I ../lib/ -I boost -lbamtools wham.cpp ../lib/*cpp
 
 #include  "api/api_global.h"
 #include  "api/BamReader.h"
