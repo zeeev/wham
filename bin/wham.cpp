@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
 //
 
+// starting development
+
 //g++ -o read_oddity -I ../bamtools-1.0.2/include/ -L ../bamtools-1.0.2/lib/ -I ../lib/ -I boost -lbamtools wham.cpp ../lib/*cpp
 
 #include  "api/api_global.h"
