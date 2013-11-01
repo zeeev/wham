@@ -32,7 +32,8 @@ Dependencies:
   LibZ:
     1. No action should be required under most linux distributions.
 
-  Bamtools: 
+Bamtools:
+
 1.  git clone https://github.com/pezmaster31/bamtools
 2.  cd bamtools
 3.  mkdir build
