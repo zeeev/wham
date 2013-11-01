@@ -43,22 +43,16 @@ Bamtools:
 
 Intalling Wham:
 
-  Wham:
-   1.  git clone git://github.com/pezmaster31/bamtools.git
+Wham:
    
-   2.  cd wham
-   
-   3.  mkdir build
-   
-   4.  cd build
-   
-   5.  cmake ..
-  
-   6.  make install
-   
-   7.  cd ..
-   
-   8.  rm -rf build
+1.  git clone git://github.com/pezmaster31/bamtools.git
+2.  cd wham
+3.  mkdir build
+4.  cd build
+5.  cmake ..
+6.  make install
+7.  cd ..
+8.  rm -rf build
 
 
 Details:
