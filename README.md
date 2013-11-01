@@ -1,4 +1,4 @@
-May 6-th 2013
+
 
 Purpose:
 Wham is a suite of tools designed to help identify and classify alignment regions
@@ -21,17 +21,39 @@ Columns:
 6. Probability of observing K bad reads out of N trials (See Details)
 7. Global fraction of bad reads.
 
-Installing
+---Installing---
 
 Dependencies:
 
-Bamtools 
+  Cmake:
+    Make your life easier and install Cmake.
+    No action should be required under most linux distributions.  If yes then use a package manager to install cmake.
 
-Boost - functions should be stable, but built on 1.42 
+  Boost - At least 1.42:
+    No actions should be required under most linux distributions. 
+  LibZ:
+    No action should be required under most linux distributions.
 
-g++ -o wham -I ../bamtools-1.0.2/include/ \
--L $PATH/bamtools-1.0.2/lib/ -I ../lib/ -I $PATH/boost/1.42.0/include/ \
--lbamtools wham.cpp ../lib/*cpp
+  Bamtools: 
+      git clone https://github.com/pezmaster31/bamtools
+      cd bamtools
+      mkdir build
+      cd build
+      cmake ..
+      sudo make install
+
+Intalling Wham:
+
+  Wham:
+    git clone git://github.com/pezmaster31/bamtools.git
+    cd wham
+    mkdir build
+    cd build
+    cmake ..
+    make install
+    cd ..
+    rm -rf build
+
 
 Details:
 
