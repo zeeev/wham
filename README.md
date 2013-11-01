@@ -33,17 +33,12 @@ Dependencies:
     1. No action should be required under most linux distributions.
 
   Bamtools: 
-    1.  git clone https://github.com/pezmaster31/bamtools
-    
-    2.  cd bamtools
-    
-    3.  mkdir build
-    
-    4.  cd build
-    
-    5.  cmake ..
-    
-    6.  sudo make install
+1.  git clone https://github.com/pezmaster31/bamtools
+2.  cd bamtools
+3.  mkdir build
+4.  cd build
+5.  cmake ..
+6.  sudo make install
 
 Intalling Wham:
 
