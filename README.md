@@ -1,4 +1,3 @@
-
 Purpose:
 Wham is a suite of tools designed to help identify and classify alignment regions
 that are of poor quality.  Currently there is one program wham.cpp
@@ -35,22 +34,34 @@ Dependencies:
 
   Bamtools: 
     1.  git clone https://github.com/pezmaster31/bamtools
+    
     2.  cd bamtools
+    
     3.  mkdir build
+    
     4.  cd build
+    
     5.  cmake ..
+    
     6.  sudo make install
 
 Intalling Wham:
 
   Wham:
-   1. git clone git://github.com/pezmaster31/bamtools.git
+   1.  git clone git://github.com/pezmaster31/bamtools.git
+   
    2.  cd wham
+   
    3.  mkdir build
+   
    4.  cd build
+   
    5.  cmake ..
+  
    6.  make install
+   
    7.  cd ..
+   
    8.  rm -rf build
 
 
