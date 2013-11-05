@@ -26,7 +26,7 @@ Columns:
 6. Probability of observing K bad reads out of N trials (See Details)
 7. Global fraction of bad reads.
 
-Installing
+Installing:
 -----
 
 Dependencies:
