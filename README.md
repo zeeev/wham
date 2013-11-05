@@ -1,5 +1,3 @@
-
-
 Purpose:
 Wham is a suite of tools designed to help identify and classify alignment regions
 that are of poor quality.  Currently there is one program wham.cpp
@@ -26,33 +24,35 @@ Columns:
 Dependencies:
 
   Cmake:
-    Make your life easier and install Cmake.
-    No action should be required under most linux distributions.  If yes then use a package manager to install cmake.
+    Make your life easier and install Cmake.  No action should be required under most linux distributions. 
+    If yes then use a package manager to install cmake.
 
   Boost - At least 1.42:
-    No actions should be required under most linux distributions. 
+    1.  Boot devel should be installed via Yum or other package manager.
   LibZ:
-    No action should be required under most linux distributions.
+    1. No action should be required under most linux distributions.
 
-  Bamtools: 
-      git clone https://github.com/pezmaster31/bamtools
-      cd bamtools
-      mkdir build
-      cd build
-      cmake ..
-      sudo make install
+Bamtools:
+
+1.  git clone https://github.com/pezmaster31/bamtools
+2.  cd bamtools
+3.  mkdir build
+4.  cd build
+5.  cmake ..
+6.  sudo make install
 
 Intalling Wham:
 
-  Wham:
-    git clone git://github.com/pezmaster31/bamtools.git
-    cd wham
-    mkdir build
-    cd build
-    cmake ..
-    make install
-    cd ..
-    rm -rf build
+Wham:
+   
+1.  git clone git://github.com/pezmaster31/bamtools.git
+2.  cd wham
+3.  mkdir build
+4.  cd build
+5.  cmake ..
+6.  make install
+7.  cd ..
+8.  rm -rf build
 
 
 Details:
