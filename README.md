@@ -1,4 +1,5 @@
 Purpose:
+------
 Wham is a suite of tools designed to help identify and classify alignment regions
 that are of poor quality.  Currently there is one program wham.cpp
 
