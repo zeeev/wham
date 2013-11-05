@@ -3,14 +3,17 @@ Wham is a suite of tools designed to help identify and classify alignment region
 that are of poor quality.  Currently there is one program wham.cpp
 
 Testing:
+-----
 
 sh /test/run-test.sh
 
 Usage:
+-----
 
 wham mybam.bam mybam.bai scaffoldX 
 
 Output:
+-----
 
 A tab delimited text file.
 Columns:
@@ -23,7 +26,8 @@ Columns:
 6. Probability of observing K bad reads out of N trials (See Details)
 7. Global fraction of bad reads.
 
----Installing---
+Installing
+-----
 
 Dependencies:
 
