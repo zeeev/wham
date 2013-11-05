@@ -64,6 +64,7 @@ Installing:
 
 
 Details:
+-----
 
 The Samtools flags are hashed across the entire scaffold.  From this the global fraction
 of bad reads is calculated.  Then the scaffold is "pileup."  For each position with 
