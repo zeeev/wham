@@ -24,7 +24,6 @@ using namespace std;
 using namespace BamTools;
 using namespace boost;
 
-
 void printFlagCounts(std::map<int, int> flags){
     
   for(map<int, int>::iterator it = flags.begin() ; it != flags.end(); it++){
@@ -74,13 +73,27 @@ flagPileupInfo processFlagCounts(std::map<int, int> flags){
   return c;
 }
 
+std::string get_index(const std::string filename){
+
+  std::string r = filename;
+  std::string ind = "bai";
+
+  r += ind;
+
+  return r;
+
+}
 
 int main(int argc, const char * argv[])
 {
   std::string filename  = argv[1];
-  std::string fileindex = argv[1]; 
-  std::string seqid     = argv[2];  
-  fileindex += ".bai";
+
+  std::string fileindex = argv[2];
+
+  std::string seqid     = argv[3];  
+
+  
+  //  std::string fileindex = get_index(filename);
 
   BamTools::BamReader reader;
   
