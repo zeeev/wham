@@ -30,7 +30,7 @@ Columns:
 Installing:
 -----
 
-#Dependencies:
+###Dependencies:
 
   Cmake:
     Make your life easier and install Cmake.  No action should be required under most linux distributions. 
@@ -41,7 +41,7 @@ Installing:
   LibZ:
     1. No action should be required under most linux distributions.
 
-#Bamtools:
+###Bamtools:
 
 1.  git clone https://github.com/pezmaster31/bamtools
 2.  cd bamtools
@@ -51,7 +51,7 @@ Installing:
 6.  sudo make install
 
 
-#Wham:
+###Wham:
    
 1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
