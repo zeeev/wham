@@ -49,7 +49,7 @@ Intalling Wham:
 
 Wham:
    
-1.  git clone git://github.com/pezmaster31/bamtools.git
+1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
 3.  mkdir build
 4.  cd build
