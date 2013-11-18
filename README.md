@@ -1,12 +1,20 @@
 Purpose:
+------
 Wham is a suite of tools designed to help identify and classify alignment regions
 that are of poor quality.  Currently there is one program wham.cpp
 
-Usage:
+Testing:
+-----
 
-wham mybam.bam scaffoldX 
+sh /test/run-test.sh
+
+Usage:
+-----
+
+wham mybam.bam mybam.bai scaffoldX 
 
 Output:
+-----
 
 A tab delimited text file.
 Columns:
@@ -19,9 +27,10 @@ Columns:
 6. Probability of observing K bad reads out of N trials (See Details)
 7. Global fraction of bad reads.
 
----Installing---
+Installing:
+-----
 
-Dependencies:
+###Dependencies:
 
   Cmake:
     Make your life easier and install Cmake.  No action should be required under most linux distributions. 
@@ -32,7 +41,7 @@ Dependencies:
   LibZ:
     1. No action should be required under most linux distributions.
 
-Bamtools:
+###Bamtools:
 
 1.  git clone https://github.com/pezmaster31/bamtools
 2.  cd bamtools
@@ -41,11 +50,10 @@ Bamtools:
 5.  cmake ..
 6.  sudo make install
 
-Intalling Wham:
 
-Wham:
+###Wham:
    
-1.  git clone git://github.com/pezmaster31/bamtools.git
+1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
 3.  mkdir build
 4.  cd build
@@ -56,6 +64,7 @@ Wham:
 
 
 Details:
+-----
 
 The Samtools flags are hashed across the entire scaffold.  From this the global fraction
 of bad reads is calculated.  Then the scaffold is "pileup."  For each position with 
