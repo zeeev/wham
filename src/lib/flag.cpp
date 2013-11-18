@@ -8,11 +8,11 @@
 
 #include "flag.h"
 
-#define NONE                    0x0
-#define MULTIPLE_SEGMENTS       0x1   // paired end ie two reads
-#define PAIR_ALIGNER_BLESS      0x2   // both pairs are aligned - insert size ect via aligner
-#define UNMAPPED                0x4   // read is not mapped
-#define PARTNER_UNMAPPED        0x8   // pair is not mapped
+#define NONE                    0x00
+#define MULTIPLE_SEGMENTS       0x01   // paired end ie two reads
+#define PAIR_ALIGNER_BLESS      0x02   // both pairs are aligned - insert size ect via aligner
+#define UNMAPPED                0x04   // read is not mapped
+#define PARTNER_UNMAPPED        0x08   // pair is not mapped
 #define REVERSE_STRAND          0x10
 #define PARTNER_REVERSE_STRAND  0x20
 #define FIRST                   0x40
@@ -59,11 +59,11 @@ bool flag::isUnMapped(void){
 }
 
 bool flag::isPairMapped(void){
-  if((bamflag & PARTNER_UNMAPPED) == 0 ){
-    return true;
+  if((bamflag & PARTNER_UNMAPPED)){
+    return false;
   }
   else{
-    return false;
+    return true;
   }
 }
 
@@ -79,7 +79,7 @@ bool flag::bothUnmapped(void){
 
 // RL
 bool flag::sameStrand(void){
-  if((bamflag & BOTH_REVERSE) !=0){
+  if(bamflag & 0x20 & 0x10){
     return true;
   }
   else{
@@ -90,5 +90,3 @@ bool flag::sameStrand(void){
 int flag::returnFlag(void){
   return bamflag;
 }
-
-

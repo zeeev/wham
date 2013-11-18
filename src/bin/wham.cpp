@@ -6,10 +6,6 @@
 //  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
 //
 
-// starting development
-
-//g++ -o read_oddity -I ../bamtools-1.0.2/include/ -L ../bamtools-1.0.2/lib/ -I ../lib/ -I boost -lbamtools wham.cpp ../lib/*cpp
-
 #include  "api/api_global.h"
 #include  "api/BamReader.h"
 
@@ -24,12 +20,8 @@ using namespace std;
 using namespace BamTools;
 using namespace boost;
 
-void printFlagCounts(std::map<int, int> flags){
-    
-  for(map<int, int>::iterator it = flags.begin() ; it != flags.end(); it++){
-    std::cerr << "flag:\t" << it->first << "\t" << "count:\t" << it->second << "\n";
-  }
-}
+//------------------------------------------------------------
+//------------------------------------------------------------
 
 struct flagPileupInfo{
   int good;
@@ -37,6 +29,17 @@ struct flagPileupInfo{
   int total_reads;
 };
 
+//------------------------------------------------------------
+//------------------------------------------------------------
+
+void printFlagCounts(std::map<int, int> flags){    
+  for(map<int, int>::iterator it = flags.begin() ; it != flags.end(); it++){
+    std::cerr << "flag:\t" << it->first << "\t" << "count:\t" << it->second << "\n";
+  }
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------
 
 flagPileupInfo processFlagCounts(std::map<int, int> flags){
     
@@ -46,9 +49,9 @@ flagPileupInfo processFlagCounts(std::map<int, int> flags){
         
     c.total_reads += it->second;
         
-    int passFail = 0;
-        
+    int passFail = 0;     
     flag currentflag;
+
     currentflag.addFlag(it->first);
     if(currentflag.returnFlag() == 0){
       passFail = 1;
@@ -69,118 +72,79 @@ flagPileupInfo processFlagCounts(std::map<int, int> flags){
       c.bad += it->second;
     }
   }
-    
   return c;
 }
 
-std::string get_index(const std::string filename){
+//------------------------------------------------------------
+//------------------------------------------------------------
 
-  std::string r = filename;
-  std::string ind = "bai";
+void prepFileIterator(const std::string filename, const std::string fileindex, const std::string seqid, BamTools::BamReader & reader){
 
-  r += ind;
-
-  return r;
-
-}
-
-int main(int argc, const char * argv[])
-{
-  std::string filename  = argv[1];
-
-  std::string fileindex = argv[2];
-
-  std::string seqid     = argv[3];  
-
-  
-  //  std::string fileindex = get_index(filename);
-
-  BamTools::BamReader reader;
-  
   if ( ! reader.Open(filename)){
-    std::cerr << "FATAL: cannot open bam index\n";     
-    return 1;
+    std::cerr << "FATAL: cannot open bam index\n";
+    exit(EXIT_FAILURE);
   }
   std::cerr << "INFO: " << filename << " opened for reading\n";
   if( ! reader.OpenIndex(fileindex)){
     std::cerr << "FATAL: cannot open bam index\n";
-    return 1;
+    exit(EXIT_FAILURE);
   }
   std::cerr << "INFO: " << fileindex << " opened for reading\n";
-  BamTools::SamHeader header;
-  
-  header = reader.GetHeader();
 
-  BamTools::SamSequenceDictionary seqs;
-  
-  seqs = header.Sequences;
-  
+  int i ;
+  BamTools::SamHeader           header = reader.GetHeader();
+  BamTools::SamSequenceDictionary seqs = header.Sequences;
+
   if(! seqs.Contains(seqid)){
-    std::cerr << "FATAL: cannot find seqid in SAM header" << "\n";
-    return 1; 
+    std::cerr << "FATAL: cannot find seqid in BAM header" << "\n";
+    exit(EXIT_FAILURE);
   }
 
-   SamSequence seq;
-   int i = 0;
-   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
-   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-   for ( ; seqIter != seqEnd; ++seqIter ) {
-     seq = (*seqIter);
-     //     cout << "Name: " << seq.Name << "\tLength: " << seq.Length << endl;
+  BamTools::SamSequence seq;
 
-     std::string sname = seq.Name;
-     if(sname.compare(seqid) == 0){
-       break;
-     }
-     i++;
-   }
+  BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
+  BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
+  for ( ; seqIter != seqEnd; ++seqIter ) {
+    seq = (*seqIter);
+    std::string sname = seq.Name;
+    if(sname.compare(seqid) == 0){
+      break;
+    }
+    i++;
+  }
 
-   std::cerr << "INFO: " << "scaffold: " << seq.Name << " ID: " << i << " Seq len: " << seq.Length << "\n"; 
+  if(! reader.SetRegion(i, 0, i, boost::lexical_cast<int>(seq.Length))){
+    std::cerr << "FATAL: cannot set region\n";
+    exit(EXIT_FAILURE);
+  }
 
-   if(! reader.SetRegion(i, 0, i, boost::lexical_cast<int>(seq.Length))){
-     std::cerr << "FATAL: cannot set region\n";    
-     return 1;
-   }
+  std::cerr << "INFO: " << "scaffold: " << seq.Name << " ID: " << i << " Seq len: " << seq.Length << "\n";
 
-  map<int, int> flag_count;
-    
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------
+void collectFlags(BamTools::BamReader & reader, map <int, int> & flag_count){
+
   read_pileup zk;
   BamTools::BamAlignment al;
-    
+
   while(reader.GetNextAlignment(al)){
-    //    if(!al.IsPaired()){
-    //  continue;
-    //}
     flag_count[al.AlignmentFlag]++;
   }
+
   std::cerr << "flagstat done\n";
-    
-  printFlagCounts(flag_count);
-  flagPileupInfo global = processFlagCounts(flag_count);
-    
-  BamTools::BamReader readerb;                                                                                
-                                                                                                             
-  if ( ! readerb.Open(filename)){                                                                             
-    std::cerr << "FATAL: cannot open bam index\n";                                                           
-    return 1;                                                                                                
-  }                                                                                                          
-  std::cerr << "INFO: " << filename << " opened for reading\n";                                              
-  if( ! readerb.OpenIndex(fileindex)){                                                                        
-    std::cerr << "FATAL: cannot open bam index\n";                                                           
-    return 1;                                                                                                
-  } 
+}
 
-    
-  if(! readerb.SetRegion(i, 0, i, boost::lexical_cast<int>(seq.Length))){                                    
-    std::cerr << "FATAL: cannot set region\n";                                                              
-    return 1;                                                                                               
-  }  
+//------------------------------------------------------------
+//------------------------------------------------------------
 
-
-  while(readerb.GetNextAlignment(al)){
-    // if(!al.IsPaired()){
-    //  continue;
-    // }
+void runPileup(BamTools::BamReader & reader, flagPileupInfo & global, const std::string seqid){
+                                                                                                                
+  read_pileup zk;
+  BamTools::BamAlignment al;
+  
+  while(reader.GetNextAlignment(al)){
 
       zk.proccess_alignment(al);
    
@@ -201,21 +165,41 @@ int main(int argc, const char * argv[])
             
       float gp = boost::lexical_cast<float>(global.bad) / boost::lexical_cast<float>(global.total_reads);
                  
-      //      boost::math::binomial_distribution<float> pdf =  boost::math::binomial_distribution<float>(t, gp);
-
-      //      float pp = boost::math::pdf(boost::math::binomial_distribution<float>(t, gp), b);
-            
       float sign = 1;
-            
-      //if(p < gp){
-      //	sign = -1;
-      //}     
-        
+                    
       float pp = boost::math::cdf(complement(boost::math::binomial_distribution<float>(t, gp), b));
-
-                
-      std::cout << seq.Name << "\t" << al.Position << "\t" << b << "\t" << t << "\t" << p << "\t" << pp << "\t" << gp << "\n";
+               
+      std::cout << seqid << "\t" << al.Position << "\t" << b << "\t" << t << "\t" << p << "\t" << pp << "\t" << gp << "\n";
     }
   }
-  std::cerr << "pileup prop done\n";
+  std::cerr << "wham wham done\n";
 }
+
+//------------------------------------------------------------
+//------------------------------------------------------------
+
+int main(int argc, const char * argv[])
+{
+  std::string filename  = argv[1];
+  std::string fileindex = argv[2];
+  std::string seqid     = argv[3];
+
+  BamTools::BamReader reader_a;
+  BamTools::BamReader reader_b;
+
+  prepFileIterator(filename, fileindex, seqid, reader_a);
+  prepFileIterator(filename, fileindex, seqid, reader_b);
+
+  map<int, int> flag_count;
+
+  collectFlags(reader_a, flag_count);
+  printFlagCounts(flag_count);
+
+  flagPileupInfo global = processFlagCounts(flag_count);
+
+  runPileup(reader_b, global, seqid);
+
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------

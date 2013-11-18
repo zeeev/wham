@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 2.6)
 
 project(WHAM CXX)
 
-
+set(CMAKE_CXX_FLAGS "-lboost_program_options")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
 set(SRC ${CMAKE_SOURCE_DIR}/src/lib/flag.cpp ${CMAKE_SOURCE_DIR}/src/lib/read_pileup.cpp)
@@ -25,9 +25,12 @@ include_directories(${CMAKE_SOURCE_DIR}/src/lib)
 link_directories(/usr/local/lib/bamtools/)
 link_directories(${CMAKE_SOURCE_DIR}/src/lib)
 
-add_executable(wham ${CMAKE_SOURCE_DIR}/src/bin/wham.cpp ${SRC} ${HEADER})
+add_executable(wham ${CMAKE_SOURCE_DIR}/src/bin/wham.cpp  ${SRC} ${HEADER})
+add_executable(whamy ${CMAKE_SOURCE_DIR}/src/bin/multi-wham.cpp  ${SRC} ${HEADER})
+target_link_libraries(wham ${lib} bamtools)
+target_link_libraries(whamy ${lib} bamtools)
 
-target_link_libraries( wham ${lib} bamtools)
+
 
 
 

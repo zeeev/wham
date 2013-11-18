@@ -60,13 +60,15 @@ void printvec(string base, vector<string> & data){
 void check_index(vector<string> & group){
 
   BamMultiReader mreaderz;
-  bool flag = 1;
-  flag = mreaderz.Open(group);
-  if(!flag) cout << "file didn't open \n";
+
+  if(! mreaderz.Open( group ) ){
+    cerr << "couldn't open file\n";
+  }
+
+
   
   if(! mreaderz.HasIndexes()){
-    flag = mreaderz.CreateIndexes();
-    
+    mreaderz.CreateIndexes();
   }
    
 
@@ -172,7 +174,7 @@ void run_regions(vector<string> & target, vector <string> & background){
     target_info[*it]++;
   }
 
-  printvec("total grouping", total);
+   printvec("total grouping", total);
 
   // cerr << "INFO: entering check_index\n";
 
@@ -184,7 +186,9 @@ void run_regions(vector<string> & target, vector <string> & background){
 
   // cerr << "INFO: opening BAMs and indices\n" << endl;
 
-  mreader.Open(total);
+  if(! mreader.Open(total)){
+    cerr << "cannot open bams.\n";
+  }
 
   mreader.LocateIndexes();
 
