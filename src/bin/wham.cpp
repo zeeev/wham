@@ -62,9 +62,9 @@ flagPileupInfo processFlagCounts(std::map<int, int> flags){
     if(! currentflag.isPairMapped()){
       passFail = 1;
     }
-    if(! currentflag.sameStrand()){
-      passFail = 1;
-    }
+    //    if(! currentflag.sameStrand()){
+    //	  passFail = 1;
+    //    }
     if(passFail == 0){
       c.good += it->second;
     }
@@ -91,7 +91,7 @@ void prepFileIterator(const std::string filename, const std::string fileindex, c
   }
   std::cerr << "INFO: " << fileindex << " opened for reading\n";
 
-  int i ;
+  int i =0 ;
   BamTools::SamHeader           header = reader.GetHeader();
   BamTools::SamSequenceDictionary seqs = header.Sequences;
 
@@ -112,6 +112,8 @@ void prepFileIterator(const std::string filename, const std::string fileindex, c
     }
     i++;
   }
+  
+  cerr << "i" << i << endl;
 
   if(! reader.SetRegion(i, 0, i, boost::lexical_cast<int>(seq.Length))){
     std::cerr << "FATAL: cannot set region\n";
@@ -131,6 +133,12 @@ void collectFlags(BamTools::BamReader & reader, map <int, int> & flag_count){
 
   while(reader.GetNextAlignment(al)){
     flag_count[al.AlignmentFlag]++;
+    
+    int pos = al.Position;
+    int flag = al.AlignmentFlag;
+
+    std::cerr << "DIAGNOSTICS" << "\t" << pos << "\t" << flag << endl;
+    
   }
 
   std::cerr << "flagstat done\n";
@@ -142,6 +150,7 @@ void collectFlags(BamTools::BamReader & reader, map <int, int> & flag_count){
 void runPileup(BamTools::BamReader & reader, flagPileupInfo & global, const std::string seqid){
                                                                                                                 
   read_pileup zk;
+
   BamTools::BamAlignment al;
   
   while(reader.GetNextAlignment(al)){
@@ -193,6 +202,7 @@ int main(int argc, const char * argv[])
   map<int, int> flag_count;
 
   collectFlags(reader_a, flag_count);
+
   printFlagCounts(flag_count);
 
   flagPileupInfo global = processFlagCounts(flag_count);

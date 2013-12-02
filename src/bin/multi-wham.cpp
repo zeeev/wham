@@ -12,6 +12,7 @@
 #include  "randomregion.h"
 #include  "flag.h"
 
+#include "boost/lexical_cast.hpp"
 #include "boost/algorithm/string.hpp"
 #include "boost/program_options.hpp"
 
@@ -32,10 +33,13 @@ struct posInfo
   int samestrand;
   vector<int> mapq;
   vector<int> flags;
+  vector<int> fragl;
 };
 
 //------------------------------------------------------------
 //------------------------------------------------------------
+
+/// split a string and return a vector
 
 vector<string> parse_groups(string  files){
 
@@ -48,6 +52,8 @@ vector<string> parse_groups(string  files){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// print a vector and a base string for the tag
+
 void printvec(string base, vector<string> & data){
 
   for(vector<string>::iterator it = data.begin(); it != data.end(); it++){
@@ -57,6 +63,8 @@ void printvec(string base, vector<string> & data){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// test if bam indecies exists and if they doesn't it creates them
+
 void check_index(vector<string> & group){
 
   BamMultiReader mreaderz;
@@ -64,10 +72,9 @@ void check_index(vector<string> & group){
   if(! mreaderz.Open( group ) ){
     cerr << "couldn't open file\n";
   }
-
-
   
-  if(! mreaderz.HasIndexes()){
+  if(! mreaderz.LocateIndexes()){
+    cerr << "INFO: wham didn't find index, creating one.\n";
     mreaderz.CreateIndexes();
   }
    
@@ -78,6 +85,31 @@ void check_index(vector<string> & group){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// takes a vector and calculates the mean
+
+float mean(vector<int> & dat){
+
+  int n   = 0;
+  int sum = 0;
+
+  for(vector<int>::iterator datum = dat.begin(); datum != dat.end(); datum++){
+
+    n++;
+    sum += *datum;
+      
+  }
+
+  float mean = static_cast<float>(sum) / static_cast<float>(n);
+  
+  return mean;
+
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------
+
+/// load up the pileup information
+
 void load_info_struct(posInfo  *info, BamAlignment & read){
 
   (*info).nreads++;
@@ -85,6 +117,8 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
   (*info).flags.push_back(read.AlignmentFlag);
 
   flag alflag;
+
+  (*info).fragl.push_back(abs(read.InsertSize));
 
   alflag.addFlag(read.AlignmentFlag);
   //  cout << "readflag: " << read.AlignmentFlag << endl;
@@ -100,6 +134,9 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
 
 //------------------------------------------------------------
 //------------------------------------------------------------
+
+/// Initialize the pileup data struct
+
 void initPosInfo (posInfo * info){
 
   (*info).nreads       = 0;
@@ -109,7 +146,10 @@ void initPosInfo (posInfo * info){
 }
 //------------------------------------------------------------
 //------------------------------------------------------------
-void process_pileup(list<BamAlignment> & data, map<string, int> & target_info){
+
+/// proces the pileup information
+
+void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid){
 
   posInfo target, background;
 
@@ -119,6 +159,7 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info){
 
   //  cout << "nreads: " << "\t" << data.size() << endl;
 
+
   for(list<BamAlignment>::iterator read = data.begin(); read != data.end(); read++){
     
     int amItarget = target_info.count(read->Filename);
@@ -127,33 +168,49 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info){
     }
     else{
       load_info_struct( &target, *read);
-    }
-    
+    }    
   }
 
-  float t, b;
+  float t, b, tss, bss ;
 
-  t = (float)(target.mateunmapped) / (float)(target.nreads);
-  b = (float)(background.mateunmapped) / (float)(background.nreads);
+  t = static_cast<float>(target.mateunmapped) / static_cast<float>(target.nreads);
+  b = static_cast<float>(background.mateunmapped) / static_cast<float>(background.nreads);
+  
+  tss = static_cast<float>(target.samestrand) / static_cast<float>(target.nreads);
+  bss = static_cast<float>(background.samestrand) / static_cast<float>(background.nreads);
 
-  cout  << t << "\t" << b << endl;
+
+  float mti = mean(target.fragl);
+  float mbi = mean(background.fragl);
+
+  float mtm = mean(target.mapq);
+  float mbm = mean(background.mapq);
+
+  cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << target.nreads << "\t" << background.nreads << "\t" << mti << "\t" << mbi 
+       << "\t" << mtm << "\t" << mbm << endl;
 
 }
 
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// run the pileup
+
 void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
   BamAlignment al;
   read_pileup PileUp;
 
+  BamTools::RefVector seqids = mreader.GetReferenceData();
+
+
   while(mreader.GetNextAlignment(al)){
     PileUp.proccess_alignment(al);
+    string seqid = seqids[al.RefID].RefName;
     // cout << al.Position << "\t" << al.Filename << endl;
     if(PileUp.currentStart() > PileUp.currentPos()){
       list<BamAlignment> dat =  PileUp.pileup();
-      process_pileup(dat, target_info);
+      process_pileup(dat, target_info, PileUp.currentPos(), seqid);
     } 
 
   }
@@ -162,7 +219,9 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
-void run_regions(vector<string> & target, vector <string> & background){
+/// run the regions
+
+void run_regions(vector<string> & target, vector <string> & background, string & seqid, BamRegion & seqr){
 
   vector <string> total  = target;
 
@@ -188,19 +247,29 @@ void run_regions(vector<string> & target, vector <string> & background){
 
   if(! mreader.Open(total)){
     cerr << "cannot open bams.\n";
+    exit(EXIT_FAILURE);
   }
 
-  mreader.LocateIndexes();
+  if(! mreader.LocateIndexes()){
+    cerr << "cannot create or locate indicies" << endl;
+    exit(EXIT_FAILURE);  
+  }
+
+  RefVector seqids = mreader.GetReferenceData();
 
   int nseqs = mreader.GetReferenceCount() -1;
 
-  for(int i; i <= nseqs; i++){
-    mreader.Jump(i, 0);
+  if(seqid.compare("NA") == 0 ){
     pileup(mreader, target_info);
-    cerr << "Finished seqid: " << i << endl;
+    cerr << "Finished Whole Genome!" << endl;
   }
-
-
+  else{
+    if(! mreader.SetRegion(seqr)){
+      cerr << "failed to jump to seqid!" << endl;
+      exit(EXIT_FAILURE);
+    }
+    pileup(mreader, target_info);
+  }
   mreader.Close();
 
 }
@@ -208,17 +277,69 @@ void run_regions(vector<string> & target, vector <string> & background){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// given a seqid and a file/set of files find the index for the seqid
+
+BamRegion getseqidn (string & seqid, vector<string> & target){
+
+  BamRegion region;
+
+  cerr << "WTF: " << seqid << endl;
+
+  BamMultiReader mreader;
+
+  if(! mreader.Open(target)){
+    cerr << "cannot open bams.\n";
+  }
+  
+  int i = 0 ;
+
+  BamTools::SamHeader           header = mreader.GetHeader();
+  BamTools::SamSequenceDictionary seqs = header.Sequences;
+
+  BamTools::SamSequence seq;
+  BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
+  BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
+
+  for ( ; seqIter != seqEnd; ++seqIter ) {
+
+    seq = (*seqIter);
+    std::string sname = seq.Name;
+    if(sname.compare(seqid) == 0){
+      cerr << "seqid: " << sname << "\t" << "is index: " << "\t" << i << endl;
+
+      region.LeftRefID     = i;
+      region.RightRefID    = i;
+      region.LeftPosition  = 0;
+      region.RightPosition = boost::lexical_cast<int>(seq.Length);
+
+      break;
+    }
+    i++;
+  }
+  
+  return region;
+
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------
+
 int main(int argc,  char * argv[]){
-    
+
+  string seqid = "NA";
+  BamRegion seqr;
+  
   try{
   
     namespace po = boost::program_options;
     po::options_description desc ("Allowed options");
        
     desc.add_options()
-      ("help",       "produce help info")
-      ("target",     po::value<std::string>() ,  "The target bam files, comma sep list")
-      ("background", po::value<std::string>() ,  "The background bam files, comma sep list");
+      ("help,h",       "produce help info")
+      ("target,t",     po::value<string>() ,   "The target bam files, comma sep list")
+      ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
+      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" );
+      
     
     po::variables_map vm;
     
@@ -230,8 +351,17 @@ int main(int argc,  char * argv[]){
 	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
 	return SUCCESS;
       }
-      
-    po::notify(vm);
+      if(! vm.count("target")){
+	cout << "failure to specify target correctly" << endl;
+	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+	return ERROR_IN_COMMAND_LINE;
+      }
+      if(! vm.count("background")){
+      	cout << "failure to specify background correctly" << endl;
+	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+	return ERROR_IN_COMMAND_LINE;
+      }
+      po::notify(vm);
     }
     catch(po::error & e){
       cerr << "ERROR: " << e.what() << endl << endl;
@@ -242,13 +372,18 @@ int main(int argc,  char * argv[]){
     vector<string> target     = parse_groups(vm["target"].as<string>());
     vector<string> background = parse_groups(vm["background"].as<string>());
 
+    if(vm.count("seqid")){
+      seqid = vm["seqid"].as<string>();
+      seqr  = getseqidn(seqid, target);
+    }
+
+    //    cerr << "if region is set: " << "\t" << seqn << "\t" << seqid << endl;
+
     printvec("INFO: target bam",     target    );
     printvec("INFO: background bam", background);
-
-
     cerr << "INFO: starting to run regions\n";
     
-    run_regions(target, background);
+    run_regions(target, background, seqid, seqr);
 
   }
   catch(std::exception& e){

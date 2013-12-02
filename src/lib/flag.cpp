@@ -59,7 +59,7 @@ bool flag::isUnMapped(void){
 }
 
 bool flag::isPairMapped(void){
-  if((bamflag & PARTNER_UNMAPPED)){
+  if((bamflag & PARTNER_UNMAPPED) != 0 ){
     return false;
   }
   else{
@@ -77,15 +77,36 @@ bool flag::bothUnmapped(void){
   }
 }
 
-// RL
-bool flag::sameStrand(void){
-  if(bamflag & 0x20 & 0x10){
+
+bool flag::bothRevStrand(void){
+  if((bamflag & BOTH_REVERSE) != 0){
     return true;
   }
   else{
     return false;
   }
 }
+
+
+bool flag::bothForStrand(void){
+  if((bamflag & 0x20) == 0 && (bamflag & 0x10) == 0){
+    return true;
+  }
+  else{
+    return false;
+  }
+}
+
+bool flag::sameStrand(void){
+
+  if(flag::bothForStrand() || flag::bothRevStrand() ){
+    return true;
+  }
+  else{
+    return false;
+  }
+}
+
 
 int flag::returnFlag(void){
   return bamflag;
