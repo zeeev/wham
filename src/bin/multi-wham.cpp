@@ -11,6 +11,7 @@
 #include  "read_pileup.h"
 #include  "randomregion.h"
 #include  "flag.h"
+#include "math.h"
 
 #include "boost/lexical_cast.hpp"
 #include "boost/algorithm/string.hpp"
@@ -171,23 +172,50 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
     }    
   }
 
-  float t, b, tss, bss ;
+  double t, b, tss, bss, tn, bn ;
 
-  t = static_cast<float>(target.mateunmapped) / static_cast<float>(target.nreads);
-  b = static_cast<float>(background.mateunmapped) / static_cast<float>(background.nreads);
+  tn = static_cast<float>(target.nreads);
+  bn = static_cast<float>(background.nreads);
+
+  t = static_cast<float>(target.mateunmapped)     ;
+  b = static_cast<float>(background.mateunmapped) ;
   
-  tss = static_cast<float>(target.samestrand) / static_cast<float>(target.nreads);
-  bss = static_cast<float>(background.samestrand) / static_cast<float>(background.nreads);
+  tss = static_cast<float>(target.samestrand)    ;
+  bss = static_cast<float>(background.samestrand);
 
+  double mti = mean(target.fragl);
+  double mbi = mean(background.fragl);
 
-  float mti = mean(target.fragl);
-  float mbi = mean(background.fragl);
+  double mtm = mean(target.mapq);
+  double mbm = mean(background.mapq);
 
-  float mtm = mean(target.mapq);
-  float mbm = mean(background.mapq);
+  double uclid = 0;
 
-  cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << target.nreads << "\t" << background.nreads << "\t" << mti << "\t" << mbi 
-       << "\t" << mtm << "\t" << mbm << endl;
+  double mdif = (mtm - mbm) ; // ((mbm+mtm)/2);
+  double idif = (mti - mbi) ; // ((mbi + mti)/2);
+  double ddif = (tn - bn  ) ;
+  double ndif = (t - b    ) ;
+  double sdif = (tss - bss) ;
+
+  if(! isnan(ddif)){
+    // uclid += pow(ddif, 2);
+  }
+  if(! isnan(mdif)){
+    // uclid += pow(idif, 2);
+  }
+  if(! isnan(mdif)){
+    uclid += pow(mdif, 2);
+  }
+  if(! isnan(ndif)){
+    uclid += pow(ndif, 2);
+  }
+  if(! isnan(sdif)){
+    uclid += pow(sdif, 2);
+  }
+  double u = sqrt(uclid);
+
+  cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << tss << "\t" << bss << "\t" << target.nreads << "\t" << background.nreads << "\t" << mti << "\t" << mbi 
+       << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
 
 }
 

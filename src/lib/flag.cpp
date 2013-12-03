@@ -79,7 +79,7 @@ bool flag::bothUnmapped(void){
 
 
 bool flag::bothRevStrand(void){
-  if((bamflag & BOTH_REVERSE) != 0){
+  if((bamflag & 0x20) == 1 && (bamflag & 0x10) == 1){
     return true;
   }
   else{
