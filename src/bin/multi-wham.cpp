@@ -32,6 +32,7 @@ struct posInfo
   int nreads;
   int mateunmapped;
   int samestrand;
+  int otherscaffold;
   vector<int> mapq;
   vector<int> flags;
   vector<int> fragl;
@@ -123,6 +124,11 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
 
   alflag.addFlag(read.AlignmentFlag);
   //  cout << "readflag: " << read.AlignmentFlag << endl;
+
+  if(!(read.RefID == read.MateRefID)){
+    (*info).otherscaffold++;
+  }
+
   if(! alflag.isPairMapped()){
     (*info).mateunmapped++;
     //  cout << "\tread pair is not mapped" << endl;
@@ -140,9 +146,10 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
 
 void initPosInfo (posInfo * info){
 
-  (*info).nreads       = 0;
-  (*info).mateunmapped = 0;
-  (*info).samestrand   = 0;
+  (*info).nreads        = 0;
+  (*info).mateunmapped  = 0;
+  (*info).samestrand    = 0;
+  (*info).otherscaffold = 0;
 
 }
 //------------------------------------------------------------
@@ -172,7 +179,7 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
     }    
   }
 
-  double t, b, tss, bss, tn, bn ;
+  double t, b, tss, bss, tn, bn, tos, bos ;
 
   tn = static_cast<float>(target.nreads);
   bn = static_cast<float>(background.nreads);
@@ -182,6 +189,10 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   
   tss = static_cast<float>(target.samestrand)    ;
   bss = static_cast<float>(background.samestrand);
+
+  tos = static_cast<float>(target.otherscaffold);
+  bos = static_cast<float>(target.otherscaffold);
+    
 
   double mti = mean(target.fragl);
   double mbi = mean(background.fragl);
@@ -196,6 +207,7 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   double ddif = (tn - bn  ) ;
   double ndif = (t - b    ) ;
   double sdif = (tss - bss) ;
+  double odif = (tos - bos) ;
 
   if(! isnan(ddif)){
     // uclid += pow(ddif, 2);
@@ -206,6 +218,9 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   if(! isnan(mdif)){
     uclid += pow(mdif, 2);
   }
+  if(! isnan(odif) ){
+    uclid += pow(odif, 2);
+  }
   if(! isnan(ndif)){
     uclid += pow(ndif, 2);
   }
@@ -214,7 +229,9 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   }
   double u = sqrt(uclid);
 
-  cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << tss << "\t" << bss << "\t" << target.nreads << "\t" << background.nreads << "\t" << mti << "\t" << mbi 
+  cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << tss << "\t" 
+       << bss << "\t" << tos << "\t" << bos << "\t" << target.nreads << "\t" 
+       << background.nreads << "\t" << mti << "\t" << mbi 
        << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
 
 }
