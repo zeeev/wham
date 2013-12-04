@@ -191,7 +191,7 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   bss = static_cast<float>(background.samestrand);
 
   tos = static_cast<float>(target.otherscaffold);
-  bos = static_cast<float>(target.otherscaffold);
+  bos = static_cast<float>(background.otherscaffold);
     
 
   double mti = mean(target.fragl);
