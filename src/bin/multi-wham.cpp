@@ -250,6 +250,9 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
 
   while(mreader.GetNextAlignment(al)){
+    if(al.IsDuplicate){
+    	continue;
+    }
     PileUp.proccess_alignment(al);
     string seqid = seqids[al.RefID].RefName;
     // cout << al.Position << "\t" << al.Filename << endl;
