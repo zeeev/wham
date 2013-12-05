@@ -250,7 +250,7 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
 
   while(mreader.GetNextAlignment(al)){
-    if(al.IsDuplicate){
+    if(al.IsDuplicate()){
     	continue;
     }
     PileUp.proccess_alignment(al);
