@@ -388,7 +388,6 @@ int main(int argc,  char * argv[]){
       ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
       ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" );
       
-    
     po::variables_map vm;
     
     try{
@@ -432,14 +431,18 @@ int main(int argc,  char * argv[]){
     cerr << "INFO: starting to run regions\n";
     
     run_regions(target, background, seqid, seqr);
-
+    cerr << "INFO: Whamy has finished normally\n";
+    return 0;    
   }
   catch(std::exception& e){
     std::cerr << "Unhandled Exception reached the top of main: " 
 	      << e.what() << ", application will now exit" << std::endl; 
     return ERROR_UNHANDLED_EXCEPTION; 
   }
-  return SUCCESS;
+
+  
+  
+
 }
 
 //------------------------------------------------------------
