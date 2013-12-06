@@ -12,31 +12,6 @@ Wham is designed to look for anomalies within a single bam file
 
 Whamy is designed to look for anomalies across groups of bams.  
 
-
-Testing:
------
-
-sh /test/run-test.sh
-
-Usage:
------
-
-wham mybam.bam mybam.bai scaffoldX 
-
-Output:
------
-
-A tab delimited text file.
-Columns:
-
-1. Seqid.
-2. Position in the pileup. 
-3. Number of "bad reads" covering the position in the pileup.
-4. Number of reads covering the position in the pileup.
-5. Fraction of "bad reads"
-6. Probability of observing K bad reads out of N trials (See Details)
-7. Global fraction of bad reads.
-
 Installing:
 -----
 
@@ -71,6 +46,31 @@ Installing:
 6.  make install
 7.  cd ..
 8.  rm -rf build
+
+Testing:
+-----
+
+sh /test/run-test.sh
+
+Usage:
+-----
+
+wham mybam.bam mybam.bai scaffoldX 
+
+Output:
+-----
+
+A tab delimited text file.
+Columns:
+
+1. Seqid.
+2. Position in the pileup. 
+3. Number of "bad reads" covering the position in the pileup.
+4. Number of reads covering the position in the pileup.
+5. Fraction of "bad reads"
+6. Probability of observing K bad reads out of N trials (See Details)
+7. Global fraction of bad reads.
+
 
 
 Details:
