@@ -101,7 +101,7 @@ Columns:
 12. Average insert length (background)
 13. Average mapping quality (target)
 14. Average mapping quality (background)
-15. euclidean distances based on columns (3,4;5,6;7,8;13,14)
+15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
 
 
 Details:
