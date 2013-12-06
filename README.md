@@ -69,21 +69,45 @@ is not set whamy will run the whole genome.
 Output:
 -----
 
+###wham
+
 A tab delimited text file.
 Columns:
 
 1. Seqid.
-2. Position in the pileup. 
+2. Position. 
 3. Number of "bad reads" covering the position in the pileup.
 4. Number of reads covering the position in the pileup.
 5. Fraction of "bad reads"
 6. Probability of observing K bad reads out of N trials (See Details)
 7. Global fraction of bad reads.
 
+###whamy
+
+A tab delimited text file.
+Columns:
+
+1. Seqid.
+2. Position. 
+3. Number of unmapped mates (target)
+4. Number of unmapped mates (background)
+5. Number of same strand mates (target)
+6. Number of same strand mates (background)
+7. Number of cross seqid mapped mates (target)
+8. Number of cross seqid mapped mates (background)
+9. Depth - Number of reads covering position (target)
+10. Depth - Number of reads covering position (background)
+11. Average insert length (target)
+12. Average insert length (background)
+13. Average mapping quality (target)
+14. Average mapping quality (background)
+15. euclidean distances based on columns (3,4;5,6;7,8;13,14)
 
 
 Details:
 -----
+
+###wham
 
 The Samtools flags are hashed across the entire scaffold.  From this the global fraction
 of bad reads is calculated.  Then the scaffold is "pileup."  For each position with 
