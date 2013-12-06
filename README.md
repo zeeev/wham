@@ -59,7 +59,7 @@ Basic usage:
 
   wham mybam.bam mybam.bai scaffoldX > stdout 2> stderr
 
-## whamy
+### whamy
 
 Whamy requires sorted BAMs.  It is also ideal to remove the duplicates, but not required.  If the scaffold flag 
 is not set whamy will run the whole genome.
