@@ -52,10 +52,19 @@ Testing:
 
 sh /test/run-test.sh
 
-Usage:
+Basic usage:
 -----
 
-wham mybam.bam mybam.bai scaffoldX 
+### wham
+
+  wham mybam.bam mybam.bai scaffoldX > stdout 2> stderr
+
+## whamy
+
+Whamy requires sorted BAMs.  It is also ideal to remove the duplicates, but not required.  If the scaffold flag 
+is not set whamy will run the whole genome.
+
+  whamy --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --scaffold chr1 > stdout 2> stderr
 
 Output:
 -----
