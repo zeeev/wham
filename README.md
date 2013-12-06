@@ -60,7 +60,7 @@ Installing:
 6.  sudo make install
 
 
-###Wham:
+###wham&whamy:
    
 1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
