@@ -1,16 +1,17 @@
 Purpose:
 ------
-Wham is a suite of tools designed to identify anomalies in alignments.  These regions may 
-contain structural rearrangements or just bad quality.  
+WHole-genome Aligment Metricts (wham BAM) is a suite of tools designed to identify anomalies in binary alignment/mapping files (BAM).  
 
-The toolkit has two scripts:
+The toolkit has two programs:
 
 ### wham 
 
+Wham is designed to look for anomalies within a single bam file
+
 ### whamy
 
-Whamy was designed to look for anomalies across groups of alignments.  
-This is useful for identifying regions associated with a trait...
+Whamy is designed to look for anomalies across groups of bams.  
+
 
 Testing:
 -----
@@ -60,7 +61,7 @@ Installing:
 6.  sudo make install
 
 
-###wham&whamy:
+###wham BAM:
    
 1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
