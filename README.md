@@ -9,8 +9,8 @@ The toolkit has two scripts:
 
 ### whamy
 
-	Whamy was designed to look for anomalies across groups of alignments.  This is useful 
-	for identifying regions associated with a trait...
+Whamy was designed to look for anomalies across groups of alignments.  
+This is useful for identifying regions associated with a trait...
 
 Testing:
 -----
