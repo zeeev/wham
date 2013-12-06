@@ -1,7 +1,16 @@
 Purpose:
 ------
-Wham is a suite of tools designed to help identify and classify alignment regions
-that are of poor quality.  Currently there is one program wham.cpp
+Wham is a suite of tools designed to identify anomalies in alignments.  These regions may 
+contain structural rearrangements or just bad quality.  
+
+The toolkit has two scripts:
+
+### wham 
+
+### whamy
+
+	Whamy was designed to look for anomalies across groups of alignments.  This is useful 
+	for identifying regions associated with a trait...
 
 Testing:
 -----
