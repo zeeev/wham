@@ -61,7 +61,7 @@ Basic usage:
 
 ### whamy
 
-Whamy requires sorted BAMs.  It is also ideal to remove the duplicates, but not required.  If the scaffold flag 
+Whamy requires sorted BAMs.  To improve whamy's speeds it is a good idea to remove duplicates and index the BAMS (not required).  If the scaffold flag 
 is not set whamy will run the whole genome.
 
     whamy --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --scaffold chr1 > stdout 2> stderr
