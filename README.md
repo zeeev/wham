@@ -43,7 +43,7 @@ Installing:
 3.  mkdir build
 4.  cd build
 5.  cmake ..
-6.  make install
+6.  make 
 7.  cd ..
 8.  rm -rf build
 
