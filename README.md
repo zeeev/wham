@@ -2,7 +2,7 @@ Purpose:
 ------
 WHole-genome Aligment Metricts (wham BAM) is a suite of tools designed to identify anomalies in binary alignment/mapping files (BAM).  
 
-The toolkit has two programs:
+The toolkit has three programs:
 
 ### wham 
 
@@ -12,19 +12,25 @@ Wham is designed to look for anomalies within a single bam file
 
 Whamy is designed to look for anomalies across groups of bams.  
 
+### raw
+
+the latest tool that incoperates a statistical model
+
 Installing:
 -----
 
 ###Dependencies:
 
   Cmake:
-    Cmake is designed to make compiling code easy across different operation systems. It can be installed from yum or other repository managers.  To check if cmake is installed type cmake --version
+    Cmake is designed to make compiling code easy across different operation systems. It can be installed from yum or other repository managers.  To check if cmake is installed type cmake --version.  Cmake 2.6 or higher is required.
     
 
-  Boost - At least 1.42:
-    1.  Boot devel should be installed via Yum or other package manager.
+  Boost:
+    Boost is used for it's program opitions and statistical distributions.
+    
   LibZ:
-    1. No action should be required under most linux distributions.
+    
+
 
 ###Bamtools:
 
@@ -35,6 +41,26 @@ Installing:
 5.  cmake ..
 6.  sudo make install
 
+
+For non-root users:
+
+bash users:
+
+add the following to your bash profile
+
+PATH=/xxx/bamtools/include:$APTH
+CPATH=/xxx/bamtools/lib:$CPATH
+export CPATH
+LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH
+
+tcsh user (similar to C shell):
+ 
+add the following to your profile:  
+
+setenv CPATH           {$CPATH}:/xxx/bamtools/include
+setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
+setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
 
 ###wham BAM:
    
