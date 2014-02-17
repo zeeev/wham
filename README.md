@@ -26,7 +26,15 @@ Installing:
     
 
   Boost:
-    Boost is used for it's program opitions and statistical distributions.
+    Boost is used for it's program opitions and statistical distributions.  If boost is not installed as root. you might need to create an enviromental variable for boost:
+    
+    bash :
+    
+    export BOOST_ROOT=/xxx/boost/
+    
+    tcsh :
+    
+    setenv BOOST_ROOT /xxx/boost/
     
   LibZ:
     
@@ -48,11 +56,10 @@ bash users:
 
 add the following to your bash profile
 
-PATH=/xxx/bamtools/include:$APTH
-CPATH=/xxx/bamtools/lib:$CPATH
-export CPATH
-LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH
+export PATH=/xxx/bamtools/include:$APTH
+export CPATH=/xxx/bamtools/lib:$CPATH
+export LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
+
 
 tcsh user (similar to C shell):
  
