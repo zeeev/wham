@@ -1,6 +1,8 @@
 Purpose:
 ------
-WHole-genome Aligment Metricts (wham BAM) is a suite of tools designed to identify anomalies in binary alignment/mapping files (BAM).  
+
+Whole-Genome aligment metrics Tools, or WhamTools for short, is an ensemble of tools focused on identifying structural variants associated with a group of bam Files.  
+  
 
 The toolkit has three programs:
 
@@ -14,10 +16,15 @@ Whamy is designed to look for anomalies across groups of bams.
 
 ### raw
 
-the latest tool that incoperates a statistical model
+Raw has the ability to test for associations via a likelihood ratio test.
 
 Installing:
 -----
+###Quick Install:
+
+Assuming that bamtools is installed and boost is present on your system skip strait to "Installing WhamTools."
+
+
 
 ###Dependencies:
 
@@ -137,18 +144,3 @@ Columns:
 15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
 
 
-Details:
------
-
-###wham
-
-The Samtools flags are hashed across the entire scaffold.  From this the global fraction
-of bad reads is calculated.  Then the scaffold is "pileup."  For each position with 
-coverage the CDF of the binomial is calculated where:
-
-K = number of bad reads (column 4)
-N = number of reads  (column 5)
-P = global fraction of bad reads (column 7)
-
-Bad reads include: Mate not mapped, and same strand.  Further information will be added
-soon.  IE: the insert size etc....
