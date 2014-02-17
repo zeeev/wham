@@ -56,18 +56,18 @@ bash users:
 
 add the following to your bash profile
 
-  export PATH=/xxx/bamtools/include:$APTH
-  export CPATH=/xxx/bamtools/lib:$CPATH
-  export LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
+    export PATH=/xxx/bamtools/include:$APTH
+    export CPATH=/xxx/bamtools/lib:$CPATH
+    export LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
 
 
 tcsh user (similar to C shell):
  
 add the following to your profile:  
 
-  setenv CPATH           {$CPATH}:/xxx/bamtools/include
-  setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
-  setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
+    setenv CPATH           {$CPATH}:/xxx/bamtools/include
+    setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
+    setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
 
 ###wham BAM:
    
