@@ -18,8 +18,8 @@ Installing:
 ###Dependencies:
 
   Cmake:
-    Make your life easier and install Cmake.  No action should be required under most linux distributions. 
-    If yes then use a package manager to install cmake.
+    Cmake is designed to make compiling code easy across different operation systems. It can be installed from yum or other repository managers.  To check if cmake is installed type cmake --version
+    
 
   Boost - At least 1.42:
     1.  Boot devel should be installed via Yum or other package manager.
