@@ -19,10 +19,8 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 add_library(lib ${SRC} ${HEADERS})
 
-include_directories(/usr/local/include/bamtools)
-include_directories(${CMAKE_SOURCE_DIR}/src/lib)
 
-link_directories(/usr/local/lib/bamtools/)
+include_directories(${CMAKE_SOURCE_DIR}/src/lib)
 link_directories(${CMAKE_SOURCE_DIR}/src/lib)
 
 add_executable(wham ${CMAKE_SOURCE_DIR}/src/bin/wham.cpp  ${SRC} ${HEADER})
