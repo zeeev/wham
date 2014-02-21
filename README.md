@@ -1,8 +1,10 @@
 Purpose:
 ------
-WHole-genome Aligment Metricts (wham BAM) is a suite of tools designed to identify anomalies in binary alignment/mapping files (BAM).  
 
-The toolkit has two programs:
+Whole-Genome Aligment Metrics Tools, or WhamTools for short, is an ensemble of tools focused on identifying structural variants associated with a group of bam Files.  
+  
+
+The toolkit has three programs:
 
 ### wham 
 
@@ -12,19 +14,38 @@ Wham is designed to look for anomalies within a single bam file
 
 Whamy is designed to look for anomalies across groups of bams.  
 
+### raw
+
+Raw has the ability to test for associations via a likelihood ratio test.
+
 Installing:
 -----
+###Quick Install:
+
+Assuming that bamtools is installed and boost is present on your system skip strait to "Installing WhamTools."
+
+
 
 ###Dependencies:
 
   Cmake:
-    Make your life easier and install Cmake.  No action should be required under most linux distributions. 
-    If yes then use a package manager to install cmake.
+    Cmake is designed to make compiling code easy across different operation systems. It can be installed from yum or other repository managers.  To check if cmake is installed type cmake --version.  Cmake 2.6 or higher is required.
+    
 
-  Boost - At least 1.42:
-    1.  Boot devel should be installed via Yum or other package manager.
+  Boost:
+    Boost is used for it's program opitions and statistical distributions.  If boost is not installed as root. you might need to create an enviromental variable for boost:
+    
+    bash :
+    
+    export BOOST_ROOT=/xxx/boost/
+    
+    tcsh :
+    
+    setenv BOOST_ROOT /xxx/boost/
+    
   LibZ:
-    1. No action should be required under most linux distributions.
+    
+
 
 ###Bamtools:
 
@@ -35,6 +56,25 @@ Installing:
 5.  cmake ..
 6.  sudo make install
 
+
+For non-root users:
+
+bash users:
+
+add the following to your bash profile
+
+    export PATH=/xxx/bamtools/include:$APTH
+    export CPATH=/xxx/bamtools/lib:$CPATH
+    export LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
+
+
+tcsh user (similar to C shell):
+ 
+add the following to your profile:  
+
+    setenv CPATH           {$CPATH}:/xxx/bamtools/include
+    setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
+    setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
 
 ###wham BAM:
    
@@ -104,18 +144,3 @@ Columns:
 15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
 
 
-Details:
------
-
-###wham
-
-The Samtools flags are hashed across the entire scaffold.  From this the global fraction
-of bad reads is calculated.  Then the scaffold is "pileup."  For each position with 
-coverage the CDF of the binomial is calculated where:
-
-K = number of bad reads (column 4)
-N = number of reads  (column 5)
-P = global fraction of bad reads (column 7)
-
-Bad reads include: Mate not mapped, and same strand.  Further information will be added
-soon.  IE: the insert size etc....
