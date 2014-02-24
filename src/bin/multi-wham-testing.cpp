@@ -14,6 +14,7 @@
 #include "math.h"
 
 #include "boost/math/distributions/normal.hpp"
+#include "boost/math/distributions/negative_binomial.hpp"
 #include "boost/math/distributions/poisson.hpp"
 #include "boost/math/distributions/binomial.hpp"
 #include "boost/math/distributions/chi_squared.hpp"
@@ -42,7 +43,7 @@ struct posInfo
   int      otherscaffold;
   vector<int>       mapq;
   vector<int>      flags;
-  vector<int>      fragl;
+  vector<double>   fragl;
   map<string,int>  depth;
   vector<int>     depths;
 };
@@ -96,68 +97,58 @@ void check_index(vector<string> & group){
 
 /// takes a vector and calculates the mean
 
-float mean(vector<int> & dat){
+double mean(vector<double> & dat){
 
-  int n   = 0;
-  int sum = 0;
+  double n   = 0;
+  double sum = 0;
 
-  for(vector<int>::iterator datum = dat.begin(); datum != dat.end(); datum++){
-    n++;
+  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
+    n += 1.0 ;  
     sum += *datum;
-  }
-
-  double mean = static_cast<double>(sum) / static_cast<double>(n);
   
+}
+
+  double mean = sum / n;
   return mean;
 
 }
 
 //------------------------------------------------------------
-float sd(vector<int> & dat, double mean){
+double sd(vector<double> & dat, double mean){
   
   double ss = 0;
   double n  = 0;
   
-  for(vector<int>::iterator datum = dat.begin(); datum != dat.end(); datum++){
-    
+  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){    
     ss += pow((*datum - mean), 2);
     n  += 1;
-    
   }
 
   double sd = sqrt(ss/(n-1));
-  
-  return sd;
+  return sd + 1;
 
 }
 
-
-
 //------------------------------------------------------------
-float lldnorm(vector<int> & dat, double mu, double sdev, int flag ){
+double lldnorm(vector<double> & dat, double mu, double sdev){
+  double llsum = 0;
 
+  double ss = pow(sdev, 2);
+  
+  double p = mu / ss; 
+  double r = pow(mu, 2) / (ss - mu);
 
-  if(flag == 1){
-    mu     = mean( dat );
-    sdev   = sd( dat, mu);
-  }
+  cerr << "INFO " << mu << "\t" << sdev << endl;
+  //  cerr << "INFO " << mu << "\t" << sdev << "\t" << r << "\t" << p << "\t" << endl;
 
-    sdev = sdev * 2;
+  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
 
-    if(sdev == 0){
-      sdev = 1;
-    }
-
-  // cerr << m << "\t" << std << "\n";
-
-  float llsum = 0;
-
-
-  for(vector<int>::iterator datum = dat.begin(); datum != dat.end(); datum++){
-
-
-    llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>(mu, sdev), *datum) );
-
+    //    if(r > 0){
+    //  llsum += log ( boost::math::pdf(boost::math::negative_binomial_distribution<double>( r, p ), *datum) );
+    // }
+    // else{
+      llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>( mu, sdev ), *datum) );
+      //}
   }
 
   return -1 * llsum;
@@ -165,16 +156,38 @@ float lldnorm(vector<int> & dat, double mu, double sdev, int flag ){
 }
 
 //------------------------------------------------------------
+void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
+  (*a).nreads         =  (*t).nreads         +    (*b).nreads       ;
+  (*a).otherscaffold  =  (*t).otherscaffold  +    (*b).otherscaffold; 
+  (*a).samestrand     =  (*t).samestrand     +    (*b).samestrand   ;
+  (*a).mateunmapped   =  (*t).mateunmapped   +    (*b).mateunmapped ;
+  (*a).fragl.insert((*a).fragl.end(), (*t).fragl.begin(),(*t).fragl.end());
+  (*a).fragl.insert((*a).fragl.end(), (*b).fragl.begin(),(*b).fragl.end());
+
+}
+
+//------------------------------------------------------------
 
 /// load up the pileup information
 
-void load_info_struct(posInfo  *info, BamAlignment & read){
+
+
+void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 
   (*info).nreads++;
   (*info).mapq.push_back(read.MapQuality);
   (*info).flags.push_back(read.AlignmentFlag);
-  (*info).fragl.push_back(log(abs(read.InsertSize)));
+
   (*info).depth[read.Filename]++;
+
+
+
+  double ins =  abs(boost::lexical_cast<double>(read.InsertSize)) ;
+
+    ins = abs(ins / rolling_mean);
+
+
+  (*info).fragl.push_back(ins);
 
   flag alflag;
 
@@ -250,7 +263,7 @@ void initPosInfo (posInfo * info){
 
 /// proces the pileup information
 
-void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid){
+void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid, double rolling_meant, double rolling_meanb, double rolling_meana){
 
   //  cerr << "INFO: processing pileup\n"; 
 
@@ -263,18 +276,13 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   for(list<BamAlignment>::iterator read = data.begin(); read != data.end(); read++){
     int amItarget = target_info.count(read->Filename);
     if(amItarget == 0){
-      load_info_struct( &background, *read);
+      load_info_struct( &background, *read, rolling_meanb);
     }
     else{
-      load_info_struct( &target, *read);
+      load_info_struct( &target, *read, rolling_meant);
     }    
-    load_info_struct(&all, *read);
   }
-
-
-  //  loadDepths(&target);
-  //  loadDepths(&background);
-  //  loadDepths(&all);
+  combine_info_struct(&target, &background, &all);
 
   if( background.nreads < 10 ){
     return;
@@ -284,56 +292,57 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   }
 
   double nreads  = boost::lexical_cast<double>(all.nreads);
+  double treads  = boost::lexical_cast<double>(target.nreads);
+  double breads  = boost::lexical_cast<double>(background.nreads);
   double mp      = boost::lexical_cast<double>(all.mateunmapped) / nreads;
   double sp      = boost::lexical_cast<double>(all.samestrand) / nreads;
   double op      = boost::lexical_cast<double>(all.otherscaffold) / nreads;
   
-  //  double fraglmu = mean(all.fragl);
-  // double fraglsd = sd(all.fragl,  fraglmu);
+  double fraglmu = mean(all.fragl);
+  double fraglsd = sd(all.fragl,  fraglmu);
 
-  //  if(fraglmu < 1){
-  //  return;
-  // }
+  if(fraglsd > 20){
+    return;
+  }
+
+  double fglt = mean(target.fragl);
+  double fglb = mean(background.fragl);
+  double fgst = sd(target.fragl, fglt);
+  double fgsb = sd(background.fragl, fglb);
+
+  //  double FiST  =  (((treads/nreads) * fgst  ) + ((breads/nreads) * fgsb )) / fraglsd;
 
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
   double bta    = llbinom(&target,     mp, sp, op, 1);
   double bba    = llbinom(&background, mp, sp, op, 1);
 
-  //  double fta    = lldnorm(target.fragl, 0, 0, 1);  
-  //  double fba    = lldnorm(background.fragl, 0, 0 , 1);
-  //  double ftn    = lldnorm(target.fragl, fraglmu, fraglsd, 0);  
-  //  double fbn    = lldnorm(background.fragl, fraglmu, fraglsd, 0);  
+  double fta    = lldnorm(target.fragl, fglt, fgst           );  
+  double fba    = lldnorm(background.fragl, fglb, fgsb       );
+  double ftn    = lldnorm(target.fragl, fraglmu, fraglsd     );  
+  double fbn    = lldnorm(background.fragl, fraglmu, fraglsd );  
 
 
-  double lrt = 2 * ((btn + bbn) - (bta + bba));
+  //  double lrt =  2 * ((btn + bbn) - (bta + bba));
+  // double lrtb = 2 * ((ftn + fbn) - (fta + fba)); 
 
-  //  double lrtb = 2 * ((ftn + fbn) - (fta + fba)); 
+  double lrt = 2 * ((btn + bbn + ftn + fbn) - (bta + bba + fta + fba));
 
-  //  double lrt_top  = btn + bbn + ftn + fbn ;
-  //  double lrt_bot  = bta + bba + fta + fba ; 
-  
-  //  cerr << "INFO" << "\t" << pos << "\t" << "\t" << "NULL: " << btn << "\t" <<  bbn << "\t" <<  ftn << "\t" <<  fbn << endl;
-  //  cerr << "INFO" << "\t" << pos << "\t" << "\t" << "ALT: "  << bta << "\t" <<  bba << "\t" <<  fta << "\t" <<  fba << endl;
-
-  //  double lrt      = 2 * (lrt_top - lrt_bot);
-
-  boost::math::chi_squared_distribution<double> chisq(3.0);
+  boost::math::chi_squared_distribution<double> chisq(5);
+  //   boost::math::chi_squared_distribution<double> chisqb(3.0);
 
   if(lrt <= 0){
-    lrt = 0.001;
+    lrt = 0.0001;
   }
+  
 
-  if(isnan(lrt)){
-    return;
-  }
-  if(isinf(lrt)){
-    return;
-  }
+  double lp  = 1 - boost::math::cdf(chisq, lrt);
 
-  double lp = 1 - boost::math::cdf(chisq, lrt);
 
-  cout << seqid << "\t" << pos  << "\t" << lrt << "\t" << lp << "\n";
+  //  cout << pos << "\t" << "IM" << "\t" << fglt << "\t" << fglb << endl;
+  // cout << pos << "\t" << "IS" << "\t" << fgst << "\t" << fgsb << endl;
+
+  cout << seqid << "\t" << pos << "\t" << lrt << "\t" << lp << endl ;
 
 }
 
@@ -351,20 +360,51 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
   cerr << "INFO: starting pileup\n";
 
+
+  double  Nt = 1;
+  double  St = 1;
+  double  Nb = 1;
+  double  Sb = 1;
+  double  Na = 1;
+  double  Sa = 1;
+
   while(mreader.GetNextAlignment(al)){
 
     //    cerr << al.Position << "\n";
 
+    //cerr << "DIST: " << al.InsertSize << "\n";
+
     if(al.IsDuplicate()){
       continue;
     }
+
+    double ins = abs(boost::lexical_cast<double>(al.InsertSize));
+
+    int amItarget = target_info.count(al.Filename);
+    if(amItarget == 0){
+
+      Nb += 1 ;
+      Sb += ins;
+    }
+    else{
+      Nt += 1 ;
+      St += ins;
+    }
+    Na += 1;
+    Sa += ins;
+
+    double rolling_meant = St / Nt; 
+    double rolling_meanb = Sb / Nb; 
+    double rolling_meana = Sa / Na; 
+
+    //    cerr << "ROLLING: " <<  rolling_meant << "\t" << rolling_meanb << "\t" <<  rolling_meana << endl;
 
     PileUp.proccess_alignment(al);
     string seqid = seqids[al.RefID].RefName;
     // cout << al.Position << "\t" << al.Filename << endl;                                                                     
     if(PileUp.currentStart() > PileUp.currentPos()){
       list<BamAlignment> dat =  PileUp.pileup();
-      process_pileup(dat, target_info, PileUp.currentPos(), seqid);
+      process_pileup(dat, target_info, PileUp.currentPos(), seqid, rolling_meant, rolling_meanb, rolling_meana);
     }
   }
 }
@@ -435,7 +475,7 @@ BamRegion getseqidn (string & seqid, vector<string> & target){
 
   BamRegion region;
 
-  cerr << "WTF: " << seqid << endl;
+  cerr << "INFO region set to: " << seqid << endl;
 
   BamMultiReader mreader;
 
