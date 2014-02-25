@@ -41,11 +41,11 @@ struct posInfo
   int       mateunmapped;
   int         samestrand;
   int      otherscaffold;
-  vector<int>       mapq;
-  vector<int>      flags;
+  //  vector<int>       mapq;
+  // vector<int>      flags;
   vector<double>   fragl;
-  map<string,int>  depth;
-  vector<int>     depths;
+  // map<string,int>  depth;
+  // vector<int>     depths;
 };
 
 boost::mutex print_guard;
@@ -145,11 +145,6 @@ double sd(vector<double> & dat, double mean){
 double lldnorm(vector<double> & dat, double mu, double sdev){
   double llsum = 0;
 
-  double ss = pow(sdev, 2);
-  
-  double p = mu / ss; 
-  double r = pow(mu, 2) / (ss - mu);
-
   for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
 
       llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>( mu, sdev ), *datum) );
@@ -177,15 +172,14 @@ void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
 void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 
   (*info).nreads++;
-  (*info).mapq.push_back(read.MapQuality);
-  (*info).flags.push_back(read.AlignmentFlag);
+  //  (*info).mapq.push_back(read.MapQuality);
+  //  (*info).flags.push_back(read.AlignmentFlag);
 
-  (*info).depth[read.Filename]++;
+  //  (*info).depth[read.Filename]++;
 
   double ins =  abs(boost::lexical_cast<double>(read.InsertSize)) ;
 
     ins = abs(ins / rolling_mean);
-
 
   (*info).fragl.push_back(ins);
 
@@ -209,15 +203,15 @@ void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 }
 
 //------------------------------------------------------------
-void loadDepths(posInfo *info){
-
-  map<string, int>::iterator it;
-
-  for(it = (*info).depth.begin(); it != (*info).depth.end(); ++it){    
-    (*info).depths.push_back(it->second);
-  }
-
-}
+// void loadDepths(posInfo *info){
+// 
+//   map<string, int>::iterator it;
+// 
+//   for(it = (*info).depth.begin(); it != (*info).depth.end(); ++it){    
+//     (*info).depths.push_back(it->second);
+//   }
+// 
+// }
 
 //------------------------------------------------------------
 double llbinom(posInfo *info , double mp, double sp, double op, int flag){
@@ -363,10 +357,8 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
 
 void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total){
 
-
   BamMultiReader mreader_thread;
   BamRegion      region_thread;
-
 
   if(! mreader_thread.Open(total)){
     cerr << "ERROR: cannot open bams." << endl;
@@ -398,6 +390,9 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   std::vector <string> buffer;
 
   while(mreader_thread.GetNextAlignment(al)){
+    if(! al.IsFirstMate()){
+      continue;
+    }
 
     if(al.IsDuplicate()){
       continue;
@@ -431,6 +426,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
       buffer.push_back(ans);
       if(buffer.size() > 100000){
 	print_guard.lock();
+	running_mb += (lexical_cast<double>(e) - lexical_cast<double>(j)) / 1000000;
 	cerr << "INFO:" << running_mb << "Mb finished" << endl; 
 	printansvec("", buffer);	
 	print_guard.unlock();
@@ -494,30 +490,37 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
 
-   boost::asio::io_service io_service;
-   boost::asio::io_service::work work(io_service);
- 
-   boost::thread_group threads;
-
+  boost::asio::io_service io_service;
+  boost::asio::io_service::work work(io_service);
+  
+  boost::thread_group threads;
+  
   for(int i = 0; i < cpu; i++){
     threads.create_thread(boost::bind(&asio::io_service::run, &io_service));
   }
   
   cerr << "INFO: launched " << cpu << " threads" << endl;
 
-  int s = 0;
+  int s      = 0;
   double sum = 0;
 
   for ( ; seqIter != seqEnd; ++seqIter ) {
     if(seqr != -5){
-      if(seqr != s){
+      if( seqr != s ){
+	s += 1;
 	continue;
       }
     }
 
+
+    
     seq = (*seqIter);
     std::string sname = seq.Name;
+
+    cerr << "INFO: loading " << sname << " into thread pool " << endl;
     int j = 0;
+
+
     for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
       io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total)); 
     }
