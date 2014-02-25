@@ -426,7 +426,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
       buffer.push_back(ans);
       if(buffer.size() > 100000){
 	print_guard.lock();
-	running_mb += (lexical_cast<double>(e) - lexical_cast<double>(j)) / 1000000;
+	running_mb += 100000 / 1000000;
 	cerr << "INFO:" << running_mb << "Mb finished" << endl; 
 	printansvec("", buffer);	
 	print_guard.unlock();
@@ -511,8 +511,6 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 	continue;
       }
     }
-
-
     
     seq = (*seqIter);
     std::string sname = seq.Name;
