@@ -388,6 +388,8 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   double  Sa = 1;
 
   std::vector <string> buffer;
+  double onedump = 100000;
+  onedump = (onedump / 1000000);
 
   while(mreader_thread.GetNextAlignment(al)){
     if(! al.IsFirstMate()){
@@ -426,7 +428,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
       buffer.push_back(ans);
       if(buffer.size() > 100000){
 	print_guard.lock();
-	running_mb += 100000 / 1000000;
+	running_mb += onedump;
 	cerr << "INFO:" << running_mb << "Mb finished" << endl; 
 	printansvec("", buffer);	
 	print_guard.unlock();
@@ -435,7 +437,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
     }
   }
   print_guard.lock();
-  running_mb += (lexical_cast<double>(e) - lexical_cast<double>(j)) / 1000000;
+  running_mb += (lexical_cast<double>(buffer.size()) / 1000000);
   cerr << "INFO:" << running_mb << "Mb finished" << endl; 
   printansvec("", buffer);
   print_guard.unlock();
