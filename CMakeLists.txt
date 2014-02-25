@@ -25,8 +25,7 @@ add_executable(wham ${CMAKE_SOURCE_DIR}/src/bin/wham.cpp  ${SRC} ${HEADER})
 add_executable(whamy ${CMAKE_SOURCE_DIR}/src/bin/multi-wham.cpp  ${SRC} ${HEADER})
 add_executable(emissions ${CMAKE_SOURCE_DIR}/src/bin/hmm_region.cpp  ${SRC} ${HEADER})
 add_executable(raw ${CMAKE_SOURCE_DIR}/src/bin/multi-wham-testing.cpp   ${SRC} ${HEADER})
-<<<<<<< HEAD
-=======
+
 
 
 target_link_libraries(wham ${lib} bamtools)
