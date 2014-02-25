@@ -6,27 +6,27 @@
 //  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
 //
 
-#include <stdio.h>
+#include "stdio.h"
 #include "api/BamMultiReader.h"
 #include "read_pileup.h"
 #include "randomregion.h"
 #include "flag.h"
 #include "math.h"
 
+#include "boost/asio/io_service.hpp"
+#include "boost/bind.hpp"
+#include "boost/thread/thread.hpp"
+
 #include "boost/math/distributions/normal.hpp"
-#include "boost/math/distributions/negative_binomial.hpp"
-#include "boost/math/distributions/poisson.hpp"
 #include "boost/math/distributions/binomial.hpp"
 #include "boost/math/distributions/chi_squared.hpp"
 #include "boost/lexical_cast.hpp"
 #include "boost/algorithm/string.hpp"
 #include "boost/program_options.hpp"
 
-
 using namespace std;
 using namespace BamTools;
 using namespace boost;
-
 
 namespace
 { 
@@ -48,6 +48,11 @@ struct posInfo
   vector<int>     depths;
 };
 
+boost::mutex print_guard;
+
+double running_mb = 0;
+
+
 //------------------------------------------------------------
 //------------------------------------------------------------
 
@@ -63,6 +68,12 @@ vector<string> parse_groups(string  files){
 
 //------------------------------------------------------------
 //------------------------------------------------------------
+
+void printansvec(string base, vector<string> & data){
+  for(vector<string>::iterator it = data.begin(); it != data.end(); it++){
+    cout <<  *it ;
+  }
+}
 
 /// print a vector and a base string for the tag
 
@@ -81,11 +92,11 @@ void check_index(vector<string> & group){
   BamMultiReader mreaderz;
 
   if(! mreaderz.Open( group ) ){
-    cerr << "couldn't open file\n";
+    cerr << "couldn't open file" << endl;
   }
   
   if(! mreaderz.LocateIndexes()){
-    cerr << "INFO: wham didn't find index, creating one.\n";
+    cerr << "INFO: wham didn't find index, creating one." << endl;
     mreaderz.CreateIndexes();
   }
    
@@ -130,6 +141,7 @@ double sd(vector<double> & dat, double mean){
 }
 
 //------------------------------------------------------------
+
 double lldnorm(vector<double> & dat, double mu, double sdev){
   double llsum = 0;
 
@@ -138,17 +150,9 @@ double lldnorm(vector<double> & dat, double mu, double sdev){
   double p = mu / ss; 
   double r = pow(mu, 2) / (ss - mu);
 
-  cerr << "INFO " << mu << "\t" << sdev << endl;
-  //  cerr << "INFO " << mu << "\t" << sdev << "\t" << r << "\t" << p << "\t" << endl;
-
   for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
 
-    //    if(r > 0){
-    //  llsum += log ( boost::math::pdf(boost::math::negative_binomial_distribution<double>( r, p ), *datum) );
-    // }
-    // else{
       llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>( mu, sdev ), *datum) );
-      //}
   }
 
   return -1 * llsum;
@@ -170,8 +174,6 @@ void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
 
 /// load up the pileup information
 
-
-
 void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 
   (*info).nreads++;
@@ -179,8 +181,6 @@ void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
   (*info).flags.push_back(read.AlignmentFlag);
 
   (*info).depth[read.Filename]++;
-
-
 
   double ins =  abs(boost::lexical_cast<double>(read.InsertSize)) ;
 
@@ -263,9 +263,7 @@ void initPosInfo (posInfo * info){
 
 /// proces the pileup information
 
-void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid, double rolling_meant, double rolling_meanb, double rolling_meana){
-
-  //  cerr << "INFO: processing pileup\n"; 
+std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid, double rolling_meant, double rolling_meanb, double rolling_meana){
 
   posInfo target, background, all;
 
@@ -284,13 +282,6 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   }
   combine_info_struct(&target, &background, &all);
 
-  if( background.nreads < 10 ){
-    return;
-  }
-  if( target.nreads    < 10  ){
-    return;
-  }
-
   double nreads  = boost::lexical_cast<double>(all.nreads);
   double treads  = boost::lexical_cast<double>(target.nreads);
   double breads  = boost::lexical_cast<double>(background.nreads);
@@ -301,16 +292,24 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   double fraglmu = mean(all.fragl);
   double fraglsd = sd(all.fragl,  fraglmu);
 
+  if(fraglsd <= 0){
+    fraglsd = 0.0001;
+  }
+
+  if(treads < 10){
+    return "";
+  }
+  if(breads < 10){
+    return "";
+  }
   if(fraglsd > 20){
-    return;
+    return "";
   }
 
   double fglt = mean(target.fragl);
   double fglb = mean(background.fragl);
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
-
-  //  double FiST  =  (((treads/nreads) * fgst  ) + ((breads/nreads) * fgsb )) / fraglsd;
 
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
@@ -322,28 +321,39 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
   double ftn    = lldnorm(target.fragl, fraglmu, fraglsd     );  
   double fbn    = lldnorm(background.fragl, fraglmu, fraglsd );  
 
-
-  //  double lrt =  2 * ((btn + bbn) - (bta + bba));
-  // double lrtb = 2 * ((ftn + fbn) - (fta + fba)); 
-
   double lrt = 2 * ((btn + bbn + ftn + fbn) - (bta + bba + fta + fba));
 
   boost::math::chi_squared_distribution<double> chisq(5);
-  //   boost::math::chi_squared_distribution<double> chisqb(3.0);
+
+  if(isinf(lrt)){
+    return "";
+  }
+  if(isnan(lrt)){
+    return "";
+  }
 
   if(lrt <= 0){
-    lrt = 0.0001;
+    return "";
   }
   
-
   double lp  = 1 - boost::math::cdf(chisq, lrt);
 
+  string printdat =  seqid ;
 
-  //  cout << pos << "\t" << "IM" << "\t" << fglt << "\t" << fglb << endl;
-  // cout << pos << "\t" << "IS" << "\t" << fgst << "\t" << fgsb << endl;
+  printdat.append("\t") ;
+  printdat.append(boost::lexical_cast<string>(pos)) ;
+  printdat.append("\t") ;
+  printdat.append(boost::lexical_cast<string>(lrt)) ;
+  printdat.append("\t") ;
+  printdat.append(boost::lexical_cast<string>(lp)) ;
+  printdat.append("\n");
+  
+  if(lp > 0.05){
+    printdat = "";
+  }
 
-  cout << seqid << "\t" << pos << "\t" << lrt << "\t" << lp << endl ;
-
+  return printdat; 
+  
 }
 
 //------------------------------------------------------------
@@ -351,15 +361,32 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
 
 /// run the pileup
 
-void pileup(BamMultiReader & mreader, map<string, int> & target_info){
+void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total){
+
+
+  BamMultiReader mreader_thread;
+  BamRegion      region_thread;
+
+
+  if(! mreader_thread.Open(total)){
+    cerr << "ERROR: cannot open bams." << endl;
+    exit(EXIT_FAILURE);
+  }
+
+  if(! mreader_thread.LocateIndexes()){
+    cerr << "ERROR: cannot create or locate indicies" << endl;
+    exit(EXIT_FAILURE);
+  }
+
+  region_thread.LeftRefID     = s;
+  region_thread.RightRefID    = s;
+  region_thread.LeftPosition  = j;
+  region_thread.RightPosition = e;
 
   BamAlignment al;
   read_pileup PileUp;
 
-  BamTools::RefVector seqids = mreader.GetReferenceData();
-
-  cerr << "INFO: starting pileup\n";
-
+  BamTools::RefVector seqids = mreader_thread.GetReferenceData();
 
   double  Nt = 1;
   double  St = 1;
@@ -368,11 +395,9 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
   double  Na = 1;
   double  Sa = 1;
 
-  while(mreader.GetNextAlignment(al)){
+  std::vector <string> buffer;
 
-    //    cerr << al.Position << "\n";
-
-    //cerr << "DIST: " << al.InsertSize << "\n";
+  while(mreader_thread.GetNextAlignment(al)){
 
     if(al.IsDuplicate()){
       continue;
@@ -396,17 +421,29 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
     double rolling_meant = St / Nt; 
     double rolling_meanb = Sb / Nb; 
     double rolling_meana = Sa / Na; 
-
-    //    cerr << "ROLLING: " <<  rolling_meant << "\t" << rolling_meanb << "\t" <<  rolling_meana << endl;
+   
 
     PileUp.proccess_alignment(al);
     string seqid = seqids[al.RefID].RefName;
-    // cout << al.Position << "\t" << al.Filename << endl;                                                                     
     if(PileUp.currentStart() > PileUp.currentPos()){
       list<BamAlignment> dat =  PileUp.pileup();
-      process_pileup(dat, target_info, PileUp.currentPos(), seqid, rolling_meant, rolling_meanb, rolling_meana);
+      string ans = process_pileup(dat, target_info, PileUp.currentPos(), seqid, rolling_meant, rolling_meanb, rolling_meana);
+      buffer.push_back(ans);
+      if(buffer.size() > 100000){
+	print_guard.lock();
+	cerr << "INFO:" << running_mb << "Mb finished" << endl; 
+	printansvec("", buffer);	
+	print_guard.unlock();
+	buffer.clear();
+      }
     }
   }
+  print_guard.lock();
+  running_mb += (lexical_cast<double>(e) - lexical_cast<double>(j)) / 1000000;
+  cerr << "INFO:" << running_mb << "Mb finished" << endl; 
+  printansvec("", buffer);
+  print_guard.unlock();
+  buffer.clear();
 }
 
 //------------------------------------------------------------
@@ -414,8 +451,7 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
 /// run the regions
 
-void run_regions(vector<string> & target, vector <string> & background, string & seqid, BamRegion & seqr){
-
+void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu){
 
   vector <string> total  = target;
 
@@ -427,23 +463,23 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     target_info[*it]++;
   }
 
-   cerr << "INFO: entering check_index\n";
+  cerr << "INFO: locating and testing bam indices" << endl;
 
    check_index(total);
 
-   cerr << "INFO: left check_index\n"; 
+   cerr << "INFO: bam indices checked out" << endl; 
 
-  BamMultiReader mreader;
+   BamMultiReader mreader;
 
-   cerr << "INFO: opening BAMs and indices\n" << endl;
+   cerr << "INFO: opening bam files for reading" << endl;
 
   if(! mreader.Open(total)){
-    cerr << "cannot open bams.\n";
+    cerr << "ERROR: cannot open bams." << endl;
     exit(EXIT_FAILURE);
   }
 
   if(! mreader.LocateIndexes()){
-    cerr << "cannot create or locate indicies" << endl;
+    cerr << "ERROR: cannot create or locate indicies" << endl;
     exit(EXIT_FAILURE);  
   }
 
@@ -451,17 +487,48 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   int nseqs = mreader.GetReferenceCount() -1;
 
-  if(seqid.compare("NA") == 0 ){
-    pileup(mreader, target_info);
-    cerr << "Finished Whole Genome!" << endl;
+  BamTools::SamHeader           header = mreader.GetHeader();
+  BamTools::SamSequenceDictionary seqs = header.Sequences;
+
+  BamTools::SamSequence seq;
+  BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
+  BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
+
+   boost::asio::io_service io_service;
+   boost::asio::io_service::work work(io_service);
+ 
+   boost::thread_group threads;
+
+  for(int i = 0; i < cpu; i++){
+    threads.create_thread(boost::bind(&asio::io_service::run, &io_service));
   }
-  else{
-    if(! mreader.SetRegion(seqr)){
-      cerr << "failed to jump to seqid!" << endl;
-      exit(EXIT_FAILURE);
+  
+  cerr << "INFO: launched " << cpu << " threads" << endl;
+
+  int s = 0;
+  double sum = 0;
+
+  for ( ; seqIter != seqEnd; ++seqIter ) {
+    if(seqr != -5){
+      if(seqr != s){
+	continue;
+      }
     }
-    pileup(mreader, target_info);
+
+    seq = (*seqIter);
+    std::string sname = seq.Name;
+    int j = 0;
+    for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
+      io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total)); 
+    }
+    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total)); 
+    s += 1.0;
   }
+  
+  io_service.stop();
+  
+  threads.join_all();
+  
   mreader.Close();
 
 }
@@ -471,7 +538,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
 /// given a seqid and a file/set of files find the index for the seqid
 
-BamRegion getseqidn (string & seqid, vector<string> & target){
+int getseqidn (string & seqid, vector<string> & target){
 
   BamRegion region;
 
@@ -480,7 +547,7 @@ BamRegion getseqidn (string & seqid, vector<string> & target){
   BamMultiReader mreader;
 
   if(! mreader.Open(target)){
-    cerr << "cannot open bams.\n";
+    cerr << "cannot open bams." << endl;
   }
   
   int i = 0 ;
@@ -498,18 +565,12 @@ BamRegion getseqidn (string & seqid, vector<string> & target){
     std::string sname = seq.Name;
     if(sname.compare(seqid) == 0){
       cerr << "seqid: " << sname << "\t" << "is index: " << "\t" << i << endl;
-
-      region.LeftRefID     = i;
-      region.RightRefID    = i;
-      region.LeftPosition  = 0;
-      region.RightPosition = boost::lexical_cast<int>(seq.Length);
-
       break;
     }
     i++;
   }
   
-  return region;
+  return i;
 
 }
 
@@ -519,8 +580,9 @@ BamRegion getseqidn (string & seqid, vector<string> & target){
 int main(int argc,  char * argv[]){
 
   string seqid = "NA";
-  BamRegion seqr;
-  
+  int seqr = -5;
+  int cpu = 2;
+
   try{
   
     namespace po = boost::program_options;
@@ -530,8 +592,8 @@ int main(int argc,  char * argv[]){
       ("help,h",       "produce help info")
       ("target,t",     po::value<string>() ,   "The target bam files, comma sep list")
       ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
-      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" );
-      
+      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" )
+      ("cpu,c",        po::value<int>()    ,      "The number of threads to use");
     po::variables_map vm;
     
     try{
@@ -544,13 +606,18 @@ int main(int argc,  char * argv[]){
       }
       if(! vm.count("target")){
 	cout << "failure to specify target correctly" << endl;
-	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+	cout << "raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
 	return ERROR_IN_COMMAND_LINE;
       }
       if(! vm.count("background")){
       	cout << "failure to specify background correctly" << endl;
-	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+	cout << "raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
 	return ERROR_IN_COMMAND_LINE;
+      }
+      if(! vm.count("cpu")){
+        cout << "ERROR: failure to specify cpus correctly" << endl;
+        cout << "Usage: raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+        return ERROR_IN_COMMAND_LINE;
       }
       po::notify(vm);
     }
@@ -563,6 +630,8 @@ int main(int argc,  char * argv[]){
     vector<string> target     = parse_groups(vm["target"].as<string>());
     vector<string> background = parse_groups(vm["background"].as<string>());
 
+    cpu = vm["cpu"].as<int>();
+
     if(vm.count("seqid")){
       seqid = vm["seqid"].as<string>();
       seqr  = getseqidn(seqid, target);
@@ -572,15 +641,15 @@ int main(int argc,  char * argv[]){
 
     printvec("INFO: target bam",     target    );
     printvec("INFO: background bam", background);
-    cerr << "INFO: starting to run regions\n";
+    cerr <<  "INFO: starting to run regions" << endl;
     
-    run_regions(target, background, seqid, seqr);
-    cerr << "INFO: Whamy has finished normally\n";
+    run_regions(target, background, seqid, seqr, cpu);
+    cerr << "INFO: raw has finished" << endl;
     return 0;    
   }
   catch(std::exception& e){
     std::cerr << "Unhandled Exception reached the top of main: " 
-	      << e.what() << ", application will now exit" << std::endl; 
+	      << e.what() << ", application will now exit" << endl; 
     return ERROR_UNHANDLED_EXCEPTION; 
   }
 
