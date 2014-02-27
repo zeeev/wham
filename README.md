@@ -72,12 +72,13 @@ add the following to your bash profile
 tcsh user (similar to C shell):
  
 add the following to your profile:  
+    
     setenv PATH            {$PATH}:/xxx/bamtools/include
     setenv CPATH           {$CPATH}:/xxx/bamtools/include
     setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
     setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
 
-###wham BAM:
+###WhamTools:
    
 1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
