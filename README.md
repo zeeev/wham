@@ -78,7 +78,7 @@ add the following to your profile:
     setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
     setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
 
-###WhamTools:
+###Installing WhamTools:
    
 1.  git clone git://github.com/jewmanchue/wham.git
 2.  cd wham
