@@ -14,6 +14,7 @@
 #include "math.h"
 
 #include "boost/asio/io_service.hpp"
+#include "boost/asio.hpp"
 #include "boost/bind.hpp"
 #include "boost/thread/thread.hpp"
 
@@ -361,7 +362,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   BamRegion      region_thread;
 
   if(! mreader_thread.Open(total)){
-    cerr << "ERROR: cannot open bams." << endl;
+    cerr << "ERROR: cannot open bams" << endl;
     exit(EXIT_FAILURE);
   }
 
@@ -374,6 +375,11 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   region_thread.RightRefID    = s;
   region_thread.LeftPosition  = j;
   region_thread.RightPosition = e;
+
+ if(! mreader_thread.SetRegion(region_thread)){
+   cerr << "ERROR: a thread was unable to set region" << endl;
+   exit(EXIT_FAILURE);
+ }
 
   BamAlignment al;
   read_pileup PileUp;
@@ -484,51 +490,53 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   RefVector seqids = mreader.GetReferenceData();
 
   int nseqs = mreader.GetReferenceCount() -1;
-
+  
   BamTools::SamHeader           header = mreader.GetHeader();
   BamTools::SamSequenceDictionary seqs = header.Sequences;
-
+  
   BamTools::SamSequence seq;
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-
+  
   boost::asio::io_service io_service;
-  boost::asio::io_service::work work(io_service);
-  
-  boost::thread_group threads;
-  
-  for(int i = 0; i < cpu; i++){
-    threads.create_thread(boost::bind(&asio::io_service::run, &io_service));
-  }
-  
-  cerr << "INFO: launched " << cpu << " threads" << endl;
-
-  int s      = 0;
-  double sum = 0;
-
-  for ( ; seqIter != seqEnd; ++seqIter ) {
-    if(seqr != -5){
-      if( seqr != s ){
-	s += 1;
-	continue;
-      }
+  auto_ptr<boost::asio::io_service::work> work(new boost::asio::io_service::work(io_service));
+   
+  //    boost::asio::io_service io_service;
+  //  boost::asio::io_service::work work (io_service);
+    
+    boost::thread_group threads;
+    
+    for(int i = 0; i < cpu; i++){
+      threads.create_thread(boost::bind(&asio::io_service::run, &io_service));
     }
     
-    seq = (*seqIter);
-    std::string sname = seq.Name;
+    cerr << "INFO: launched " << cpu << " threads" << endl;
+    
+    int s      = 0;
+    double sum = 0;
+    
+    for ( ; seqIter != seqEnd; ++seqIter ) {
+      if(seqr != -5){
+	if( seqr != s ){
+	  s += 1;
+	  continue;
+	}
+      }
+      
+      seq = (*seqIter);
+      std::string sname = seq.Name;
 
-    cerr << "INFO: loading " << sname << " into thread pool " << endl;
-    int j = 0;
-
-
-    for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
-      io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total)); 
+      cerr << "INFO: loading " << sname << " into thread pool " << endl;
+      int j = 0;
+      
+      for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
+	io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total)); 
+      }
+      io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total)); 
+      s += 1.0;
     }
-    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total)); 
-    s += 1.0;
-  }
-  
-  io_service.stop();
+    
+  work.reset();
   
   threads.join_all();
   
