@@ -397,6 +397,15 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   onedump = (onedump / 1000000);
 
   while(mreader_thread.GetNextAlignment(al)){
+
+    if(! al.IsPrimaryAlignment()){
+      continue; 
+    }
+
+    if(al.MapQuality < 20){
+      continue;
+    }
+
     if(! al.IsFirstMate()){
       continue;
     }
