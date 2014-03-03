@@ -97,6 +97,10 @@ sh /test/run-test.sh
 Basic usage:
 -----
 
+## getting help
+
+Run the programs with the -? flag
+
 ### wham
 
     wham mybam.bam mybam.bai scaffoldX > stdout 2> stderr
@@ -107,6 +111,12 @@ Whamy requires sorted BAMs.  To improve whamy's speeds it is a good idea to remo
 is not set whamy will run the whole genome.
 
     whamy --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --scaffold chr1 > stdout 2> stderr
+    
+### raw
+  Raw requires sorted BAMs.  To improve whamy's speeds it is a good idea to remove duplicates and index the BAMS (not required).  If the scaffold flag raw not set whamy will run the whole genome.
+  
+     raw --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --cpu 20 --scaffold chr1 > stdout 2> stderr
+     
 
 Output:
 -----
@@ -144,5 +154,17 @@ Columns:
 13. Average mapping quality (target)
 14. Average mapping quality (background)
 15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
+16. 
+
+###raw
+
+A tab delimited text file.
+Columns:
+
+1. Seqid
+2. Position
+3. LRT
+4. Depth - downsampled if depth exceeds 100
+5. P-value from ChiSq LRT lookup
 
 
