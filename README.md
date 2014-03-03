@@ -1,7 +1,7 @@
 Purpose:
 ------
 
-Whole-Genome Aligment Metrics Tools, or WhamTools for short, is an ensemble of tools focused on identifying structural variants associated with a group of bam Files.  
+Whole-Genome Aligment Metrics Tools, or WhamTools for short, is an ensemble of tools focused on identifying structural variants associated with a group of BAM Files / indviduals.  
   
 
 The toolkit has three programs:
