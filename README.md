@@ -97,7 +97,7 @@ sh /test/run-test.sh
 Basic usage:
 -----
 
-## getting help
+### getting help
 
 Run the programs with the -? flag
 
