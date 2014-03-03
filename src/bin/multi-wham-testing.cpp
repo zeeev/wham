@@ -48,6 +48,8 @@ struct posInfo
   // vector<int>     depths;
 };
 
+
+
 boost::mutex print_guard;
 
 double running_mb = 0;
@@ -214,6 +216,16 @@ void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 // }
 
 //------------------------------------------------------------
+double bound(double v){
+  if(v <= 0){
+    return 0.000001;
+  }
+  if(v >= 1){
+    return 0.999999;
+  }
+  return v;
+}
+//------------------------------------------------------------
 double llbinom(posInfo *info , double mp, double sp, double op, int flag){
   
   double m = boost::lexical_cast<double> ((*info).mateunmapped);
@@ -227,6 +239,9 @@ double llbinom(posInfo *info , double mp, double sp, double op, int flag){
      op = o / n;
   }
   
+  mp = bound(mp);
+  sp = bound(sp);
+  op = bound(op);
 
   double psum = 0.0;
 
@@ -265,7 +280,17 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   initPosInfo (&background);
   initPosInfo (&all);
 
-  for(list<BamAlignment>::iterator read = data.begin(); read != data.end(); read++){
+  int n = 0;
+  vector<BamAlignment> bv(data.size());
+  copy(data.begin(), data.end(), bv.begin());
+  random_shuffle(bv.begin(), bv.end());
+  list<BamAlignment> dat(bv.begin(), bv.end());
+
+  for(list<BamAlignment>::iterator read = dat.begin(); read != dat.end(); read++){
+    n += 1;
+    if(n > 50){
+      break;
+    }
     int amItarget = target_info.count(read->Filename);
     if(amItarget == 0){
       load_info_struct( &background, *read, rolling_meanb);
@@ -283,27 +308,31 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   double sp      = boost::lexical_cast<double>(all.samestrand) / nreads;
   double op      = boost::lexical_cast<double>(all.otherscaffold) / nreads;
   
-  double fraglmu = mean(all.fragl);
-  double fraglsd = sd(all.fragl,  fraglmu);
-
-  if(fraglsd <= 0){
-    fraglsd = 0.0001;
-  }
-
   if(treads < 10){
     return "";
   }
   if(breads < 10){
     return "";
   }
-  if(fraglsd > 20){
-    return "";
-  }
 
+  double fraglmu = mean(all.fragl);
+  double fraglsd = sd(all.fragl,  fraglmu);
+
+  if(fraglsd <= 0){
+    fraglsd = 0.0001;
+  }
+ 
   double fglt = mean(target.fragl);
   double fglb = mean(background.fragl);
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
+
+  if(fgst > 5){
+    return "";
+  }
+  if(fgsb > 5){
+    return "";
+  }
 
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
@@ -338,6 +367,8 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   printdat.append(boost::lexical_cast<string>(pos)) ;
   printdat.append("\t") ;
   printdat.append(boost::lexical_cast<string>(lrt)) ;
+  printdat.append("\t") ;
+  printdat.append(boost::lexical_cast<string>(nreads)) ;
   printdat.append("\t") ;
   printdat.append(boost::lexical_cast<string>(lp)) ;
   printdat.append("\n");
