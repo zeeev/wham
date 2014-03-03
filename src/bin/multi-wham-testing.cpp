@@ -281,14 +281,15 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   initPosInfo (&all);
 
   int n = 0;
+
   vector<BamAlignment> bv(data.size());
   copy(data.begin(), data.end(), bv.begin());
   random_shuffle(bv.begin(), bv.end());
   list<BamAlignment> dat(bv.begin(), bv.end());
-
+  
   for(list<BamAlignment>::iterator read = dat.begin(); read != dat.end(); read++){
     n += 1;
-    if(n > 50){
+    if(n > 100){
       break;
     }
     int amItarget = target_info.count(read->Filename);
