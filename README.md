@@ -61,7 +61,7 @@ For non-root users:
 
 bash users:
 
-add the following to your bash profile
+add the following to your bash profile where "xxx" is your relative path.
 
     export PATH=/xxx/bamtools/include:$PATH
     export CPATH=/xxx/bamtools/lib:$CPATH
