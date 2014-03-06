@@ -63,13 +63,13 @@ bash users:
 
 add the following to your bash profile where "xxx" is your relative path to bamtools. the path ("xxx") you want to specify should contain the following:
   
-  bin  build  CMakeLists.txt  docs  include  lib  LICENSE  README  src
+    "bin  build  CMakeLists.txt  docs  include  lib  LICENSE  README  src"
 
-  export BAMROOT="xxx"
-  export PATH=$BAMROOT/include:$PATH
-  export CPATH=$BAMROOT/lib:$CPATH
-  export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
-  export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
+    export BAMROOT="xxx"
+    export PATH=$BAMROOT/include:$PATH
+    export CPATH=$BAMROOT/lib:$CPATH
+    export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
 
 
     
