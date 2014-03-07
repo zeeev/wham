@@ -8,9 +8,9 @@ The toolkit has three programs:
 
 ### wham 
 
-Alignment anomalies within a single bamfile.  Do not use.
+Detecting alignment anomalies within a single bamfile.  Do not use.
 
-Detecting 
+
 
 ### whamy
 
