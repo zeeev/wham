@@ -6,7 +6,9 @@ Whole-Genome Aligment Metrics Tools, or WhamTools for short, is an ensemble of t
 
 The toolkit has three programs:
 
-### wham alignment anomalies within a single bamfile.  Do not use.
+### wham 
+
+Alignment anomalies within a single bamfile.  Do not use.
 
 Detecting 
 
