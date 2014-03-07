@@ -11,7 +11,6 @@
 #include "read_pileup.h"
 #include "randomregion.h"
 #include "flag.h"
-#include "entropy.h"
 #include "math.h"
 
 #include "boost/asio/io_service.hpp"
