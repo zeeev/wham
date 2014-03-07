@@ -61,12 +61,18 @@ For non-root users:
 
 bash users:
 
-add the following to your bash profile
+add the following to your bash profile where "xxx" is your relative path to bamtools. the path ("xxx") you want to specify should contain the following:
+  
+    "bin  build  CMakeLists.txt  docs  include  lib  LICENSE  README  src"
 
-    export PATH=/xxx/bamtools/include:$PATH
-    export CPATH=/xxx/bamtools/lib:$CPATH
-    export LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
-    export LD_LIBRARY_PATH=/xxx/bamtools/lib:$LD_LIBRARY_PATH
+    export BAMROOT="xxx"
+    export PATH=$BAMROOT/include:$PATH
+    export CPATH=$BAMROOT/lib:$CPATH
+    export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
+
+
+    
 
 
 tcsh user (similar to C shell):
