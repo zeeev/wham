@@ -11,6 +11,7 @@
 #include "read_pileup.h"
 #include "randomregion.h"
 #include "flag.h"
+#include "entropy.h"
 #include "math.h"
 
 #include "boost/asio/io_service.hpp"
@@ -41,13 +42,8 @@ struct posInfo
   int       mateunmapped;
   int         samestrand;
   int      otherscaffold;
-  //  vector<int>       mapq;
-  // vector<int>      flags;
   vector<double>   fragl;
-  // map<string,int>  depth;
-  // vector<int>     depths;
 };
-
 
 
 boost::mutex print_guard;
@@ -118,7 +114,7 @@ double mean(vector<double> & dat){
   for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
     n += 1.0 ;  
     sum += *datum;
-  
+    
 }
 
   double mean = sum / n;
@@ -151,9 +147,7 @@ double lldnorm(vector<double> & dat, double mu, double sdev){
 
       llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>( mu, sdev ), *datum) );
   }
-
   return -1 * llsum;
-
 }
 
 //------------------------------------------------------------
@@ -174,46 +168,27 @@ void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
 void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 
   (*info).nreads++;
-  //  (*info).mapq.push_back(read.MapQuality);
-  //  (*info).flags.push_back(read.AlignmentFlag);
-
-  //  (*info).depth[read.Filename]++;
 
   double ins =  abs(boost::lexical_cast<double>(read.InsertSize)) ;
-
-    ins = abs(ins / rolling_mean);
+  
+     ins = abs(ins / rolling_mean);
 
   (*info).fragl.push_back(ins);
 
   flag alflag;
 
   alflag.addFlag(read.AlignmentFlag);
-  //  cout << "readflag: " << read.AlignmentFlag << endl;
-
+  
   if(!(read.RefID == read.MateRefID)){
     (*info).otherscaffold++;
   }
-
   if(! alflag.isPairMapped()){
     (*info).mateunmapped++;
-    //  cout << "\tread pair is not mapped" << endl;
   }
   if(alflag.sameStrand()){
     (*info).samestrand++;
-    // cout << "\tread is on the same strand" << endl;
   }
 }
-
-//------------------------------------------------------------
-// void loadDepths(posInfo *info){
-// 
-//   map<string, int>::iterator it;
-// 
-//   for(it = (*info).depth.begin(); it != (*info).depth.end(); ++it){    
-//     (*info).depths.push_back(it->second);
-//   }
-// 
-// }
 
 //------------------------------------------------------------
 double bound(double v){
@@ -238,16 +213,12 @@ double llbinom(posInfo *info , double mp, double sp, double op, int flag){
      sp = s / n;
      op = o / n;
   }
-  
-  mp = bound(mp);
-  sp = bound(sp);
-  op = bound(op);
 
   double psum = 0.0;
 
   psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, mp), m ));
-  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, op), o ));
-  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, sp), s ));
+  //  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, op), o ));
+  //  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, sp), s ));
 
   
   return( -1 * psum);
@@ -268,11 +239,9 @@ void initPosInfo (posInfo * info){
 
 }
 //------------------------------------------------------------
-//------------------------------------------------------------
-
 /// proces the pileup information
 
-std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid, double rolling_meant, double rolling_meanb, double rolling_meana){
+double score(vector<BamAlignment> & dat, map<string, int> & target_info , double rolling_meant, double rolling_meanb){
 
   posInfo target, background, all;
 
@@ -280,24 +249,13 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   initPosInfo (&background);
   initPosInfo (&all);
 
-  int n = 0;
-
-  vector<BamAlignment> bv(data.size());
-  copy(data.begin(), data.end(), bv.begin());
-  random_shuffle(bv.begin(), bv.end());
-  list<BamAlignment> dat(bv.begin(), bv.end());
-  
-  for(list<BamAlignment>::iterator read = dat.begin(); read != dat.end(); read++){
-    n += 1;
-    if(n > 100){
-      break;
-    }
-    int amItarget = target_info.count(read->Filename);
+  for(int d = 0; d < dat.size(); d++){
+    int amItarget = target_info.count(dat[d].Filename);
     if(amItarget == 0){
-      load_info_struct( &background, *read, rolling_meanb);
+      load_info_struct( &background, dat[d], rolling_meanb);
     }
     else{
-      load_info_struct( &target, *read, rolling_meant);
+      load_info_struct( &target, dat[d], rolling_meant);
     }    
   }
   combine_info_struct(&target, &background, &all);
@@ -309,30 +267,23 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
   double sp      = boost::lexical_cast<double>(all.samestrand) / nreads;
   double op      = boost::lexical_cast<double>(all.otherscaffold) / nreads;
   
-  if(treads < 10){
-    return "";
+  if(treads < 10 ){
+    return 1;
   }
-  if(breads < 10){
-    return "";
+  if(breads < 10 ){
+    return 1;
   }
 
   double fraglmu = mean(all.fragl);
   double fraglsd = sd(all.fragl,  fraglmu);
 
-  if(fraglsd <= 0){
-    fraglsd = 0.0001;
-  }
- 
   double fglt = mean(target.fragl);
   double fglb = mean(background.fragl);
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
-  if(fgst > 5){
-    return "";
-  }
-  if(fgsb > 5){
-    return "";
+  if(abs(fglt - fglb) < 0.05 && (mp + sp + op) < 0.05){
+    return 1;
   }
 
   double btn    = llbinom(&target,     mp, sp, op, 0);
@@ -347,47 +298,47 @@ std::string process_pileup(list<BamAlignment> & data, map<string, int> & target_
 
   double lrt = 2 * ((btn + bbn + ftn + fbn) - (bta + bba + fta + fba));
 
-  boost::math::chi_squared_distribution<double> chisq(5);
-
   if(isinf(lrt)){
-    return "";
+    return 1;
   }
   if(isnan(lrt)){
-    return "";
+    return 1;
   }
 
-  if(lrt <= 0){
-    return "";
-  }
-  
-  double lp  = 1 - boost::math::cdf(chisq, lrt);
-
-  string printdat =  seqid ;
-
-  printdat.append("\t") ;
-  printdat.append(boost::lexical_cast<string>(pos)) ;
-  printdat.append("\t") ;
-  printdat.append(boost::lexical_cast<string>(lrt)) ;
-  printdat.append("\t") ;
-  printdat.append(boost::lexical_cast<string>(nreads)) ;
-  printdat.append("\t") ;
-  printdat.append(boost::lexical_cast<string>(lp)) ;
-  printdat.append("\n");
-  
-  if(lp > 0.05){
-    printdat = "";
-  }
-
-  return printdat; 
+  return lrt;
   
 }
 
 //------------------------------------------------------------
+//------------------------------------------------------------                                                                       
+double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target_info, double rolling_meant, double rolling_meanb){
+
+  double success = 0;
+
+  for(int rep = 0; rep < 1000; rep++){
+
+    for(int i = dat.size() -1 ;  i > 0 ; --i){
+      
+      if(target_info.count(dat[i].Filename)){
+	swap(dat[i].Filename, dat[ rand() % dat.size() ].Filename);
+      }
+    }
+
+    double newlrt = score(dat, target_info, rolling_meant, rolling_meanb);
+    //    cerr << "newlrt" << "\t" << newlrt << endl;
+    if(newlrt > lrt){
+      success += 1;
+    }
+  }
+  return success / 1000;
+}
+
+//------------------------------------------------------------ 
 //------------------------------------------------------------
 
 /// run the pileup
 
-void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total){
+void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total, double rolling_meant, double rolling_meanb){
 
   BamMultiReader mreader_thread;
   BamRegion      region_thread;
@@ -417,21 +368,115 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
   BamTools::RefVector seqids = mreader_thread.GetReferenceData();
 
-  double  Nt = 1;
-  double  St = 1;
-  double  Nb = 1;
-  double  Sb = 1;
-  double  Na = 1;
-  double  Sa = 1;
-
   std::vector <string> buffer;
-  double onedump = 100000;
-  onedump = (onedump / 1000000);
+
+  std::map<string, int> readname;
 
   while(mreader_thread.GetNextAlignment(al)){
-
+  
+    if(! al.IsMapped()){
+      continue;
+    }
     if(! al.IsPrimaryAlignment()){
       continue; 
+    }
+    if(al.MapQuality < 20){
+      continue;
+    }
+    if(! al.IsFirstMate()){
+      continue;
+    }
+    if(al.IsDuplicate()){
+      continue;
+    }
+   
+    PileUp.proccess_alignment(al);
+    string seqid = seqids[al.RefID].RefName;
+    if(PileUp.currentStart() > PileUp.currentPos()){
+      list<BamAlignment> dat =  PileUp.pileup();
+
+      vector <BamAlignment> data(dat.begin(), dat.end());
+      
+      //      cerr << "about to score\n";
+
+      double results = score(data, target_info, rolling_meant, rolling_meanb);
+
+      //      cerr << "about to score\n";
+
+      boost::math::chi_squared_distribution<double> chisq(5);
+      
+      if(results < 0){
+	results = 1;
+      }
+
+      double pv = 1 - boost::math::cdf(chisq, results);
+      double pr = 1;
+      
+
+      if(pv < 0.01){
+	pr = permute(results, data, target_info, rolling_meant, rolling_meanb);
+      }
+      
+      if(pv > 0.05){
+	continue;
+      }
+
+      string ans;
+      ans.append(seqid);
+      ans.append("\t");
+      ans.append(lexical_cast<string>(al.Position));
+      ans.append("\t");
+      ans.append(lexical_cast<string>(data.size()));
+      ans.append("\t");
+      ans.append(lexical_cast<string>(results));
+      ans.append("\t");
+      ans.append(lexical_cast<string>(pv));
+      ans.append("\t");
+      ans.append(lexical_cast<string>(pr));
+      ans.append("\n");
+
+      buffer.push_back(ans);
+    
+    }
+  }
+
+  print_guard.lock();
+  running_mb += (lexical_cast<double>(buffer.size()) / 1000000);
+  cerr << "INFO:" << running_mb << "Mb finished" << endl; 
+  if(buffer.size() > 0){
+    printansvec("", buffer);
+    print_guard.unlock();
+    buffer.clear();
+  }
+}
+
+//------------------------------------------------------------
+//------------------------------------------------------------
+void set_mu_i(map<string, int> & target_info, vector<string> & target, double *mut, double *mub){
+
+  BamMultiReader mreader;
+
+  if(! mreader.Open(target)){
+    cerr << "cannot open bams." << endl;
+  }
+
+  double bs = 0;
+  double bn = 0;
+
+  double ts = 0;
+  double tn = 0;
+
+  BamAlignment al;
+
+  while(mreader.GetNextAlignment(al)){
+
+    if(! al.IsMapped()){
+      
+      continue;
+    }
+
+    if(! al.IsPrimaryAlignment()){
+      continue;
     }
 
     if(al.MapQuality < 20){
@@ -450,49 +495,25 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
     int amItarget = target_info.count(al.Filename);
     if(amItarget == 0){
-
-      Nb += 1 ;
-      Sb += ins;
+      bs += ins;
+      bn += 1;
     }
     else{
-      Nt += 1 ;
-      St += ins;
+      ts += ins;
+      tn += 1;
     }
-    Na += 1;
-    Sa += ins;
-
-    double rolling_meant = St / Nt; 
-    double rolling_meanb = Sb / Nb; 
-    double rolling_meana = Sa / Na; 
-   
-
-    PileUp.proccess_alignment(al);
-    string seqid = seqids[al.RefID].RefName;
-    if(PileUp.currentStart() > PileUp.currentPos()){
-      list<BamAlignment> dat =  PileUp.pileup();
-      string ans = process_pileup(dat, target_info, PileUp.currentPos(), seqid, rolling_meant, rolling_meanb, rolling_meana);
-      buffer.push_back(ans);
-      if(buffer.size() > 100000){
-	print_guard.lock();
-	running_mb += onedump;
-	cerr << "INFO:" << running_mb << "Mb finished" << endl; 
-	printansvec("", buffer);	
-	print_guard.unlock();
-	buffer.clear();
-      }
+    if(bn > 1000000 && tn > 1000000){
+      break;
     }
   }
-  print_guard.lock();
-  running_mb += (lexical_cast<double>(buffer.size()) / 1000000);
-  cerr << "INFO:" << running_mb << "Mb finished" << endl; 
-  printansvec("", buffer);
-  print_guard.unlock();
-  buffer.clear();
+
+  (*mut) = ts / tn;
+  (*mub) = bs / bn;
+
+  mreader.Close();
+
 }
-
 //------------------------------------------------------------
-//------------------------------------------------------------
-
 /// run the regions
 
 void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu){
@@ -522,6 +543,14 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     exit(EXIT_FAILURE);
   }
 
+  double mu_i_target    ;
+  double mu_i_background;
+
+  set_mu_i(target_info,total, & mu_i_target, & mu_i_background);
+
+   cerr << "INFO: target mate pair mapping distance average over 1million reads: "     << mu_i_target     << endl;
+   cerr << "INFO: background mate pair mapping distance average over 1million reads: " << mu_i_background << endl;
+
   if(! mreader.LocateIndexes()){
     cerr << "ERROR: cannot create or locate indicies" << endl;
     exit(EXIT_FAILURE);  
@@ -537,18 +566,10 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   BamTools::SamSequence seq;
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-  
-  //boost::asio::io_service io_service;
-  //auto_ptr<boost::asio::io_service::work> work(new boost::asio::io_service::work(io_service));
-
-  
-   
+     
   asio::io_service io_service;
   auto_ptr<asio::io_service::work> work(new asio::io_service::work(io_service));
 
-    //asio::io_service::work work (io_service);
-  
-  
   boost::thread_group threads;
   
   for(int i = 0; i < cpu; i++){
@@ -575,9 +596,9 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     int j = 0;
     
     for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
-      io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total)); 
+      io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total, mu_i_target, mu_i_background)); 
     }
-    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total)); 
+    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total, mu_i_target, mu_i_background)); 
     s += 1.0;
   }
   
@@ -590,7 +611,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 }
 
 //------------------------------------------------------------
-//------------------------------------------------------------
+
 
 /// given a seqid and a file/set of files find the index for the seqid
 
