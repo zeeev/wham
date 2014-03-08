@@ -11,7 +11,6 @@
 #include "read_pileup.h"
 #include "randomregion.h"
 #include "flag.h"
-#include "entropy.h"
 #include "math.h"
 
 #include "boost/asio/io_service.hpp"
@@ -52,7 +51,6 @@ double running_mb = 0;
 
 
 //------------------------------------------------------------
-//------------------------------------------------------------
 
 /// split a string and return a vector
 
@@ -65,13 +63,16 @@ vector<string> parse_groups(string  files){
 }
 
 //------------------------------------------------------------
-//------------------------------------------------------------
+
+/// print a vector
 
 void printansvec(string base, vector<string> & data){
   for(vector<string>::iterator it = data.begin(); it != data.end(); it++){
     cout <<  *it ;
   }
 }
+
+//------------------------------------------------------------
 
 /// print a vector and a base string for the tag
 
@@ -80,7 +81,7 @@ void printvec(string base, vector<string> & data){
     cerr << base  << ":  " << *it << endl;
   }
 }
-//------------------------------------------------------------
+
 //------------------------------------------------------------
 
 /// test if bam indecies exists and if they doesn't it creates them
@@ -90,15 +91,14 @@ void check_index(vector<string> & group){
   BamMultiReader mreaderz;
 
   if(! mreaderz.Open( group ) ){
-    cerr << "couldn't open file" << endl;
+    cerr << "couldn't open bams" << endl;
   }
   
   if(! mreaderz.LocateIndexes()){
-    cerr << "INFO: wham didn't find index, creating one." << endl;
+    cerr << "INFO: wham didn't find indices, creating them." << endl;
     mreaderz.CreateIndexes();
   }
    
-  //cerr << "INFO: done checking index\n";
 }
 
 //------------------------------------------------------------
@@ -123,6 +123,9 @@ double mean(vector<double> & dat){
 }
 
 //------------------------------------------------------------
+
+/// take a vector and a mean and calculate the standard deviation
+
 double sd(vector<double> & dat, double mean){
   
   double ss = 0;
@@ -140,6 +143,8 @@ double sd(vector<double> & dat, double mean){
 
 //------------------------------------------------------------
 
+/// loop over a vector of data and return the total log likelihood
+
 double lldnorm(vector<double> & dat, double mu, double sdev){
   double llsum = 0;
 
@@ -151,6 +156,9 @@ double lldnorm(vector<double> & dat, double mu, double sdev){
 }
 
 //------------------------------------------------------------
+
+/// take target and background information from the pileup and combine into total
+
 void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
   (*a).nreads         =  (*t).nreads         +    (*b).nreads       ;
   (*a).otherscaffold  =  (*t).otherscaffold  +    (*b).otherscaffold; 
@@ -191,6 +199,9 @@ void load_info_struct(posInfo  *info, BamAlignment & read, double rolling_mean){
 }
 
 //------------------------------------------------------------
+
+/// bound a double between zero and one 
+
 double bound(double v){
   if(v <= 0){
     return 0.000001;
@@ -201,6 +212,9 @@ double bound(double v){
   return v;
 }
 //------------------------------------------------------------
+
+/// give the paramters of the binomial mp,sp,op calculate total log likelihood
+
 double llbinom(posInfo *info , double mp, double sp, double op, int flag){
   
   double m = boost::lexical_cast<double> ((*info).mateunmapped);
@@ -217,15 +231,13 @@ double llbinom(posInfo *info , double mp, double sp, double op, int flag){
   double psum = 0.0;
 
   psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, mp), m ));
-  //  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, op), o ));
-  //  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, sp), s ));
+  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, op), o ));
+  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, sp), s ));
 
   
   return( -1 * psum);
 
 }
-
-
 //------------------------------------------------------------
 
 /// Initialize the pileup data struct
@@ -239,6 +251,7 @@ void initPosInfo (posInfo * info){
 
 }
 //------------------------------------------------------------
+
 /// proces the pileup information
 
 double score(vector<BamAlignment> & dat, map<string, int> & target_info , double rolling_meant, double rolling_meanb){
@@ -309,13 +322,17 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info , double
   
 }
 
-//------------------------------------------------------------
-//------------------------------------------------------------                                                                       
+//------------------------------------------------------------                                                                
+
+/// permute the score function by suffling the reads' filenames
+       
 double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target_info, double rolling_meant, double rolling_meanb){
 
   double success = 0;
+  double ntrials = 0;
 
-  for(int rep = 0; rep < 1000; rep++){
+  while(ntrials < 100000 && success < 20){
+    ntrials += 1;
 
     for(int i = dat.size() -1 ;  i > 0 ; --i){
       
@@ -325,12 +342,11 @@ double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target
     }
 
     double newlrt = score(dat, target_info, rolling_meant, rolling_meanb);
-    //    cerr << "newlrt" << "\t" << newlrt << endl;
     if(newlrt > lrt){
       success += 1;
     }
   }
-  return success / 1000;
+  return success / ntrials;
 }
 
 //------------------------------------------------------------ 
@@ -370,9 +386,10 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
   std::vector <string> buffer;
 
-  std::map<string, int> readname;
+  double nreads = 0;
 
   while(mreader_thread.GetNextAlignment(al)){
+    nreads += 1;
   
     if(! al.IsMapped()){
       continue;
@@ -389,7 +406,8 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
     if(al.IsDuplicate()){
       continue;
     }
-   
+
+
     PileUp.proccess_alignment(al);
     string seqid = seqids[al.RefID].RefName;
     if(PileUp.currentStart() > PileUp.currentPos()){
@@ -397,27 +415,23 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
       vector <BamAlignment> data(dat.begin(), dat.end());
       
-      //      cerr << "about to score\n";
-
       double results = score(data, target_info, rolling_meant, rolling_meanb);
-
-      //      cerr << "about to score\n";
 
       boost::math::chi_squared_distribution<double> chisq(5);
       
       if(results < 0){
-	results = 1;
+	continue;
       }
 
       double pv = 1 - boost::math::cdf(chisq, results);
       double pr = 1;
-      
-
-      if(pv < 0.01){
-	pr = permute(results, data, target_info, rolling_meant, rolling_meanb);
+      if(pv > 0.01){
+	continue ;
       }
       
-      if(pv > 0.05){
+      pr = permute(results, data, target_info, rolling_meant, rolling_meanb);
+
+      if(pr > 0.05){
 	continue;
       }
 
@@ -438,20 +452,31 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
       buffer.push_back(ans);
     
     }
+    if(buffer.size() > 10000){
+      print_guard.lock();
+      running_mb += (nreads / 1000000);
+      nreads = 0;
+      cerr << "INFO:" << running_mb << " Million reads finished" << endl;
+      printansvec("", buffer);
+      buffer.clear();
+      print_guard.unlock();  
+    }
+    
+    
   }
 
   print_guard.lock();
-  running_mb += (lexical_cast<double>(buffer.size()) / 1000000);
-  cerr << "INFO:" << running_mb << "Mb finished" << endl; 
-  if(buffer.size() > 0){
-    printansvec("", buffer);
-    print_guard.unlock();
-    buffer.clear();
-  }
+  running_mb += (nreads / 1000000);
+  cerr << "INFO:" << running_mb << " Million reads finished" << endl; 
+  printansvec("", buffer);
+  
+  print_guard.unlock();
 }
 
 //------------------------------------------------------------
-//------------------------------------------------------------
+
+/// set the mean mapping distance between matepairs
+
 void set_mu_i(map<string, int> & target_info, vector<string> & target, double *mut, double *mub){
 
   BamMultiReader mreader;
@@ -471,7 +496,6 @@ void set_mu_i(map<string, int> & target_info, vector<string> & target, double *m
   while(mreader.GetNextAlignment(al)){
 
     if(! al.IsMapped()){
-      
       continue;
     }
 
@@ -514,6 +538,7 @@ void set_mu_i(map<string, int> & target_info, vector<string> & target, double *m
 
 }
 //------------------------------------------------------------
+
 /// run the regions
 
 void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu){
@@ -652,7 +677,8 @@ int getseqidn (string & seqid, vector<string> & target){
 }
 
 //------------------------------------------------------------
-//------------------------------------------------------------
+
+/// main's main of course.  Using boost program options flag errors.
 
 int main(int argc,  char * argv[]){
 
@@ -678,7 +704,7 @@ int main(int argc,  char * argv[]){
       po::store(po::parse_command_line(argc, argv, desc), vm);
       
       if(vm.count("help")){
-	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
+	cout << "Usage: raw -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
 	return SUCCESS;
       }
       if(! vm.count("target")){
@@ -729,11 +755,4 @@ int main(int argc,  char * argv[]){
 	      << e.what() << ", application will now exit" << endl; 
     return ERROR_UNHANDLED_EXCEPTION; 
   }
-
-  
-  
-
 }
-
-//------------------------------------------------------------
-//------------------------------------------------------------
