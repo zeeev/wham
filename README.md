@@ -6,9 +6,11 @@ Whole-Genome Aligment Metrics Tools, or WhamTools for short, is an ensemble of t
 
 The toolkit has three programs:
 
-### wham alignment anomalies within a single bamfile.  Do not use.
+### wham 
 
-Detecting 
+Detecting alignment anomalies within a single bamfile.  Do not use.
+
+
 
 ### whamy
 
@@ -160,7 +162,7 @@ Columns:
 13. Average mapping quality (target)
 14. Average mapping quality (background)
 15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
-16. 
+
 
 ###raw
 
@@ -169,8 +171,13 @@ Columns:
 
 1. Seqid
 2. Position
+3. Combined depth target + background
 3. LRT
-4. Depth - downsampled if depth exceeds 100
 5. P-value from ChiSq LRT lookup
+6. Permutation to validate significance 
+
+
+When column 5 is much lower than column six the LRT is not valid.  The permutation test corrects for false positives due to discorance of the model and data. 
+
 
 
