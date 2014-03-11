@@ -335,9 +335,8 @@ double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target
 
     for(int i = dat.size() -1 ;  i > 0 ; --i){
       
-      if(target_info.count(dat[i].Filename)){
-	swap(dat[i].Filename, dat[ rand() % dat.size() ].Filename);
-      }
+      swap(dat[i].Filename, dat[ rand() % dat.size() ].Filename);
+
     }
 
     double newlrt = score(dat, target_info);
