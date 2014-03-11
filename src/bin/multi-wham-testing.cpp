@@ -729,7 +729,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     }
 
     int slen = lexical_cast<int>(seq.Length);
-    int rstart = rand() % (slen - 50000);
+    int rstart = rand() % (slen - 500000);
     if(rstart < 0){
       	continue;
     }
@@ -739,7 +739,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
     double per = double(randLRT.size());
 
-    cerr << "INFO: " << "assayed " << (100 * (per / 50000)) << " % of LRT genomic baseline" << endl;
+    cerr << "INFO: " << "assayed " << (100 * (per / 500000)) << " % of LRT genomic baseline" << endl;
   }
 
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
@@ -748,8 +748,13 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   double rmu = mean(randLRT);
   double rsd = sd(randLRT, rmu);
-  
   double cut = rmu + (3*rsd);
+  
+  cerr << "INFO: average LRT score aross 500kb is : " << rmu << endl;
+  cerr << "INFO: standard deviation LRT score aross 500kb is : " << rmu << endl;
+  cerr << "INFO: LRT score required for permutation : " << cut << endl;
+  
+
     
   asio::io_service io_service;
   auto_ptr<asio::io_service::work> work(new asio::io_service::work(io_service));
