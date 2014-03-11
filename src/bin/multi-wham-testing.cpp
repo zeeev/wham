@@ -577,6 +577,16 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
       buffer.push_back(ans);
     
+      if(buffer.size() > 100000){
+	print_guard.lock();
+	running_mb += (nreads / 1000000);
+	nreads = 0;
+	cerr << "INFO:" << running_mb << " Million reads finished" << endl;
+	printansvec("", buffer);
+	buffer.clear();
+	print_guard.unlock();
+      }
+
     }
   }
 
