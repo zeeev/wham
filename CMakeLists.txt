@@ -6,12 +6,12 @@ cmake_minimum_required(VERSION 2.6)
 
 project(WHAM CXX)
 
-set(CMAKE_CXX_FLAGS "-lboost_program_options -lboost_system -lpthread -lboost_thread-mt")
+set(CMAKE_CXX_FLAGS "  -lboost_program_options -lboost_system -lpthread -lboost_thread-mt")
 #set(CMAKE_CXX_FLAGS "-std=c++0x -lboost_program_options")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
-set(SRC ${CMAKE_SOURCE_DIR}/src/lib/flag.cpp ${CMAKE_SOURCE_DIR}/src/lib/read_pileup.cpp)
-set(HEADERS ${CMAKE_SOURCE_DIR}/src/lib/flag.h ${CMAKE_SOURCE_DIR}/src/lib/read_pileup.h)
+set(SRC ${CMAKE_SOURCE_DIR}/src/lib/flag.cpp ${CMAKE_SOURCE_DIR}/src/lib/read_pileup.cpp ${CMAKE_SOURCE_DIR}/src/lib/entropy.cpp)
+set(HEADERS ${CMAKE_SOURCE_DIR}/src/lib/flag.h ${CMAKE_SOURCE_DIR}/src/lib/read_pileup.h ${CMAKE_SOURCE_DIR}/src/lib/entropy.h)
 
 find_package(Boost REQUIRED) 
 include_directories(${Boost_INCLUDE_DIRS}) 
