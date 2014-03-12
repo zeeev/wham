@@ -278,7 +278,6 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double treads  = double (target.nreads);
   double breads  = double (background.nreads);
 
-
   if(treads < 10){
     return 1;
   }
@@ -290,7 +289,6 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double sp      = double (all.samestrand) / nreads;
   double op      = double (all.otherscaffold) / nreads;
   
-
   double fraglmu = all.fragm / nreads;
   double fraglsd = sd(all.fragl,  fraglmu);
 
@@ -299,6 +297,13 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
+
+  if((fraglsd - fgst) < 0){
+    return 1;
+  }
+  if((fraglsd - fgsb) < 0){
+    return 1;
+  }
 
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
@@ -321,7 +326,7 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   return lrt;
 }
 
-//------------------------------------------------------------                                                                
+//------------------------------------------------------------                                  
 
 /// permute the score function by suffling the reads' filenames
        
@@ -445,9 +450,7 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
         if(pv > 0.01){
        	continue;
         }
-      
-
-      
+            
       LRT.push_back(results);
     }
   }
