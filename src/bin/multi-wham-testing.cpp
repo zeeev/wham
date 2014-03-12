@@ -297,11 +297,10 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
-
-  if((fraglsd - fgst) < 0){
+  if((fraglsd - fgst) < -2){
     return 1;
   }
-  if((fraglsd - fgsb) < 0){
+  if((fraglsd - fgsb) < -2){
     return 1;
   }
 
@@ -558,10 +557,10 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
       if(pv > 0.01){
       	continue;
       }
-      if(results > cut){
-      	double pvp = permute(results, data, target_info);
-	pr = lexical_cast<string>(pvp);
-      }
+       if(results > cut){
+       	double pvp = permute(results, data, target_info);
+       	pr = lexical_cast<string>(pvp);
+       }
 
       string ans;
       ans.append(seqid);
@@ -711,38 +710,38 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   SamSequence seq;
 
-  while(randLRT.size() < 100000){
-   
-    int rseqid = rand() % nseqs;
-    int ni     = 0;
-
-    SamSequenceConstIterator seqIter = seqs.ConstBegin();
-    SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-       
-    for ( ; seqIter != seqEnd; ++seqIter ) {
-      if(ni != rseqid){
-	ni += 1;
-	continue;
-      }
-      else{
-	seq = (*seqIter);
-	break;
-      }
-    }
-
-    int slen = lexical_cast<int>(seq.Length);
-    int rstart = rand() % (slen - 500000);
-    if(rstart < 0){
-      	continue;
-    }
+   while(randLRT.size() < 100000){
     
-    int rend   = rstart + 50000;
-   
-    pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
-    double per = double(randLRT.size());
-
-    cerr << "INFO: " << "assayed " << (100 * (per / 500000)) << " % of LRT genomic baseline" << endl;
-  }
+     int rseqid = rand() % nseqs;
+     int ni     = 0;
+ 
+     SamSequenceConstIterator seqIter = seqs.ConstBegin();
+     SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
+        
+     for ( ; seqIter != seqEnd; ++seqIter ) {
+       if(ni != rseqid){
+ 	ni += 1;
+ 	continue;
+       }
+       else{
+ 	seq = (*seqIter);
+ 	break;
+       }
+     }
+ 
+     int slen = lexical_cast<int>(seq.Length);
+     int rstart = rand() % (slen - 100000);
+     if(rstart < 0){
+       	continue;
+     }
+     
+     int rend   = rstart + 10000;
+    
+     pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
+     double per = double(randLRT.size());
+ 
+     cerr << "INFO: " << "assayed " << (100 * (per / 500000)) << " % of LRT genomic baseline" << endl;
+   }
 
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
@@ -750,14 +749,12 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   double rmu = mean(randLRT);
   double rsd = sd(randLRT, rmu);
-  double cut = rmu + (3*rsd);
+  double cut = rmu + (3.5*rsd);
   
   cerr << "INFO: average LRT score aross 500kb is : " << rmu << endl;
   cerr << "INFO: standard deviation LRT score aross 500kb is : " << rmu << endl;
   cerr << "INFO: LRT score required for permutation : " << cut << endl;
-  
-
-    
+     
   asio::io_service io_service;
   auto_ptr<asio::io_service::work> work(new asio::io_service::work(io_service));
 
