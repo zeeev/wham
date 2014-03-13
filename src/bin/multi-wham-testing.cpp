@@ -6,7 +6,6 @@
 //  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
 //
 
-
 #include "stdio.h"
 #include "api/BamMultiReader.h"
 #include "read_pileup.h"
@@ -17,7 +16,6 @@
 #include <stdio.h>      
 #include <stdlib.h>     
 #include <time.h>       
-
 
 #include "boost/asio/io_service.hpp"
 #include "boost/bind.hpp"
@@ -709,7 +707,12 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   SamSequence seq;
 
    while(randLRT.size() < 100000){
-    
+     if(nseqs == 0){
+       cerr << "WARNING: Only one seqid in dataset cannot randomly sample LRT" << endl;
+       cerr << "WARNING: setting LRT permutation threshold to 100"             << endl;
+       break;
+     }
+ 
      int rseqid = rand() % nseqs;
      int ni     = 0;
  
@@ -744,11 +747,16 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
   BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
 
+  double rmu = 0;
+  double rsd = 0;
+  double cut = 100;
 
-  double rmu = mean(randLRT);
-  double rsd = sd(randLRT, rmu);
-  double cut = rmu + (3.5*rsd);
-  
+  if(nseqs > 0){
+     rmu = mean(randLRT);
+     rsd = sd(randLRT, rmu);
+     cut = rmu + (3.5*rsd);
+  }
+
   cerr << "INFO: average LRT score aross 100kb random is : " << rmu << endl;
   cerr << "INFO: standard deviation LRT score aross 100kb random is : " << rmu << endl;
   cerr << "INFO: LRT score required for permutation : " << cut << endl;
