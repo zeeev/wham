@@ -706,7 +706,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   SamSequence seq;
 
-   while(randLRT.size() < 100000){
+   while(randLRT.size() < 5000){
      if(nseqs == 0){
        cerr << "WARNING: Only one seqid in dataset cannot randomly sample LRT" << endl;
        cerr << "WARNING: setting LRT permutation threshold to 100"             << endl;
@@ -741,7 +741,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
      pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
      double per = double(randLRT.size());
  
-     cerr << "INFO: " << "assayed " << (100 * (per / 100000)) << "% of LRT genomic baseline" << endl;
+     cerr << "INFO: " << "assayed " << (100 * (per / 5000)) << "% of LRT genomic baseline" << endl;
    }
 
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
