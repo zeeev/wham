@@ -70,6 +70,7 @@ add the following to your bash profile where "xxx" is your relative path to bamt
     export BAMROOT="xxx"
     export PATH=$BAMROOT/include:$PATH
     export CPATH=$BAMROOT/lib:$CPATH
+    export CPATH=$BAMROOT/include:$CPATH
     export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
 
