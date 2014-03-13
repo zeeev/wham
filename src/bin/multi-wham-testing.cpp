@@ -404,13 +404,13 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
         chucker[rname] = 1;
         continue;
       }
-      fastQ read_dat;
-      read_dat.setDNA(al.QueryBases);
-      double en = read_dat.entropy(4);
-      if(en < 1){
-        chucker[rname] = 1;
-        continue;
-      }
+      // fastQ read_dat;
+      // read_dat.setDNA(al.QueryBases);
+      // double en = read_dat.entropy(4);
+      // if(en < 1){
+      //   chucker[rname] = 1;
+      //   continue;
+      // }
     }
     else{
       chucker.erase(rname);
@@ -510,14 +510,14 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 	continue;	
       }
 
-      fastQ read_dat;
-      read_dat.setDNA(al.QueryBases);
-      double en = read_dat.entropy(4);     
-
-      if(en < 1){
-        chucker[rname] = 1;
-        continue;
-      }
+      // fastQ read_dat;
+      // read_dat.setDNA(al.QueryBases);
+      // double en = read_dat.entropy(4);     
+      // 
+      // if(en < 1){
+      //   chucker[rname] = 1;
+      //   continue;
+      // }
 
     }
     else{
@@ -598,9 +598,7 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
   cerr << "INFO:" << running_mb << " Million reads finished" << endl; 
   printansvec("", buffer);
   print_guard.unlock();
-  
-
- 
+   
 }
 
 //------------------------------------------------------------
@@ -730,7 +728,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
      }
  
      int slen = lexical_cast<int>(seq.Length);
-     int rstart = rand() % (slen - 100000);
+     int rstart = rand() % (slen - 10000);
      if(rstart < 0){
        	continue;
      }
@@ -740,7 +738,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
      pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
      double per = double(randLRT.size());
  
-     cerr << "INFO: " << "assayed " << (100 * (per / 500000)) << " % of LRT genomic baseline" << endl;
+     cerr << "INFO: " << "assayed " << (100 * (per / 100000)) << "% of LRT genomic baseline" << endl;
    }
 
   BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
@@ -751,8 +749,8 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   double rsd = sd(randLRT, rmu);
   double cut = rmu + (3.5*rsd);
   
-  cerr << "INFO: average LRT score aross 500kb is : " << rmu << endl;
-  cerr << "INFO: standard deviation LRT score aross 500kb is : " << rmu << endl;
+  cerr << "INFO: average LRT score aross 100kb random is : " << rmu << endl;
+  cerr << "INFO: standard deviation LRT score aross 100kb random is : " << rmu << endl;
   cerr << "INFO: LRT score required for permutation : " << cut << endl;
      
   asio::io_service io_service;
