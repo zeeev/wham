@@ -87,9 +87,26 @@ void check_index(vector<string> & group){
 //------------------------------------------------------------
 //------------------------------------------------------------
 
+/// take a vector and a mean and calculate the standard deviation                                                                       
+
+double sd(vector<int> & dat, double mean){
+
+  double ss = 0;
+  double n  = 0;
+
+  for(vector<int>::iterator datum = dat.begin(); datum != dat.end(); datum++){
+    ss += pow(( double(*datum) - mean), 2);
+    n  += 1;
+  }
+
+  double sd = sqrt(ss/(n-1));
+  return sd + 1;
+
+}
+//------------------------------------------------------------
 /// takes a vector and calculates the mean
 
-float mean(vector<int> & dat){
+double mean(vector<int> & dat){
 
   int n   = 0;
   int sum = 0;
@@ -101,7 +118,7 @@ float mean(vector<int> & dat){
       
   }
 
-  float mean = static_cast<float>(sum) / static_cast<float>(n);
+  double mean = static_cast<float>(sum) / static_cast<float>(n);
   
   return mean;
 
@@ -159,11 +176,11 @@ void initPosInfo (posInfo * info){
 
 void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, int pos, string & seqid){
 
-  posInfo target, background;
+  posInfo target, background, all;
 
   initPosInfo (&target);
   initPosInfo (&background);
-
+  initPosInfo (&all);
 
   //  cout << "nreads: " << "\t" << data.size() << endl;
 
@@ -177,6 +194,7 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
     else{
       load_info_struct( &target, *read);
     }    
+      load_info_struct( &all, *read);
   }
 
   double t, b, tss, bss, tn, bn, tos, bos ;
@@ -196,6 +214,11 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
 
   double mti = mean(target.fragl);
   double mbi = mean(background.fragl);
+  double mai = mean(all.fragl);
+
+  double sti = sd(target.fragl, mti);
+  double sbi = sd(background.fragl, mbi);
+  double sai = sd(all.fragl, mai);
 
   double mtm = mean(target.mapq);
   double mbm = mean(background.mapq);
@@ -231,8 +254,8 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
 
   cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << tss << "\t" 
        << bss << "\t" << tos << "\t" << bos << "\t" << target.nreads << "\t" 
-       << background.nreads << "\t" << mti << "\t" << mbi 
-       << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
+       << background.nreads << "\t" << mti << "\t" << sti << "\t" <<  mbi 
+       << "\t" << sbi << "\t" << mai << "\t" << sai << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
 
 }
 
@@ -269,7 +292,7 @@ void pileup(BamMultiReader & mreader, map<string, int> & target_info){
 
 /// run the regions
 
-void run_regions(vector<string> & target, vector <string> & background, string & seqid, BamRegion & seqr){
+void run_regions(vector<string> & target, vector <string> & background, string & seqid, BamRegion  seqr){
 
   vector <string> total  = target;
 
@@ -304,10 +327,10 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   }
 
   RefVector seqids = mreader.GetReferenceData();
-
   int nseqs = mreader.GetReferenceCount() -1;
 
   if(seqid.compare("NA") == 0 ){
+    cerr << "Seqid not defined running whole genome\n" << endl;
     pileup(mreader, target_info);
     cerr << "Finished Whole Genome!" << endl;
   }
@@ -327,11 +350,9 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
 /// given a seqid and a file/set of files find the index for the seqid
 
-BamRegion getseqidn (string & seqid, vector<string> & target){
+int getseqidn (string & seqid, vector<string> & target){
 
   BamRegion region;
-
-  cerr << "WTF: " << seqid << endl;
 
   BamMultiReader mreader;
 
@@ -365,7 +386,7 @@ BamRegion getseqidn (string & seqid, vector<string> & target){
     i++;
   }
   
-  return region;
+  return i;
 
 }
 
@@ -386,13 +407,26 @@ int main(int argc,  char * argv[]){
       ("help,h",       "produce help info")
       ("target,t",     po::value<string>() ,   "The target bam files, comma sep list")
       ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
-      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" );
+      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" )
+      ("right,r",      po::value<int>() ,      "Define right boundry " )
+      ("left,l",       po::value<int>() ,      "Define left  boundry " );
       
     po::variables_map vm;
     
     try{
     
       po::store(po::parse_command_line(argc, argv, desc), vm);
+
+
+      if(! vm.count("left")){
+	return ERROR_IN_COMMAND_LINE;
+      }
+      if(! vm.count("right")){
+	return ERROR_IN_COMMAND_LINE;
+      }
+      if(! vm.count("seqid")){
+        return ERROR_IN_COMMAND_LINE;
+      }
       
       if(vm.count("help")){
 	cout << "Usage: whammy -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
@@ -419,10 +453,18 @@ int main(int argc,  char * argv[]){
     vector<string> target     = parse_groups(vm["target"].as<string>());
     vector<string> background = parse_groups(vm["background"].as<string>());
 
-    if(vm.count("seqid")){
-      seqid = vm["seqid"].as<string>();
-      seqr  = getseqidn(seqid, target);
-    }
+
+    seqid = vm["seqid"].as<string>();
+    int seqix  = getseqidn(seqid, target);
+    seqr.LeftRefID  = seqix;
+    seqr.RightRefID = seqix;
+    seqr.LeftPosition =  vm["left"].as<int>();
+    seqr.RightPosition = vm["right"].as<int>();
+    
+
+    cerr << "seqid: " << seqr.LeftRefID     << endl;
+    cerr << "left:  " << seqr.LeftPosition  << endl;
+    cerr << "right: " << seqr.RightPosition << endl;
 
     //    cerr << "if region is set: " << "\t" << seqn << "\t" << seqid << endl;
 
