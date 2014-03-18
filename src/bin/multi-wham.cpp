@@ -254,8 +254,8 @@ void process_pileup(list<BamAlignment> & data, map<string, int> & target_info, i
 
   cout << seqid << "\t" << pos << "\t" << t << "\t" << b << "\t" << tss << "\t" 
        << bss << "\t" << tos << "\t" << bos << "\t" << target.nreads << "\t" 
-       << background.nreads << "\t" << mti << "\t" << sti << "\t" <<  mbi 
-       << "\t" << sbi << "\t" << mai << "\t" << sai << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
+       << background.nreads << "\t" << mti <<  "\t" <<  mbi 
+       << "\t" << mtm << "\t" << mbm << "\t" << u << endl;
 
 }
 
