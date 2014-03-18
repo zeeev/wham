@@ -24,8 +24,7 @@ Installing:
 -----
 ###Quick Install:
 
-Assuming that bamtools is installed and boost is present on your system skip strait to "Installing WhamTools."
-
+Assuming that bamtools is installed and boost is present on your system skip strait to "Installing WhamBAM."
 
 
 ###Dependencies:
@@ -35,7 +34,7 @@ Assuming that bamtools is installed and boost is present on your system skip str
     
 
   Boost:
-    Boost is used for it's program opitions and statistical distributions.  If boost is not installed as root. you might need to create an enviromental variable for boost:
+    Boost is required for probability density functions.  Most linux distirbutions should already have Boost installed.  If you NEED/WANT to do a local install set the enviromental variables as follows. 
     
     bash :
     
@@ -45,27 +44,27 @@ Assuming that bamtools is installed and boost is present on your system skip str
     
     setenv BOOST_ROOT /xxx/boost/
     
-  LibZ:
-    
-
 
 ###Bamtools:
+
+  Bamtools provides an excellent API for reading and writing BAM files.  
 
 1.  git clone https://github.com/pezmaster31/bamtools
 2.  cd bamtools
 3.  mkdir build
 4.  cd build
 5.  cmake ..
-6.  sudo make install
+6.  make 
 
 
-For non-root users:
+Setting up the enviromental variables:
 
-bash users:
-
-add the following to your bash profile where "xxx" is your relative path to bamtools. the path ("xxx") you want to specify should contain the following:
+  In order for WhamBAM to install you need to set several enviromental variables.  Copy the block of code into your profile.  Change "xxx" to the root Bamtools path.  If you are in Bamtools root and type ls you should see:
   
     "bin  build  CMakeLists.txt  docs  include  lib  LICENSE  README  src"
+
+
+bash users:
 
     export BAMROOT="xxx"
     export PATH=$BAMROOT/include:$PATH
@@ -74,14 +73,8 @@ add the following to your bash profile where "xxx" is your relative path to bamt
     export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
 
-
-    
-
-
 tcsh user (similar to C shell):
  
-add the following to your profile:  
-    
     setenv PATH            {$PATH}:/xxx/bamtools/include
     setenv CPATH           {$CPATH}:/xxx/bamtools/include
     setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
@@ -98,10 +91,6 @@ add the following to your profile:
 7.  cd ..
 8.  rm -rf build
 
-Testing:
------
-
-sh /test/run-test.sh
 
 Basic usage:
 -----
