@@ -295,10 +295,10 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
-  if((fraglsd - fgst) < -2){
+  if(fgst - fraglsd > 2 ){
     return 1;
   }
-  if((fraglsd - fgsb) < -2){
+  if(fgsb - fraglsd > 2){
     return 1;
   }
 
