@@ -332,7 +332,7 @@ double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target
   double success = 0;
   double ntrials = 0;
 
-  while(ntrials < 100000 && success < 20){
+  while(ntrials < 100000 && success < 1){
     ntrials += 1;
 
     for(int i = dat.size() -1 ;  i > 0 ; --i){
