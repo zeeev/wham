@@ -295,13 +295,10 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
-  if(fgst - fraglsd > 2 ){
+  if(fgst - fraglsd > 2 || fgsb - fraglsd > 2 ){
     return 1;
   }
-  if(fgsb - fraglsd > 2){
-    return 1;
-  }
-
+  
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
   double bta    = llbinom(&target,     mp, sp, op, 1);
