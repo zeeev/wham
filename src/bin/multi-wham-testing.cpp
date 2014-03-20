@@ -396,13 +396,6 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
         chucker[rname] = 1;
         continue;
       }
-      // fastQ read_dat;
-      // read_dat.setDNA(al.QueryBases);
-      // double en = read_dat.entropy(4);
-      // if(en < 1){
-      //   chucker[rname] = 1;
-      //   continue;
-      // }
     }
     else{
       chucker.erase(rname);
@@ -429,20 +422,20 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
       
       double results = score(data, target_info);
       
-      boost::math::chi_squared_distribution<double> chisq(5);
+      boost::math::chi_squared_distribution<double> chisq(8);
       
        if(results < 2){
  	continue;
        }
  
-        double pv = 1 - boost::math::cdf(chisq, results);
-        double pr = 1;
+       double pv = 1 - boost::math::cdf(chisq, results);
+       double pr = 1;
        
-        if(pv > 0.01){
-       	continue;
-        }
-            
-      LRT.push_back(results);
+       if(pv > 0.01){
+	 continue;
+       }
+       
+       LRT.push_back(results);
     }
   }
 }
@@ -501,15 +494,6 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 	chucker[rname] = 1;
 	continue;	
       }
-
-      // fastQ read_dat;
-      // read_dat.setDNA(al.QueryBases);
-      // double en = read_dat.entropy(4);     
-      // 
-      // if(en < 1){
-      //   chucker[rname] = 1;
-      //   continue;
-      // }
 
     }
     else{
