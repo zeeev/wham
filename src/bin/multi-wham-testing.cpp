@@ -276,13 +276,10 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double treads  = double (target.nreads);
   double breads  = double (background.nreads);
 
-  if(treads < 10){
+  if(treads < 10 || breads < 10){
     return 1;
   }
-  if(breads < 10){
-    return 1;
-  }
-
+  
   double mp      = double (all.mateunmapped) / nreads;
   double sp      = double (all.samestrand) / nreads;
   double op      = double (all.otherscaffold) / nreads;
@@ -295,9 +292,9 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   double fgst = sd(target.fragl, fglt);
   double fgsb = sd(background.fragl, fglb);
 
-  if(fgst - fraglsd > 2 || fgsb - fraglsd > 2 ){
-    return 1;
-  }
+ // if(fgst - fraglsd > 2 || fgsb - fraglsd > 2 ){
+ //   return 1;
+ // }
   
   double btn    = llbinom(&target,     mp, sp, op, 0);
   double bbn    = llbinom(&background, mp, sp, op, 0);
