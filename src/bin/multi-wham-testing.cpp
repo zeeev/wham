@@ -47,6 +47,8 @@ struct posInfo
   int      otherscaffold;
   double           fragm;
   vector<double>   fragl;
+  map<double, int> bins;
+
 };
 
 
@@ -185,6 +187,8 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
 
   double ins =  abs(double(read.InsertSize)) ;
   
+  (*info).bins[round((ins)/100)*100]++;
+
   (*info).fragm += ins;
 
   //  ins = abs(ins / rolling_mean);
@@ -204,6 +208,27 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
   if(alflag.sameStrand()){
     (*info).samestrand++;
   }
+}
+
+//------------------------------------------------------------
+void purge_bins(posInfo  *info){
+
+  vector<double>::iterator it = (*info).fragl.begin();
+  vector<double> cleaned ;
+
+
+  for( ; it != (*info).fragl.end(); it++ ){
+    
+    double size = round(*it/100)*100;
+    int bin = (*info).bins[size];
+    if(bin > 2){
+      cleaned.push_back(*it);   
+    }
+    else{
+      cerr << "WARNING: " << "removing read length bin: size:" << size << "\tnumber in bin: " << bin << endl;
+    }
+  } 
+  (*info).fragl = cleaned;
 }
 
 //------------------------------------------------------------
@@ -271,6 +296,14 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
       load_info_struct( &target, dat[d]);
     }    
   }
+  
+  purge_bins(&target);
+  purge_bins(&background);
+
+  if(target.fragl.size() < 10 || background.fragl.size() < 10 ){
+    return 1;
+  }
+
   combine_info_struct(&target, &background, &all);
 
   double treads  = double (target.nreads);
