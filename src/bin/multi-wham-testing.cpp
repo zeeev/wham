@@ -225,7 +225,7 @@ void purge_bins(posInfo  *info){
       cleaned.push_back(*it);   
     }
     else{
-      cerr << "WARNING: " << "removing read length bin: size:" << size << "\tnumber in bin: " << bin << endl;
+      //  cerr << "WARNING:\t" << "removing read length bin: size:\t" << size << "\tnumber in bin: " << bin << endl;
     }
   } 
   (*info).fragl = cleaned;
@@ -666,7 +666,7 @@ void set_mu_i(map<string, int> & target_info, vector<string> & all, double *mut,
 
 /// run the regions
 
-void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu){
+void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu, int lcut){
 
   vector <string> total  = target;
 
@@ -720,10 +720,15 @@ void run_regions(vector<string> & target, vector <string> & background, string &
    while(randLRT.size() < 5000){
      if(nseqs == 0){
        cerr << "WARNING: Only one seqid in dataset cannot randomly sample LRT" << endl;
-       cerr << "WARNING: setting LRT permutation threshold to 100"             << endl;
+       cerr << "WARNING: setting LRT permutation threshold to 300"             << endl;
        break;
      }
- 
+     if(lcut > -1){
+       cerr << "INFO: user specified LRT permatation threshold: " << lcut << endl;
+       break;
+     }
+     
+     
      int rseqid = rand() % nseqs;
      int ni     = 0;
  
@@ -760,16 +765,24 @@ void run_regions(vector<string> & target, vector <string> & background, string &
 
   double rmu = 0;
   double rsd = 0;
-  double cut = 100;
+  double cut = 300;
 
-  if(nseqs > 0){
+  if(lcut > -1){
+    cut = double( lcut );
+  }
+
+  cerr << "test" << endl;
+
+  if(nseqs > 0 && lcut == -1 ){
+  cerr << "testb" << endl;
      rmu = mean(randLRT);
      rsd = sd(randLRT, rmu);
      cut = rmu + (3.5*rsd);
-  }
+     cerr << "INFO: average LRT score aross 100kb random is : " << rmu << endl;
+     cerr << "INFO: standard deviation LRT score aross 100kb random is : " << rmu << endl;
 
-  cerr << "INFO: average LRT score aross 100kb random is : " << rmu << endl;
-  cerr << "INFO: standard deviation LRT score aross 100kb random is : " << rmu << endl;
+ }
+
   cerr << "INFO: LRT score required for permutation : " << cut << endl;
      
   asio::io_service io_service;
@@ -800,8 +813,8 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     cerr << "INFO: loading " << sname << " into thread pool " << endl;
     int j = 0;
     
-    for (; j + 2000000 <=  boost::lexical_cast<int>(seq.Length); j += 2000000){
-      io_service.post(boost::bind(pileup, s, j, j+2000000, target_info, total, cut)); 
+    for (; j + 20000 <=  boost::lexical_cast<int>(seq.Length); j += 20000){
+      io_service.post(boost::bind(pileup, s, j, j+20000, target_info, total, cut)); 
     }
     io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total, cut)); 
     s += 1.0;
@@ -864,8 +877,9 @@ int main(int argc,  char * argv[]){
 
   string seqid = "NA";
   int seqr     = -5;
-  int cpu      = 2;
-
+  int cpu      =  2;
+  int lcut     = -1;
+  
   try{
   
     namespace po = boost::program_options;
@@ -876,7 +890,9 @@ int main(int argc,  char * argv[]){
       ("target,t",     po::value<string>() ,   "The target bam files, comma sep list")
       ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
       ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" )
-      ("cpu,c",        po::value<int>()    ,      "The number of threads to use");
+      ("lcut,l",          po::value<int>() ,    "Permute any likelihood value over theshold" )
+      ("cpu,c",           po::value<int>() ,    "The number of threads to use");
+      
     po::variables_map vm;
     
     try{
@@ -915,18 +931,20 @@ int main(int argc,  char * argv[]){
 
     cpu = vm["cpu"].as<int>();
 
+    if(vm.count("lcut")){
+      lcut = vm["lcut"].as<int>();
+    }
+
     if(vm.count("seqid")){
       seqid = vm["seqid"].as<string>();
       seqr  = getseqidn(seqid, target);
     }
 
-    //    cerr << "if region is set: " << "\t" << seqn << "\t" << seqid << endl;
-
     printvec("INFO: target bam",     target    );
     printvec("INFO: background bam", background);
     cerr <<  "INFO: starting to run regions" << endl;
     
-    run_regions(target, background, seqid, seqr, cpu);
+    run_regions(target, background, seqid, seqr, cpu, lcut);
     cerr << "INFO: raw has finished" << endl;
     return 0;    
   }
