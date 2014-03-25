@@ -181,19 +181,17 @@ void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
 
 /// load up the pileup information
 
-void load_info_struct(posInfo  *info, BamAlignment & read){
+void load_info_struct(posInfo  *info, BamAlignment & read, double mean_ins){
 
   (*info).nreads++;
 
-  double ins =  abs(double(read.InsertSize)) ;
+  double ins =  abs(double(read.InsertSize)/ mean_ins) ;
   
   (*info).bins[round((ins)/100)*100]++;
 
   (*info).fragm += ins;
 
-  //  ins = abs(ins / rolling_mean);
 
-  (*info).fragl.push_back(ins);
   
   flag alflag;
 
@@ -204,6 +202,9 @@ void load_info_struct(posInfo  *info, BamAlignment & read){
   }
   if(! alflag.isPairMapped()){
     (*info).mateunmapped++;
+  }
+  else{
+    (*info).fragl.push_back(ins);    
   }
   if(alflag.sameStrand()){
     (*info).samestrand++;
@@ -221,7 +222,7 @@ void purge_bins(posInfo  *info){
     
     double size = round(*it/100)*100;
     int bin = (*info).bins[size];
-    if(bin > 2){
+    if(bin  > 4){
       cleaned.push_back(*it);   
     }
     else{
@@ -275,7 +276,7 @@ void initPosInfo (posInfo * info){
 
 /// proces the pileup information
 
-double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
+double score(vector<BamAlignment> & dat, map<string, int> & target_info, double tmean, double bmean ){
 
   posInfo target, background, all;
 
@@ -290,15 +291,15 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
   for(int d = 0; d < nreads; d++){
     amItarget = target_info.find(dat[d].Filename);
     if(amItarget == target_info.end()){
-      load_info_struct( &background, dat[d]);
+      load_info_struct( &background, dat[d], bmean);
     }
     else{
-      load_info_struct( &target, dat[d]);
+      load_info_struct( &target, dat[d], tmean);
     }    
   }
   
-  purge_bins(&target);
-  purge_bins(&background);
+  //purge_bins(&target);
+  //purge_bins(&background);
 
   if(target.fragl.size() < 10 || background.fragl.size() < 10 ){
     return 1;
@@ -354,7 +355,7 @@ double score(vector<BamAlignment> & dat, map<string, int> & target_info ){
 
 /// permute the score function by suffling the reads' filenames
        
-double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target_info){
+double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target_info, double tmean, double bmean){
 
   double success = 0;
   double ntrials = 0;
@@ -368,11 +369,13 @@ double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target
 
     }
 
-    double newlrt = score(dat, target_info);
+    double newlrt = score(dat, target_info, tmean, bmean);
     if(newlrt > lrt){
       success += 1;
     }
   }
+
+  
   return success / ntrials;
 }
 
@@ -380,7 +383,7 @@ double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target
 
 /// load random LRTS 
 
-void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<string> total, vector<double>& LRT){
+void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<string> total, vector<double>& LRT, double tmean, double bmean){
 
   BamMultiReader mreader_thread;
   BamRegion      region_thread;
@@ -453,21 +456,18 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
 
       vector <BamAlignment> data(dat.begin(), dat.end());
       
-      double results = score(data, target_info);
+      double results = score(data, target_info, tmean, bmean);
       
       boost::math::chi_squared_distribution<double> chisq(8);
-      
-       if(results < 2){
- 	continue;
-       }
- 
+
+      if(results <= 0 ){
+	results = 0.1;
+      }
+
        double pv = 1 - boost::math::cdf(chisq, results);
        double pr = 1;
        
-       if(pv > 0.01){
-	 continue;
-       }
-       
+             
        LRT.push_back(results);
     }
   }
@@ -477,7 +477,7 @@ void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<strin
 
 /// run the pileup
 
-void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total, double cut){
+void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total, double cut, double tmean, double bmean){
 
   BamMultiReader mreader_thread;
   BamRegion      region_thread;
@@ -552,24 +552,23 @@ void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> 
 
       vector <BamAlignment> data(dat.begin(), dat.end());
       
-      double results = score(data, target_info);
+      double results = score(data, target_info, tmean, bmean);
 
       boost::math::chi_squared_distribution<double> chisq(5);
       
-      if(results < 2){
-	continue;
+      if(results <= 0){
+	results = 0.1;
       }
+
+    
 
       double pv = 1 - boost::math::cdf(chisq, results);
       string pr = "NA";
       
-      if(pv > 0.01){
-      	continue;
+      if(results > cut){
+	double pvp = permute(results, data, target_info, tmean, bmean);
+	pr = lexical_cast<string>(pvp);
       }
-       if(results > cut){
-       	double pvp = permute(results, data, target_info);
-       	pr = lexical_cast<string>(pvp);
-       }
 
       string ans;
       ans.append(seqid);
@@ -631,15 +630,18 @@ void set_mu_i(map<string, int> & target_info, vector<string> & all, double *mut,
   BamAlignment al;
 
   while(mreader.GetNextAlignment(al)){
-    
+    if(! al.IsMateMapped()){
+      continue; 
+    }
+
     if(! al.IsMapped()){
       continue;
     }
-
+    
     if(! al.IsPrimaryAlignment()){
       continue;
     }
-
+    
     double ins = abs(boost::lexical_cast<double>(al.InsertSize));
 
     map<string, int>::iterator amItarget = target_info.find( al.Filename );
@@ -696,10 +698,10 @@ void run_regions(vector<string> & target, vector <string> & background, string &
   double mu_i_target    ;
   double mu_i_background;
 
-  // set_mu_i(target_info, total, & mu_i_target, & mu_i_background);
+  set_mu_i(target_info, total, & mu_i_target, & mu_i_background);
 
-  //   cerr << "INFO: target mate pair mapping distance average over 1million reads: "     << mu_i_target     << endl;
-  //   cerr << "INFO: background mate pair mapping distance average over 1million reads: " << mu_i_background << endl;
+  cerr << "INFO: target mate pair mapping distance average over 1million reads: "     << mu_i_target     << endl;
+  cerr << "INFO: background mate pair mapping distance average over 1million reads: " << mu_i_background << endl;
 
   if(! mreader.LocateIndexes()){
     cerr << "ERROR: cannot create or locate indicies" << endl;
@@ -754,7 +756,7 @@ void run_regions(vector<string> & target, vector <string> & background, string &
      
      int rend   = rstart + 10000;
     
-     pileupLRT(rseqid, rstart, rend, target_info, total, randLRT );
+     pileupLRT(rseqid, rstart, rend, target_info, total, randLRT, mu_i_target, mu_i_background );
      double per = double(randLRT.size());
  
      cerr << "INFO: " << "assayed " << (100 * (per / 5000)) << "% of LRT genomic baseline" << endl;
@@ -814,9 +816,9 @@ void run_regions(vector<string> & target, vector <string> & background, string &
     int j = 0;
     
     for (; j + 20000 <=  boost::lexical_cast<int>(seq.Length); j += 20000){
-      io_service.post(boost::bind(pileup, s, j, j+20000, target_info, total, cut)); 
+      io_service.post(boost::bind(pileup, s, j, j+20000, target_info, total, cut, mu_i_target, mu_i_background)); 
     }
-    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total, cut)); 
+    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total, cut, mu_i_target, mu_i_background)); 
     s += 1.0;
   }
   
