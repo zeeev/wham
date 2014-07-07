@@ -1,958 +1,531 @@
-//
-//  main.cpp
-//  wham
-//
-//  Created by Zev Kronenberg on 12/31/12.
-//  Copyright (c) 2012 Zev Kronenberg. All rights reserved.
-//
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <cmath>
+#include <time.h>
+#include "split.h"
 
-#include "stdio.h"
 #include "api/BamMultiReader.h"
-#include "read_pileup.h"
-#include "randomregion.h"
-#include "entropy.h"
-#include "flag.h"
-#include "math.h"
-#include <stdio.h>      
-#include <stdlib.h>     
-#include <time.h>       
-
-#include "boost/asio/io_service.hpp"
-#include "boost/bind.hpp"
-#include "boost/thread/thread.hpp"
-
-#include "boost/math/distributions/normal.hpp"
-#include "boost/math/distributions/binomial.hpp"
-#include "boost/math/distributions/chi_squared.hpp"
-#include "boost/lexical_cast.hpp"
-#include "boost/algorithm/string.hpp"
-#include "boost/program_options.hpp"
+#include "readPileUp.h"
 
 using namespace std;
 using namespace BamTools;
-using namespace boost;
 
-namespace
-{ 
-  const size_t ERROR_IN_COMMAND_LINE     = 1; 
-  const size_t SUCCESS                   = 0; 
-  const size_t ERROR_UNHANDLED_EXCEPTION = 2;  
-} 
-
-struct posInfo
-{
-  int             nreads;
-  int       mateunmapped;
-  int         samestrand;
-  int      otherscaffold;
-  double           fragm;
-  vector<double>   fragl;
-  map<double, int> bins;
-
+struct indvDat{
+  int nReads;
+  int notMapped;
+  int mateMissing;
+  int mateCrossChromosome;
 };
 
+struct global_opts {
+  vector<string> targetBams;
+  vector<string> backgroundBams;
+  vector<string> region   ; 
+  vector<string> regionDat;
+} globalOpts;
 
-boost::mutex print_guard;
+static const char *optString ="ht:b:r:";
 
-double running_mb = 0;
+void printIndv(indvDat s, int t){
+  cerr << "INDV: " << t << endl;
+  cerr << " nReads      :" << s.nReads      << endl;
+  cerr << " notMapped   :" << s.notMapped   << endl;
+  cerr << " mateMissing :" << s.mateMissing << endl;
+  cerr << " crossChrom  :" << s.mateCrossChromosome << endl;
 
-
-//------------------------------------------------------------
-
-/// split a string and return a vector
-
-vector<string> parse_groups(string  files){
-
-  vector<string> split_files;
-  split(split_files, files, is_any_of(","));
-
-  return split_files;
+  cerr << endl;
 }
 
-//------------------------------------------------------------
+string join(vector<string> strings){
 
-/// print a vector
+  string joined = "";
 
-void printansvec(string base, vector<string> & data){
-  for(vector<string>::iterator it = data.begin(); it != data.end(); it++){
-    cout <<  *it ;
+  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
+    joined = joined + " " + (*sit) + "\n";
+  }
+
+  return joined;
+
+}
+
+void printVersion(void){
+  cerr << "Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
+  cerr << endl;
+}
+
+void printHelp(void){
+  cerr << "usage: wham -t <STRING> -b <STRING>" << endl << endl;
+  cerr << "option: t <STRING> -- comma separated list of target bam files"           << endl ;
+  cerr << "option: b <STRING> -- comma separated list of background bam files"       << endl ;
+  cerr << "option: r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
+  cerr << endl;
+  printVersion();
+}
+
+void parseOpts(int argc, char** argv){
+  int opt = 0;
+
+  opt = getopt(argc, argv, optString);
+
+  while(opt != -1){
+    switch(opt){
+    case 't':
+      {
+	globalOpts.targetBams     = split(optarg, ",");
+	cerr << "INFO: target bams:\n" << join(globalOpts.targetBams) ;
+	break;
+      }
+    case 'b':
+      {
+	globalOpts.backgroundBams = split(optarg, ",");
+	cerr << "INFO: background bams:\n" << join(globalOpts.backgroundBams) ;
+	break;
+      }
+    case 'h':
+      {
+	printHelp();
+	exit(1);
+      }
+    case 'r':
+      {
+	vector<string> tmp_region = split(optarg, ":");
+	vector<string> start_end = split(tmp_region[1], "-");
+
+	globalOpts.region.push_back(tmp_region[0]);
+	globalOpts.region.push_back(start_end[0]);
+	globalOpts.region.push_back(start_end[1]);
+		
+	cerr << "INFO: region set to: " <<   globalOpts.region[0] << ":" <<   globalOpts.region[1] << "-" <<  globalOpts.region[2] << endl;
+	
+	if(globalOpts.region.size() != 3){
+	  cerr << "FATAL: incorrectly formatted region." << endl;
+	  cerr << "FATAL: wham is now exiting."          << endl;
+	  exit(1);
+	}
+	break;
+      }
+    case '?':
+      {
+	printHelp();
+	exit(1);
+      }  
+  default:
+    {
+      cerr << "FATAL: Failure to parse command line options." << endl;
+      cerr << "FATAL: Now exiting wham." << endl;
+      printHelp();
+      exit(1);
+    }
+    }
+    opt = getopt( argc, argv, optString );
+  }
+  if( globalOpts.targetBams.empty() || globalOpts.backgroundBams.empty() ){
+    cerr << "FATAL: Failure to specify target or background bam files." << endl;
+    cerr << "FATAL: Now exiting wham." << endl;
+    printHelp();
+    exit(1);
   }
 }
 
-//------------------------------------------------------------
+void prepBams(BamMultiReader & bamMreader, string group){
 
-/// print a vector and a base string for the tag
+  int errorFlag    = 3;
+  string errorMessage ;
 
-void printvec(string base, vector<string> & data){
-  for(vector<string>::iterator it = data.begin(); it != data.end(); it++){
-    cerr << base  << ":  " << *it << endl;
+  vector<string> files;
+
+  if(group == "target"){
+    files = globalOpts.targetBams;
+  }
+  if(group == "background"){
+    files = globalOpts.backgroundBams;
+  }
+  if(files.empty()){
+    cerr << "FATAL: no files ?" << endl;
+    exit(1);
+  }
+
+  if(! bamMreader.Open(files)){
+    errorMessage = bamMreader.GetErrorString();
+    cerr << "FATAL: issue opening bams" << endl;
+    exit(1);
+  }
+  if(! bamMreader.LocateIndexes()){
+    errorMessage = bamMreader.GetErrorString();
+    cerr << "FATAL: locating bam indicies"<< endl;
+    exit(1); 
   }
 }
 
-//------------------------------------------------------------
-
-/// test if bam indecies exists and if they doesn't it creates them
-
-void check_index(vector<string> & group){
-
-  BamMultiReader mreaderz;
-
-  if(! mreaderz.Open( group ) ){
-    cerr << "couldn't open bams" << endl;
+double bound(double v){
+  if(v <= 0.00001){
+    return  0.00001;
   }
+  if(v >= 0.99999){
+    return 0.99999;
+  }
+  return v;
+}
+
+
+double mean(vector<double> & data){
   
-  if(! mreaderz.LocateIndexes()){
-    cerr << "INFO: wham didn't find indices, creating them." << endl;
-    mreaderz.CreateIndexes();
-  }
-   
-}
-
-//------------------------------------------------------------
-//------------------------------------------------------------
-
-/// takes a vector and calculates the mean
-
-double mean(vector<double> & dat){
-
+  double sum = 0;
   double n   = 0;
-  double sum = 0;
+  
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    sum += (*it);
+    n += 1;
+  }
+  return sum / n;
+}
 
-  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
-    n += 1.0 ;  
-    sum += *datum;
+double var(vector<double> & data, double mu){
+  double variance = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    variance += pow((*it) - mu,2);
+  }
+
+  return variance / (data.size() - 1);
+}
+
+
+double logLbinomial(double x, double n, double p){
+
+  double ans = lgamma(n+1)-lgamma(x+1)-lgamma(n-x+1) + x * log(p) + (n-x) * log(1-p);
+  return ans;
+
+}
+
+
+double logDbeta(double alpha, double beta, double x){
+  
+  double ans = 0;
+
+  ans += lgamma(alpha + beta) - ( lgamma(alpha) + lgamma(beta) );
+  ans += log( pow(x, (alpha -1) ) ) + log( pow( (1-x) , (beta-1)));
+  
+  cerr << "alpha: " << alpha << "\t" << "beta: " << beta << "\t" << "x: " << x << "\t" << ans;
+  cerr << endl;
+
+  return ans;
+
+}
+
+double totalLL(vector<double> & data, double alpha, double beta){
+
+  double total = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    total += logDbeta(alpha, beta, (*it));
+  }
+  return total;
+}
+
+double methodOfMoments(double mu, double var, double * aHat, double * bHat){
+
+  double mui = 1 - mu;
+  double right = ( (mu*mui / var) - 1 );
+
+  (*aHat)  = mu *  right;
+  (*bHat)  = mui * right; 
+  
+}
+
+
+bool printGeno(map<string, indvDat> & dat, vector<string> & keys, string * toprint){
+  
+  bool nonRef = false;
+
+  stringstream all;
+
+  for(int i = 0; i < keys.size(); i++){
     
-}
+    stringstream gl;
+    stringstream mn;
+    stringstream genotypeField;
 
-  double mean = sum / n;
-  return mean;
-
-}
-
-//------------------------------------------------------------
-
-/// take a vector and a mean and calculate the standard deviation
-
-double sd(vector<double> & dat, double mean){
-  
-  double ss = 0;
-  double n  = 0;
-  
-  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){    
-    ss += pow((*datum - mean), 2);
-    n  += 1;
-  }
-
-  double sd = sqrt(ss/(n-1));
-  return sd + 1;
-
-}
-
-//------------------------------------------------------------
-
-/// loop over a vector of data and return the total log likelihood
-
-double lldnorm(vector<double> & dat, double mu, double sdev){
-  double llsum = 0;
-
-  for(vector<double>::iterator datum = dat.begin(); datum != dat.end(); datum++){
-
-      llsum += log ( boost::math::pdf(boost::math::normal_distribution<double>( mu, sdev ), *datum) );
-  }
-  return -1 * llsum;
-}
-
-//------------------------------------------------------------
-
-/// take target and background information from the pileup and combine into total
-
-void combine_info_struct(posInfo *t, posInfo *b, posInfo *a){
-  (*a).nreads         =  (*t).nreads         +    (*b).nreads       ;
-  (*a).otherscaffold  =  (*t).otherscaffold  +    (*b).otherscaffold; 
-  (*a).samestrand     =  (*t).samestrand     +    (*b).samestrand   ;
-  (*a).mateunmapped   =  (*t).mateunmapped   +    (*b).mateunmapped ;
-  (*a).fragm          =  (*t).fragm          +    (*b).fragm;
-  (*a).fragl.insert((*a).fragl.end(), (*t).fragl.begin(),(*t).fragl.end());
-  (*a).fragl.insert((*a).fragl.end(), (*b).fragl.begin(),(*b).fragl.end());
-
-}
-
-//------------------------------------------------------------
-
-/// load up the pileup information
-
-void load_info_struct(posInfo  *info, BamAlignment & read, double mean_ins){
-
-  (*info).nreads++;
-
-  double ins =  abs(double(read.InsertSize)/ mean_ins) ;
-  
-  (*info).bins[round((ins)/100)*100]++;
-
-  (*info).fragm += ins;
-
-
-  
-  flag alflag;
-
-  alflag.addFlag(read.AlignmentFlag);
-  
-  if(!(read.RefID == read.MateRefID)){
-    (*info).otherscaffold++;
-  }
-  if(! alflag.isPairMapped()){
-    (*info).mateunmapped++;
-  }
-  else{
-    (*info).fragl.push_back(ins);    
-  }
-  if(alflag.sameStrand()){
-    (*info).samestrand++;
-  }
-}
-
-//------------------------------------------------------------
-void purge_bins(posInfo  *info){
-
-  vector<double>::iterator it = (*info).fragl.begin();
-  vector<double> cleaned ;
-
-
-  for( ; it != (*info).fragl.end(); it++ ){
+    string genotype = "0/0";
     
-    double size = round(*it/100)*100;
-    int bin = (*info).bins[size];
-    if(bin  > 4){
-      cleaned.push_back(*it);   
+    if(dat[keys[i]].nReads < 2){
+      genotype = "./.";
+      gl << ".,.,.";
+    }
+    
+    else{
+      double max;
+
+      double aa =  logLbinomial(dat[keys[i]].mateMissing, dat[keys[i]].nReads, 0.01);
+      max = aa;
+      double ab = logLbinomial(double(dat[keys[i]].mateMissing), double(dat[keys[i]].nReads), 0.50);
+      if(ab > max){
+	max = ab;
+	genotype = "0/1";
+	nonRef = true;
+      }
+      double bb = logLbinomial(double(dat[keys[i]].mateMissing), double(dat[keys[i]].nReads), 0.99);
+      if(bb > max){
+	max = bb;
+	genotype = "1/1";
+	nonRef = true;
+      }
+
+      gl << aa << "," << ab << "," << bb ;
+
+    }
+    mn << dat[keys[i]].mateMissing << "," << dat[keys[i]].nReads; 
+    genotypeField << genotype << ":" << mn.str() << ":" << gl.str() ;
+    
+    
+    if(i != (keys.size() - 1)){
+      genotypeField << "\t";
+    }
+    all << genotypeField.str();
+  }
+
+  (*toprint) = all.str();
+
+  return nonRef;
+}
+
+bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
+  
+  map < string, indvDat > ti, bi;
+  
+  for(int t = 0; t < globalOpts.targetBams.size(); t++){
+    indvDat i = {0};
+    ti[globalOpts.targetBams[t]] = i;
+  }
+  for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
+    indvDat i = {0};
+    bi[globalOpts.backgroundBams[b]] = i;
+  }
+
+  double totalTcount, totalBcount = 0;
+
+  for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
+    string fname = (*tit).Filename;
+    totalTcount += 1;
+    if((*tit).IsMapped()){
+      ti[fname].nReads++;
+    }
+    ti[fname].notMapped   += (!(*tit).IsMapped());
+    ti[fname].mateMissing += (!(*tit).IsMateMapped());
+    ti[fname].mateCrossChromosome += ((*tit).RefID == (*tit).MateRefID);
+  }
+
+  for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
+    string fname = (*bit).Filename;
+    totalBcount += 1;
+    if((*bit).IsMapped()){
+      bi[fname].nReads++;
+    }
+    bi[fname].notMapped   += (*bit).IsMapped();
+    bi[fname].mateMissing += (!(*bit).IsMateMapped());
+    bi[fname].mateCrossChromosome += ((*bit).RefID == (*bit).MateRefID);
+  }
+  
+  if(totalTcount < 10 || totalBcount < 10){
+    return true;
+  }
+
+  vector<double> tiFrq, biFrq, totFrq;
+
+
+  for(map<string, indvDat>::iterator tiIt = ti.begin(); tiIt != ti.end(); tiIt++){
+    if((tiIt->second).nReads < 2){
+      continue;
     }
     else{
-      //  cerr << "WARNING:\t" << "removing read length bin: size:\t" << size << "\tnumber in bin: " << bin << endl;
+      double frq = double(tiIt->second.mateMissing) / double(tiIt->second.nReads);
+      tiFrq.push_back(frq);
+      totFrq.push_back(frq);
     }
-  } 
-  (*info).fragl = cleaned;
-}
-
-//------------------------------------------------------------
-
-/// give the paramters of the binomial mp,sp,op calculate total log likelihood
-
-double llbinom(posInfo *info , double mp, double sp, double op, int flag){
-  
-  double m = double (((*info).mateunmapped));
-  double o = double (((*info).otherscaffold));
-  double s = double (((*info).samestrand));
-  double n = double (((*info).nreads));
-  
-  if(flag == 1){
-     mp = m / n;
-     sp = s / n;
-     op = o / n;
   }
 
-  double psum = 0.0;
-
-  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, mp), m ));
-  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, op), o ));
-  psum += log(boost::math::pdf(boost::math::binomial_distribution<double>(n, sp), s ));
-
-  
-  return( -1 * psum);
-
-}
-//------------------------------------------------------------
-
-/// Initialize the pileup data struct
-
-void initPosInfo (posInfo * info){
-
-  (*info).nreads        = 0;
-  (*info).mateunmapped  = 0;
-  (*info).samestrand    = 0;
-  (*info).otherscaffold = 0;
-  (*info).fragm         = 0;
-
-}
-//------------------------------------------------------------
-
-/// proces the pileup information
-
-double score(vector<BamAlignment> & dat, map<string, int> & target_info, double tmean, double bmean ){
-
-  posInfo target, background, all;
-
-  initPosInfo (&target);
-  initPosInfo (&background);
-  initPosInfo (&all);
-
-  double nreads = double (dat.size());
-
-  map<string, int>::iterator amItarget;
-
-  for(int d = 0; d < nreads; d++){
-    amItarget = target_info.find(dat[d].Filename);
-    if(amItarget == target_info.end()){
-      load_info_struct( &background, dat[d], bmean);
+  for(map<string, indvDat>::iterator biIt = bi.begin(); biIt != bi.end(); biIt++){
+    if((biIt->second).nReads < 2){
+      continue;
     }
     else{
-      load_info_struct( &target, dat[d], tmean);
-    }    
+      double frq = double(biIt->second.mateMissing) / double(biIt->second.nReads);
+      biFrq.push_back(frq);
+      totFrq.push_back(frq);
+    }
   }
+
+  if(totFrq.size() < 2 || tiFrq.size() < 2 || biFrq.size() < 2 ){
+    return true;
+  }
+
+  string genosT, genosB;
   
-  //purge_bins(&target);
-  //purge_bins(&background);
-
-  if(target.fragl.size() < 10 || background.fragl.size() < 10 ){
-    return 1;
-  }
-
-  combine_info_struct(&target, &background, &all);
-
-  double treads  = double (target.nreads);
-  double breads  = double (background.nreads);
-
-  if(treads < 10 || breads < 10){
-    return 1;
-  }
+  bool altT = printGeno(ti, globalOpts.targetBams,     &genosT);
+  bool altB = printGeno(bi, globalOpts.backgroundBams, &genosB);
   
-  double mp      = double (all.mateunmapped) / nreads;
-  double sp      = double (all.samestrand) / nreads;
-  double op      = double (all.otherscaffold) / nreads;
-  
-  double fraglmu = all.fragm / nreads;
-  double fraglsd = sd(all.fragl,  fraglmu);
-
-  double fglt = target.fragm / treads ;  
-  double fglb = background.fragm / breads; 
-  double fgst = sd(target.fragl, fglt);
-  double fgsb = sd(background.fragl, fglb);
-
- // if(fgst - fraglsd > 2 || fgsb - fraglsd > 2 ){
- //   return 1;
- // }
-  
-  double btn    = llbinom(&target,     mp, sp, op, 0);
-  double bbn    = llbinom(&background, mp, sp, op, 0);
-  double bta    = llbinom(&target,     mp, sp, op, 1);
-  double bba    = llbinom(&background, mp, sp, op, 1);
-
-  double fta    = lldnorm(target.fragl, fglt, fgst           );  
-  double fba    = lldnorm(background.fragl, fglb, fgsb       );
-  double ftn    = lldnorm(target.fragl, fraglmu, fraglsd     );  
-  double fbn    = lldnorm(background.fragl, fraglmu, fraglsd );  
-
-  double lrt = 2 * ((btn + bbn + ftn + fbn) - (bta + bba + fta + fba));
-
-  if(isinf(lrt)){
-    return 1;
+  if(altT && altB){
+    cout << seqid << "\t" << pos << "\t" << genosT << "\t" << genosB << endl;
   }
-  if(isnan(lrt)){
-    return 1;
+
+  double tiMean  =  mean(tiFrq);
+  double biMean  =  mean(biFrq);
+  double totMean =  mean(totFrq);
+
+  (*s) = tiMean - biMean;
+
+  if((tiMean + biMean) < 0.2){
+    return true;
   }
-  return lrt;
+
+  
+//  double tiVar  = var(tiFrq, tiMean);
+//  double biVar  = var(biFrq, biMean);
+//  double totVar = var(totFrq, totMean);
+//
+//  double tiAhat, tiBhat, biAhat, biBhat, totAhat, totBhat;
+//  
+//  methodOfMoments(tiMean, tiVar, &tiAhat, &tiBhat);
+//  methodOfMoments(biMean, biVar, &biAhat, &biBhat);
+//  methodOfMoments(totMean, totVar, &totAhat, &totBhat);
+//
+//  cerr << endl;
+//  cerr << tiAhat << "\t" << tiBhat << endl;
+//
+//  double alt  = totalLL(tiFrq, tiAhat, tiBhat)   + totalLL(biFrq, biAhat, biBhat);
+//  double null = totalLL(tiFrq, totAhat, totBhat) + totalLL(biFrq, totAhat, totBhat); 
+
+  //  cout << cp << "\t" <<  tiMean << "\t" << biMean << "\t" << totMean << "\t" << alt/null << endl;
+
+  return true;
 }
 
-//------------------------------------------------------------                                  
+bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
 
-/// permute the score function by suffling the reads' filenames
-       
-double permute(double lrt, vector<BamAlignment> & dat, map<string, int> & target_info, double tmean, double bmean){
-
-  double success = 0;
-  double ntrials = 0;
-
-  while(ntrials < 100000 && success < 1){
-    ntrials += 1;
-
-    for(int i = dat.size() -1 ;  i > 0 ; --i){
-      
-      swap(dat[i].Filename, dat[ rand() % dat.size() ].Filename);
-
-    }
-
-    double newlrt = score(dat, target_info, tmean, bmean);
-    if(newlrt > lrt){
-      success += 1;
-    }
-  }
-
+  BamMultiReader targetReader, backgroundReader;
   
-  return success / ntrials;
-}
-
-//------------------------------------------------------------ 
-
-/// load random LRTS 
-
-void pileupLRT(int s, int j, int e,  map <string, int> target_info, vector<string> total, vector<double>& LRT, double tmean, double bmean){
-
-  BamMultiReader mreader_thread;
-  BamRegion      region_thread;
-
-  if(! mreader_thread.Open(total)){
-    cerr << "ERROR: cannot open bams" << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  if(! mreader_thread.LocateIndexes()){
-    cerr << "ERROR: cannot create or locate indicies" << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  region_thread.LeftRefID     = s;
-  region_thread.RightRefID    = s;
-  region_thread.LeftPosition  = j;
-  region_thread.RightPosition = e;
+  prepBams(targetReader, "target");
+  prepBams(backgroundReader, "background");
   
-  if(! mreader_thread.SetRegion(region_thread)){
-    cerr << "ERROR: a thread was unable to set region" << endl;
-    exit(EXIT_FAILURE);
-  }
+  int setRegionErrorFlag = 0;
 
-  BamAlignment al;
-  read_pileup PileUp;
-
-  BamTools::RefVector seqids = mreader_thread.GetReferenceData();
-
-  std::vector <string> buffer;
-
-  double nreads = 0;
-
-  map <string , int> chucker;
+  setRegionErrorFlag += targetReader.SetRegion(seqidIndex, 0, seqidIndex, region.RefLength);
+  setRegionErrorFlag += backgroundReader.SetRegion(seqidIndex, 0, seqidIndex, region.RefLength);
   
-  while(mreader_thread.GetNextAlignment(al)){
-    nreads += 1;
-
-    string rname = al.Name;
-
-    map<string, int>::iterator check = chucker.find(rname);
-
-    if(check == chucker.end()){
-      size_t found = al.QueryBases.find("N");
-      if(found != std::string::npos){
-        chucker[rname] = 1;
-        continue;
-      }
-    }
-    else{
-      chucker.erase(rname);
-      continue;
-    }
-    
-    if(! al.IsMapped()){
-      continue;
-    }
-    if(! al.IsPrimaryAlignment()){
-      continue;
-    }
- 
-    PileUp.proccess_alignment(al);
-    string seqid = seqids[al.RefID].RefName;
-    if(PileUp.currentStart() > PileUp.currentPos()){
-      list<BamAlignment> dat =  PileUp.pileup();
-      
-      if(dat.size() < 20){
-	continue;
-      }
-
-      vector <BamAlignment> data(dat.begin(), dat.end());
-      
-      double results = score(data, target_info, tmean, bmean);
-      
-      boost::math::chi_squared_distribution<double> chisq(8);
-
-      if(results <= 0 ){
-	results = 0.1;
-      }
-
-       double pv = 1 - boost::math::cdf(chisq, results);
-       double pr = 1;
-       
-             
-       LRT.push_back(results);
-    }
+  if(setRegionErrorFlag != 2){
+    return false;
   }
-}
-
-//------------------------------------------------------------
-
-/// run the pileup
-
-void pileup(int s, int j, int e,  map <string, int> target_info, vector<string> total, double cut, double tmean, double bmean){
-
-  BamMultiReader mreader_thread;
-  BamRegion      region_thread;
-
-  if(! mreader_thread.Open(total)){
-    cerr << "ERROR: cannot open bams" << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  if(! mreader_thread.LocateIndexes()){
-    cerr << "ERROR: cannot create or locate indicies" << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  region_thread.LeftRefID     = s;
-  region_thread.RightRefID    = s;
-  region_thread.LeftPosition  = j;
-  region_thread.RightPosition = e;
-
- if(! mreader_thread.SetRegion(region_thread)){
-   cerr << "ERROR: a thread was unable to set region" << endl;
-   exit(EXIT_FAILURE);
- }
-
-  BamAlignment al;
-  read_pileup PileUp;
-
-  BamTools::RefVector seqids = mreader_thread.GetReferenceData();
-
-  std::vector <string> buffer;
-
-  double nreads = 0;
-
-  map <string , int> chucker;
-
-  while(mreader_thread.GetNextAlignment(al)){
-    nreads += 1;
     
-    string rname = al.Name;
-
-    map<string, int>::iterator check = chucker.find(rname);
-    
-    if(check == chucker.end()){
-     
-      size_t found = al.QueryBases.find("N");
-      if(found != std::string::npos){
-	chucker[rname] = 1;
-	continue;	
-      }
-
-    }
-    else{
-      chucker.erase(rname);
-      continue;
-    }
-
-    if(! al.IsMapped()){
-      continue;
-    }
-    if(! al.IsPrimaryAlignment()){
-      continue; 
-    }
-
-    PileUp.proccess_alignment(al);
-    string seqid = seqids[al.RefID].RefName;
-    if(PileUp.currentStart() > PileUp.currentPos()){
-      list<BamAlignment> dat =  PileUp.pileup();
-
-      if(dat.size() < 20){
-	continue;
-      }
-
-      vector <BamAlignment> data(dat.begin(), dat.end());
-      
-      double results = score(data, target_info, tmean, bmean);
-
-      boost::math::chi_squared_distribution<double> chisq(5);
-      
-      if(results <= 0){
-	results = 0.1;
-      }
-
-    
-
-      double pv = 1 - boost::math::cdf(chisq, results);
-      string pr = "NA";
-      
-      if(results > cut){
-	double pvp = permute(results, data, target_info, tmean, bmean);
-	pr = lexical_cast<string>(pvp);
-      }
-
-      string ans;
-      ans.append(seqid);
-      ans.append("\t");
-      ans.append(lexical_cast<string>(al.Position));
-      ans.append("\t");
-      ans.append(lexical_cast<string>(data.size()));
-      ans.append("\t");
-      ans.append(lexical_cast<string>(results));
-      ans.append("\t");
-      ans.append(lexical_cast<string>(pv));
-      ans.append("\t");
-      ans.append(pr);
-      ans.append("\n");
-
-      buffer.push_back(ans);
-    
-      if(buffer.size() > 100000){
-	print_guard.lock();
-	running_mb += (nreads / 1000000);
-	nreads = 0;
-	cerr << "INFO:" << running_mb << " Million reads finished" << endl;
-	printansvec("", buffer);
-	buffer.clear();
-	print_guard.unlock();
-      }
-
-    }
-  }
-
-  mreader_thread.Close();
+  BamAlignment alt, alb;
   
-  print_guard.lock();
-  running_mb += (nreads / 1000000);
-  cerr << "INFO:" << running_mb << " Million reads finished" << endl; 
-  printansvec("", buffer);
-  print_guard.unlock();
+  readPileUp targetPileUp, backgroundPileUp;
+
+  if(! targetReader.GetNextAlignment(alt)){
+    targetReader.Close();
+    backgroundReader.Close();
+    return false;
+  }
+  if(! backgroundReader.GetNextAlignment(alb)){
+    targetReader.Close();
+    backgroundReader.Close();
+    return false;
+  }
+
+  long int currentPos = -1;
+
+  targetPileUp.processAlignment(alt,     currentPos);
+  backgroundPileUp.processAlignment(alb, currentPos);
+
+  bool stillReads = true;
+  
+  while(stillReads){
+    while(currentPos > targetPileUp.currentStart() || currentPos > backgroundPileUp.currentStart()){
+      
+      bool getTarget, getBackground;
+
+      if(currentPos > targetPileUp.currentStart()){
+	getTarget = targetReader.GetNextAlignment(alt);
+	targetPileUp.processAlignment(alt, currentPos);
+      }
+      if(currentPos > backgroundPileUp.currentStart()){
+	getBackground = backgroundReader.GetNextAlignment(alb);
+	backgroundPileUp.processAlignment(alb, currentPos);
+      }
+      if(getTarget == false && getBackground == false){
+	stillReads = false;
+	break;
+      }
+    }
    
-}
+    targetPileUp.purgePast();
+    backgroundPileUp.purgePast();
 
-//------------------------------------------------------------
 
-/// set the mean mapping distance between matepairs
+    double s = 0;
 
-void set_mu_i(map<string, int> & target_info, vector<string> & all, double *mut, double *mub){
+    //    cout << seqNames[seqidIndex].RefName << "\t" << currentPos << "\t" << s << "\t" << "GT:GL" << "\t";
 
-  BamMultiReader mreader;
+    if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, backgroundPileUp, &s, currentPos )){
+      cerr << "FATAL: problem during scoring" << endl;
+      cerr << "FATAL: wham exiting"           << endl;
+      exit(1);
+    }
 
-  if(! mreader.Open(all)){
-    cerr << "cannot open bams." << endl;
+    currentPos += 50;
+
+
+    
+    
+
+
+
   }
 
-  double bs = 0;
-  double bn = 0;
 
-  double ts = 0;
-  double tn = 0;
+  targetReader.Close();
+  backgroundReader.Close();
+  return true;
+}
 
-  BamAlignment al;
 
-  while(mreader.GetNextAlignment(al)){
-    if(! al.IsMateMapped()){
-      continue; 
-    }
+int main(int argc, char** argv) {
 
-    if(! al.IsMapped()){
-      continue;
-    }
+  srand((unsigned)time(NULL));
+
+  parseOpts(argc, argv);
+
+  BamMultiReader targetReader, backgroundReader;
+  
+  prepBams(targetReader, "target");
+  prepBams(backgroundReader, "background");
+  
+  RefVector sequences = targetReader.GetReferenceData();
+
+  targetReader.Close();
+  backgroundReader.Close();
+
+  int seqidIndex = 0;
     
-    if(! al.IsPrimaryAlignment()){
-      continue;
-    }
+  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+    //    cerr << (*sit).RefName << endl;
     
-    double ins = abs(boost::lexical_cast<double>(al.InsertSize));
-
-    map<string, int>::iterator amItarget = target_info.find( al.Filename );
-    if(amItarget == target_info.end() ){
-      bs += ins;
-      bn += 1;
+    if(globalOpts.region.size() == 3){
+      if((*sit).RefName == globalOpts.region[0]){
+	if(! runRegion((*sit), seqidIndex, sequences)){
+	  cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
+	  cerr << "FATAL: Wham exiting" << endl;
+	}
+      }
     }
     else{
-      ts += ins;
-      tn += 1;
-    }
-    if(bn > 1000000 && tn > 1000000){
-      break;
-    }
-  }
-
-  (*mut) = ts / tn;
-  (*mub) = bs / bn;
-
-  mreader.Close();
-
-}
-//------------------------------------------------------------
-
-/// run the regions
-
-void run_regions(vector<string> & target, vector <string> & background, string & seqid, int seqr, int cpu, int lcut){
-
-  vector <string> total  = target;
-
-  map<string, int> target_info;
-
-  total.insert( total.end(), background.begin(), background.end() );
-
-  for(vector<string>::iterator it = target.begin(); it != target.end(); it++){
-    target_info[*it] = 1;
-  }
-
-  cerr << "INFO: locating and testing bam indices" << endl;
-
-   check_index(total);
-
-   cerr << "INFO: bam indices checked out" << endl; 
-
-   BamMultiReader mreader;
-
-   cerr << "INFO: opening bam files for reading" << endl;
-
-  if(! mreader.Open(total)){
-    cerr << "ERROR: cannot open bams." << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  double mu_i_target    ;
-  double mu_i_background;
-
-  set_mu_i(target_info, total, & mu_i_target, & mu_i_background);
-
-  cerr << "INFO: target mate pair mapping distance average over 1million reads: "     << mu_i_target     << endl;
-  cerr << "INFO: background mate pair mapping distance average over 1million reads: " << mu_i_background << endl;
-
-  if(! mreader.LocateIndexes()){
-    cerr << "ERROR: cannot create or locate indicies" << endl;
-    exit(EXIT_FAILURE);  
-  }
-
-  RefVector seqids = mreader.GetReferenceData();
-
-  int nseqs = mreader.GetReferenceCount() -1;
-  
-  SamHeader           header = mreader.GetHeader();
-  SamSequenceDictionary seqs = header.Sequences;
-  
-  vector<double> randLRT;
-
-  SamSequence seq;
-
-   while(randLRT.size() < 5000){
-     if(nseqs == 0){
-       cerr << "WARNING: Only one seqid in dataset cannot randomly sample LRT" << endl;
-       cerr << "WARNING: setting LRT permutation threshold to 300"             << endl;
-       break;
-     }
-     if(lcut > -1){
-       cerr << "INFO: user specified LRT permatation threshold: " << lcut << endl;
-       break;
-     }
-     
-     
-     int rseqid = rand() % nseqs;
-     int ni     = 0;
- 
-     SamSequenceConstIterator seqIter = seqs.ConstBegin();
-     SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-        
-     for ( ; seqIter != seqEnd; ++seqIter ) {
-       if(ni != rseqid){
- 	ni += 1;
- 	continue;
-       }
-       else{
- 	seq = (*seqIter);
- 	break;
-       }
-     }
- 
-     int slen = lexical_cast<int>(seq.Length);
-     int rstart = rand() % (slen - 10000);
-     if(rstart < 0){
-       	continue;
-     }
-     
-     int rend   = rstart + 10000;
-    
-     pileupLRT(rseqid, rstart, rend, target_info, total, randLRT, mu_i_target, mu_i_background );
-     double per = double(randLRT.size());
- 
-     cerr << "INFO: " << "assayed " << (100 * (per / 5000)) << "% of LRT genomic baseline" << endl;
-   }
-
-  BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
-  BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-
-  double rmu = 0;
-  double rsd = 0;
-  double cut = 300;
-
-  if(lcut > -1){
-    cut = double( lcut );
-  }
-
-  cerr << "test" << endl;
-
-  if(nseqs > 0 && lcut == -1 ){
-  cerr << "testb" << endl;
-     rmu = mean(randLRT);
-     rsd = sd(randLRT, rmu);
-     cut = rmu + (3.5*rsd);
-     cerr << "INFO: average LRT score aross 100kb random is : " << rmu << endl;
-     cerr << "INFO: standard deviation LRT score aross 100kb random is : " << rmu << endl;
-
- }
-
-  cerr << "INFO: LRT score required for permutation : " << cut << endl;
-     
-  asio::io_service io_service;
-  auto_ptr<asio::io_service::work> work(new asio::io_service::work(io_service));
-
-  boost::thread_group threads;
-  
-  for(int i = 0; i < cpu; i++){
-    threads.create_thread(boost::bind(&asio::io_service::run, &io_service));
-  }
-  
-  cerr << "INFO: launched " << cpu << " threads" << endl;
-  
-  int s      = 0;
-  double sum = 0;
-    
-  for ( ; seqIter != seqEnd; ++seqIter ) {
-    if(seqr != -5){
-      if( seqr != s ){
-	s += 1;
-	  continue;
+      if(! runRegion((*sit), seqidIndex, sequences)){
+	cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
+	cerr << "FATAL: Wham exiting" << endl;
       }
     }
-    
-    seq = (*seqIter);
-    std::string sname = seq.Name;
-    
-    cerr << "INFO: loading " << sname << " into thread pool " << endl;
-    int j = 0;
-    
-    for (; j + 20000 <=  boost::lexical_cast<int>(seq.Length); j += 20000){
-      io_service.post(boost::bind(pileup, s, j, j+20000, target_info, total, cut, mu_i_target, mu_i_background)); 
-    }
-    io_service.post(boost::bind(pileup, s, j, boost::lexical_cast<int>(seq.Length), target_info, total, cut, mu_i_target, mu_i_background)); 
-    s += 1.0;
+    seqidIndex += 1;
   }
-  
-  work.reset();
 
-  threads.join_all();
-  
-  mreader.Close();
-
-}
-
-//------------------------------------------------------------
-
-
-/// given a seqid and a file/set of files find the index for the seqid
-
-int getseqidn (string & seqid, vector<string> & target){
-
-  BamRegion region;
-
-  cerr << "INFO region set to: " << seqid << endl;
-
-  BamMultiReader mreader;
-
-  if(! mreader.Open(target)){
-    cerr << "cannot open bams." << endl;
-  }
-  
-  int i = 0 ;
-
-  BamTools::SamHeader           header = mreader.GetHeader();
-  BamTools::SamSequenceDictionary seqs = header.Sequences;
-
-  BamTools::SamSequence seq;
-  BamTools::SamSequenceConstIterator seqIter = seqs.ConstBegin();
-  BamTools::SamSequenceConstIterator seqEnd  = seqs.ConstEnd();
-
-  for ( ; seqIter != seqEnd; ++seqIter ) {
-
-    seq = (*seqIter);
-    std::string sname = seq.Name;
-    if(sname.compare(seqid) == 0){
-      cerr << "seqid: " << sname << "\t" << "is index: " << "\t" << i << endl;
-      break;
-    }
-    i++;
-  }
-  return i;
-}
-
-//------------------------------------------------------------
-
-/// main's main of course.  Using boost program options flag errors.
-
-int main(int argc,  char * argv[]){
-
-  srand(time(NULL));
-
-  string seqid = "NA";
-  int seqr     = -5;
-  int cpu      =  2;
-  int lcut     = -1;
-  
-  try{
-  
-    namespace po = boost::program_options;
-    po::options_description desc ("Allowed options");
-       
-    desc.add_options()
-      ("help,h",       "produce help info")
-      ("target,t",     po::value<string>() ,   "The target bam files, comma sep list")
-      ("background,b", po::value<string>() ,   "The background bam files, comma sep list")
-      ("seqid,s",      po::value<string>() ,   "Confine the analysis to a single seqid" )
-      ("lcut,l",          po::value<int>() ,    "Permute any likelihood value over theshold" )
-      ("cpu,c",           po::value<int>() ,    "The number of threads to use");
-      
-    po::variables_map vm;
-    
-    try{
-    
-      po::store(po::parse_command_line(argc, argv, desc), vm);
-      
-      if(vm.count("help")){
-	cout << "Usage: raw -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
-	return SUCCESS;
-      }
-      if(! vm.count("target")){
-	cout << "failure to specify target correctly" << endl;
-	cout << "raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
-	return ERROR_IN_COMMAND_LINE;
-      }
-      if(! vm.count("background")){
-      	cout << "failure to specify background correctly" << endl;
-	cout << "raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
-	return ERROR_IN_COMMAND_LINE;
-      }
-      if(! vm.count("cpu")){
-        cout << "ERROR: failure to specify cpus correctly" << endl;
-        cout << "Usage: raw -c 5 -t a.bam,b.bam,c.bam -b d.bam,e.bam,f.bam" << endl;
-        return ERROR_IN_COMMAND_LINE;
-      }
-      po::notify(vm);
-    }
-    catch(po::error & e){
-      cerr << "ERROR: " << e.what() << endl << endl;
-      cerr << desc << endl;
-      return ERROR_IN_COMMAND_LINE;	  
-    }
- 
-    vector<string> target     = parse_groups(vm["target"].as<string>());
-    vector<string> background = parse_groups(vm["background"].as<string>());
-
-    cpu = vm["cpu"].as<int>();
-
-    if(vm.count("lcut")){
-      lcut = vm["lcut"].as<int>();
-    }
-
-    if(vm.count("seqid")){
-      seqid = vm["seqid"].as<string>();
-      seqr  = getseqidn(seqid, target);
-    }
-
-    printvec("INFO: target bam",     target    );
-    printvec("INFO: background bam", background);
-    cerr <<  "INFO: starting to run regions" << endl;
-    
-    run_regions(target, background, seqid, seqr, cpu, lcut);
-    cerr << "INFO: raw has finished" << endl;
-    return 0;    
-  }
-  catch(std::exception& e){
-    std::cerr << "Unhandled Exception reached the top of main: " 
-	      << e.what() << ", application will now exit" << endl; 
-    return ERROR_UNHANDLED_EXCEPTION; 
-  }
 }
