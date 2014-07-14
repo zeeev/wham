@@ -1,4 +1,0 @@
-all:
-	c++ -fopenmp -std=c++0x -g ../lib/*cpp  multi-wham-testing.cpp -I ../lib/ -L ../lib/  -lbamtools -L ~/tools/bamtools/lib/ 
-	./a.out  -t /home/mshapiro/data/pigeon/bams/large_bams/COLcalRARDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAGDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAWDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAQDIAAPE.sort.rmdup.realn.bam  -b /home/mshapiro/data/pigeon/bams/large_bams/COLcalRASDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/PIGtkyRDIDIAAPEI-7.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRADDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAMDIAAPE.sort.rmdup.realn.bam  > t.txt 2> t.err
-perl -lane '$_ =~ /RA=(.*?);/; print $1' 
