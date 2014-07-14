@@ -9,6 +9,8 @@
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
+#define MATHLIB_STANDALONE
+
 using namespace std;
 using namespace BamTools;
 
@@ -17,6 +19,7 @@ struct indvDat{
   int notMapped;
   int mateMissing;
   int mateCrossChromosome;
+  vector<BamAlignment> data;
 };
 
 struct global_opts {
@@ -36,6 +39,32 @@ void printIndv(indvDat s, int t){
   cerr << " crossChrom  :" << s.mateCrossChromosome << endl;
 
   cerr << endl;
+}
+
+void printHeader(void){
+  cout << "##fileformat=VCFv4.1" << endl;
+  cout << "#INFO=<TB,Number=2,type=Float,Description=\"Mean frequency of missing mates in the target and background, respectively\">" << endl;
+  cout << "#INFO=<DI,Number=1,type=Float,Description=\"absolute difference between TB\">" << endl;
+  cout << "#INFO=<AF,Number=3,type=Float,Description=\"estimated frequency of missing mates in the target, background, and total, respectively\">" << endl;
+  cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
+  cout << "#INFO=<PV,Number=1,type=Float,Description=\"Negative log 10 pvalue from Likelihood Ratio Test\">" << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">" << endl;
+  cout << "##FORMAT=<MN,Number=2,type=Float,Description=\"Number of mates missing and number of reads\">" << endl;
+  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood under a binomial model\">"   << endl;
+  cout << "##FORMAT=<GQ,Number=1,type=FLoat,Desciption=\"Genotype Quality\">" << endl; 
+  cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
+
+  for(int t = 0; t < globalOpts.targetBams.size(); t++){
+    cout << globalOpts.targetBams[t] << "\t";
+  }
+  for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
+    cout << globalOpts.backgroundBams[b] ;
+    if(b < globalOpts.backgroundBams.size() - 1){
+      cout << "\t";
+    }
+  }
+  cout << endl;
+  
 }
 
 string join(vector<string> strings){
@@ -235,60 +264,81 @@ double methodOfMoments(double mu, double var, double * aHat, double * bHat){
   
 }
 
+double unphred(double p){
+  return pow(10, (-p/10));
+}
 
-bool printGeno(map<string, indvDat> & dat, vector<string> & keys, string * toprint){
+
+
+bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
   
-  bool nonRef = false;
+  bool alt = false;
+  
+  double aal, abl, bbl;
+  (*geno) = "./.";
+  
+  double nreads = idat.data.size();
 
-  stringstream all;
+  if(nreads < 2){
+    gls.push_back(-500.0);
+    gls.push_back(-500.0);
+    gls.push_back(-500.0);
 
-  for(int i = 0; i < keys.size(); i++){
+    return false;
     
-    stringstream gl;
-    stringstream mn;
-    stringstream genotypeField;
-
-    string genotype = "0/0";
-    
-    if(dat[keys[i]].nReads < 2){
-      genotype = "./.";
-      gl << ".,.,.";
-    }
-    
-    else{
-      double max;
-
-      double aa =  logLbinomial(dat[keys[i]].mateMissing, dat[keys[i]].nReads, 0.01);
-      max = aa;
-      double ab = logLbinomial(double(dat[keys[i]].mateMissing), double(dat[keys[i]].nReads), 0.50);
-      if(ab > max){
-	max = ab;
-	genotype = "0/1";
-	nonRef = true;
-      }
-      double bb = logLbinomial(double(dat[keys[i]].mateMissing), double(dat[keys[i]].nReads), 0.99);
-      if(bb > max){
-	max = bb;
-	genotype = "1/1";
-	nonRef = true;
-      }
-
-      gl << aa << "," << ab << "," << bb ;
-
-    }
-    mn << dat[keys[i]].mateMissing << "," << dat[keys[i]].nReads; 
-    genotypeField << genotype << ":" << mn.str() << ":" << gl.str() ;
-    
-    
-    if(i != (keys.size() - 1)){
-      genotypeField << "\t";
-    }
-    all << genotypeField.str();
   }
 
-  (*toprint) = all.str();
+  for(vector<BamAlignment>::iterator it = idat.data.begin(); it != idat.data.end(); it++ ){
+    
+    double mappingP = unphred((*it).MapQuality);
 
-  return nonRef;
+    if((*it).IsMateMapped()){
+      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
+      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
+      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+    }
+    else{
+      aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
+      abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
+      bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
+    }
+  }
+  
+  aal = aal - log(pow(2,nreads));
+  abl = abl - log(pow(2,nreads));
+  bbl = bbl - log(pow(2,nreads));
+  
+  double max = aal;
+  (*geno) = "0/0";
+
+  if(abl > max){
+    (*geno) = "0/1";
+    max = abl;
+    alt = true;
+  }
+  if(bbl > max){
+    (*geno) = "1/1";
+    alt = true;
+  }
+  gls.push_back(aal);
+  gls.push_back(abl);
+  gls.push_back(bbl);
+  
+  return alt;
+
+}
+
+void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
+  
+  for(int i = 0; i < dat.size(); i++){
+
+    (*alpha) += 2 * exp(dat[i][0]);
+    (*alpha) +=     exp(dat[i][1]);
+    (*beta ) +=     exp(dat[i][1]);
+    (*beta ) += 2 * exp(dat[i][2]);
+
+  }
+
 }
 
 bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
@@ -304,103 +354,124 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     bi[globalOpts.backgroundBams[b]] = i;
   }
 
-  double totalTcount, totalBcount = 0;
+  double totalMateMissing = 0;
 
   for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
     string fname = (*tit).Filename;
-    totalTcount += 1;
     if((*tit).IsMapped()){
-      ti[fname].nReads++;
+      if((*tit).MapQuality < 1 ){
+	continue;
+      }
+      ti[fname].nReads++; 
+      ti[fname].notMapped   += (!(*tit).IsMapped());
+      totalMateMissing +=  (!(*tit).IsMateMapped());
+      ti[fname].mateMissing += (!(*tit).IsMateMapped());
+      ti[fname].data.push_back(*tit);
     }
-    ti[fname].notMapped   += (!(*tit).IsMapped());
-    ti[fname].mateMissing += (!(*tit).IsMateMapped());
-    ti[fname].mateCrossChromosome += ((*tit).RefID == (*tit).MateRefID);
   }
 
   for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
     string fname = (*bit).Filename;
-    totalBcount += 1;
     if((*bit).IsMapped()){
+      if((*bit).MapQuality < 1 ){
+	continue;
+      }
       bi[fname].nReads++;
+      bi[fname].notMapped   += (*bit).IsMapped();
+      bi[fname].mateMissing += (!(*bit).IsMateMapped());
+      totalMateMissing +=  (!(*bit).IsMateMapped());
+      bi[fname].data.push_back(*bit);
     }
-    bi[fname].notMapped   += (*bit).IsMapped();
-    bi[fname].mateMissing += (!(*bit).IsMateMapped());
-    bi[fname].mateCrossChromosome += ((*bit).RefID == (*bit).MateRefID);
   }
-  
-  if(totalTcount < 10 || totalBcount < 10){
+
+  if(totalMateMissing < 2){
     return true;
   }
 
-  vector<double> tiFrq, biFrq, totFrq;
+  vector< vector < double > > targetGls, backgroundGls, totalGls;
+  vector<string> genotypes;
+  string genotype;
 
+  int nAlt = 0;
 
-  for(map<string, indvDat>::iterator tiIt = ti.begin(); tiIt != ti.end(); tiIt++){
-    if((tiIt->second).nReads < 2){
-      continue;
-    }
-    else{
-      double frq = double(tiIt->second.mateMissing) / double(tiIt->second.nReads);
-      tiFrq.push_back(frq);
-      totFrq.push_back(frq);
-    }
-  }
-
-  for(map<string, indvDat>::iterator biIt = bi.begin(); biIt != bi.end(); biIt++){
-    if((biIt->second).nReads < 2){
-      continue;
-    }
-    else{
-      double frq = double(biIt->second.mateMissing) / double(biIt->second.nReads);
-      biFrq.push_back(frq);
-      totFrq.push_back(frq);
+  for(int t = 0; t < globalOpts.targetBams.size(); t++){
+    vector< double > Targ;
+    //    cerr << "about to process" << endl;
+    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype);
+    // cerr << "processed" << endl;
+    genotypes.push_back(genotype);
+    if(!Targ.empty()){
+      targetGls.push_back(Targ);
+      totalGls.push_back(Targ);
     }
   }
-
-  if(totFrq.size() < 2 || tiFrq.size() < 2 || biFrq.size() < 2 ){
+  for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
+    vector< double > Back;
+    //    cerr << "about to process" << endl;
+    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype);
+    //    cerr << "processed"<< endl;
+    genotypes.push_back(genotype);
+    if(!Back.empty()){
+      backgroundGls.push_back(Back);
+      totalGls.push_back(Back);
+    }
+  }
+  
+  if(nAlt < 1){
     return true;
   }
 
-  string genosT, genosB;
+  double ta, tb, ba, bb, aa, ab = 0;
+
+  pseudoCounts(targetGls, &ta, &tb);
+  pseudoCounts(backgroundGls, &ba, &bb);
+  pseudoCounts(totalGls, &aa, & ab);
+
+  double taf = tb / (ta + tb);
+  double baf = bb / (ba + bb);
+  double aaf = (tb + bb) / (ta + tb + ba + bb);
+
+  double alt  = logLbinomial(tb, (tb+ta), taf) + logLbinomial(bb, (bb+ba), baf);
+  double null = logLbinomial(tb, (tb+ta), aaf) + logLbinomial(bb, (bb+ba), aaf);
+
+  double lrt = 2 * (alt - null);
   
-  bool altT = printGeno(ti, globalOpts.targetBams,     &genosT);
-  bool altB = printGeno(bi, globalOpts.backgroundBams, &genosB);
+  cout << seqid   << "\t" ; // CHROM
+  cout << pos     << "\t" ; // POS
+  cout << "."     << "\t" ; // ID
+  cout << "NA"    << "\t" ; // REF
+  cout << "SV"    << "\t" ; // ALT
+  cout << "."     << "\t" ; // QUAL
+  cout << "."     << "\t" ; // FILTER
+  cout << "LRT="  << lrt << "\t"; // INFO
+  cout << "GT:GL" << "\t" ;
   
-  if(altT && altB){
-    cout << seqid << "\t" << pos << "\t" << genosT << "\t" << genosB << endl;
+    
+  int index = 0;
+
+  for(vector<string>::iterator it = genotypes.begin(); it != genotypes.end(); it++){
+    
+    stringstream ss ; 
+    
+    cout << (*it);
+
+    ss  << ";" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
+    cout << ss.str();
+
+    if(it + 1 != genotypes.end()){
+      cout << "\t";
+    }
+    index += 1;
   }
-
-  double tiMean  =  mean(tiFrq);
-  double biMean  =  mean(biFrq);
-  double totMean =  mean(totFrq);
-
-  (*s) = tiMean - biMean;
-
-  if((tiMean + biMean) < 0.2){
-    return true;
-  }
+  cout << endl;
 
   
-//  double tiVar  = var(tiFrq, tiMean);
-//  double biVar  = var(biFrq, biMean);
-//  double totVar = var(totFrq, totMean);
-//
-//  double tiAhat, tiBhat, biAhat, biBhat, totAhat, totBhat;
-//  
-//  methodOfMoments(tiMean, tiVar, &tiAhat, &tiBhat);
-//  methodOfMoments(biMean, biVar, &biAhat, &biBhat);
-//  methodOfMoments(totMean, totVar, &totAhat, &totBhat);
-//
-//  cerr << endl;
-//  cerr << tiAhat << "\t" << tiBhat << endl;
-//
-//  double alt  = totalLL(tiFrq, tiAhat, tiBhat)   + totalLL(biFrq, biAhat, biBhat);
-//  double null = totalLL(tiFrq, totAhat, totBhat) + totalLL(biFrq, totAhat, totBhat); 
-
-  //  cout << cp << "\t" <<  tiMean << "\t" << biMean << "\t" << totMean << "\t" << alt/null << endl;
-
   return true;
 }
+
+  
+
+
 
 bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
 
@@ -438,34 +509,29 @@ bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
   targetPileUp.processAlignment(alt,     currentPos);
   backgroundPileUp.processAlignment(alb, currentPos);
 
-  bool stillReads = true;
-  
-  while(stillReads){
-    while(currentPos > targetPileUp.currentStart() || currentPos > backgroundPileUp.currentStart()){
-      
-      bool getTarget, getBackground;
 
-      if(currentPos > targetPileUp.currentStart()){
-	getTarget = targetReader.GetNextAlignment(alt);
-	targetPileUp.processAlignment(alt, currentPos);
-      }
-      if(currentPos > backgroundPileUp.currentStart()){
-	getBackground = backgroundReader.GetNextAlignment(alb);
-	backgroundPileUp.processAlignment(alb, currentPos);
-      }
-      if(getTarget == false && getBackground == false){
-	stillReads = false;
-	break;
-      }
+  bool getTarget     = true;
+  bool getBackground = true;  
+
+  while(1){
+    
+    while(currentPos > targetPileUp.CurrentStart && getTarget){
+      getTarget = targetReader.GetNextAlignment(alt);
+      targetPileUp.processAlignment(alt, currentPos);
     }
-   
+    while(currentPos > backgroundPileUp.CurrentStart && getBackground){
+      getBackground = backgroundReader.GetNextAlignment(alb);
+      backgroundPileUp.processAlignment(alb, currentPos);
+    }
+    
+    if(getTarget == false && getBackground == false){
+      break;
+    }
+    
     targetPileUp.purgePast();
     backgroundPileUp.purgePast();
 
-
     double s = 0;
-
-    //    cout << seqNames[seqidIndex].RefName << "\t" << currentPos << "\t" << s << "\t" << "GT:GL" << "\t";
 
     if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, backgroundPileUp, &s, currentPos )){
       cerr << "FATAL: problem during scoring" << endl;
@@ -475,14 +541,7 @@ bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
 
     currentPos += 50;
 
-
-    
-    
-
-
-
   }
-
 
   targetReader.Close();
   backgroundReader.Close();
@@ -506,26 +565,35 @@ int main(int argc, char** argv) {
   targetReader.Close();
   backgroundReader.Close();
 
+  printHeader();
+
   int seqidIndex = 0;
-    
-  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
-    //    cerr << (*sit).RefName << endl;
-    
-    if(globalOpts.region.size() == 3){
-      if((*sit).RefName == globalOpts.region[0]){
+
+
+  //#pragma omp parallel
+  {
+    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+      //    cerr << (*sit).RefName << endl;
+      
+      if(globalOpts.region.size() == 3){
+	if((*sit).RefName == globalOpts.region[0]){
+	  //	cerr << "runing region" << endl;
+	  if(! runRegion((*sit), seqidIndex, sequences)){
+	    cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
+	    cerr << "FATAL: Wham exiting" << endl;
+	  }
+	  //	cerr << "ran region" << endl;
+	}
+      }
+      else{
+	//	cerr << "runing region" << endl;
 	if(! runRegion((*sit), seqidIndex, sequences)){
 	  cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
 	  cerr << "FATAL: Wham exiting" << endl;
 	}
+	//      cerr << "ran region" << endl;
       }
+      seqidIndex += 1;
     }
-    else{
-      if(! runRegion((*sit), seqidIndex, sequences)){
-	cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
-	cerr << "FATAL: Wham exiting" << endl;
-      }
-    }
-    seqidIndex += 1;
   }
-
 }
