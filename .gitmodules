@@ -1,0 +1,3 @@
+[submodule "src/bamtools"]
+	path = src/bamtools
+	url = https://github.com/pezmaster31/bamtools.git
