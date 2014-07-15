@@ -21,3 +21,17 @@ The second step is to build WHAM-BAM.  From "wham" directory simply make.
 ``` 
 make
 ```
+
+### RUNNING WHAM-BAM
+
+usage statement:
+
+```
+usage: wham -t <STRING> -b <STRING>
+
+option: t <STRING> -- comma separated list of target bam files
+option: b <STRING> -- comma separated list of background bam files
+option: r <STRING> -- a genomic region in the format "seqid:start-end"
+
+Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
+```
