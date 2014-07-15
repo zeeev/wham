@@ -43,15 +43,10 @@ void printIndv(indvDat s, int t){
 
 void printHeader(void){
   cout << "##fileformat=VCFv4.1" << endl;
-  cout << "#INFO=<TB,Number=2,type=Float,Description=\"Mean frequency of missing mates in the target and background, respectively\">" << endl;
-  cout << "#INFO=<DI,Number=1,type=Float,Description=\"absolute difference between TB\">" << endl;
-  cout << "#INFO=<AF,Number=3,type=Float,Description=\"estimated frequency of missing mates in the target, background, and total, respectively\">" << endl;
   cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
-  cout << "#INFO=<PV,Number=1,type=Float,Description=\"Negative log 10 pvalue from Likelihood Ratio Test\">" << endl;
+  //  cout << "#INFO=<PV,Number=1,type=Float,Description=\"Negative log 10 pvalue from Likelihood Ratio Test\">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">" << endl;
-  cout << "##FORMAT=<MN,Number=2,type=Float,Description=\"Number of mates missing and number of reads\">" << endl;
   cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood under a binomial model\">"   << endl;
-  cout << "##FORMAT=<GQ,Number=1,type=FLoat,Desciption=\"Genotype Quality\">" << endl; 
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
@@ -85,7 +80,7 @@ void printVersion(void){
 }
 
 void printHelp(void){
-  cerr << "usage: wham -t <STRING> -b <STRING>" << endl << endl;
+  cerr << "usage: WHAM-BAM -t <STRING> -b <STRING> -r <STRING>" << endl << endl;
   cerr << "option: t <STRING> -- comma separated list of target bam files"           << endl ;
   cerr << "option: b <STRING> -- comma separated list of background bam files"       << endl ;
   cerr << "option: r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
