@@ -23,10 +23,10 @@ struct indvDat{
 };
 
 struct global_opts {
-  vector<string> targetBams;
+  vector<string> targetBams    ;
   vector<string> backgroundBams;
-  vector<string> region   ; 
-  vector<string> regionDat;
+  string         seqid         ;
+  vector<int>    region        ; 
 } globalOpts;
 
 static const char *optString ="ht:b:r:";
@@ -117,13 +117,13 @@ void parseOpts(int argc, char** argv){
 	vector<string> tmp_region = split(optarg, ":");
 	vector<string> start_end = split(tmp_region[1], "-");
 
-	globalOpts.region.push_back(tmp_region[0]);
-	globalOpts.region.push_back(start_end[0]);
-	globalOpts.region.push_back(start_end[1]);
+	globalOpts.seqid = tmp_region[0];
+	globalOpts.region.push_back(atoi(start_end[0].c_str()));
+	globalOpts.region.push_back(atoi(start_end[1].c_str()));
 		
-	cerr << "INFO: region set to: " <<   globalOpts.region[0] << ":" <<   globalOpts.region[1] << "-" <<  globalOpts.region[2] << endl;
+	cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
 	
-	if(globalOpts.region.size() != 3){
+	if(globalOpts.region.size() != 2){
 	  cerr << "FATAL: incorrectly formatted region." << endl;
 	  cerr << "FATAL: wham is now exiting."          << endl;
 	  exit(1);
@@ -468,7 +468,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
 
 
-bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
+bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
   BamMultiReader targetReader, backgroundReader;
   
@@ -477,8 +477,8 @@ bool runRegion(RefData region, int seqidIndex, vector< RefData > seqNames){
   
   int setRegionErrorFlag = 0;
 
-  setRegionErrorFlag += targetReader.SetRegion(seqidIndex, 0, seqidIndex, region.RefLength);
-  setRegionErrorFlag += backgroundReader.SetRegion(seqidIndex, 0, seqidIndex, region.RefLength);
+  setRegionErrorFlag += targetReader.SetRegion(seqidIndex, start, seqidIndex, end);
+  setRegionErrorFlag += backgroundReader.SetRegion(seqidIndex, start, seqidIndex, end);
   
   if(setRegionErrorFlag != 2){
     return false;
@@ -570,10 +570,10 @@ int main(int argc, char** argv) {
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
       //    cerr << (*sit).RefName << endl;
       
-      if(globalOpts.region.size() == 3){
-	if((*sit).RefName == globalOpts.region[0]){
+      if(globalOpts.region.size() == 2){
+	if((*sit).RefName == globalOpts.seqid){
 	  //	cerr << "runing region" << endl;
-	  if(! runRegion((*sit), seqidIndex, sequences)){
+	  if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
 	    cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
 	    cerr << "FATAL: Wham exiting" << endl;
 	  }
@@ -582,7 +582,7 @@ int main(int argc, char** argv) {
       }
       else{
 	//	cerr << "runing region" << endl;
-	if(! runRegion((*sit), seqidIndex, sequences)){
+	if(! runRegion(seqidIndex, 0, (*sit).RefLength, sequences)){
 	  cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
 	  cerr << "FATAL: Wham exiting" << endl;
 	}
