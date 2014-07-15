@@ -27,7 +27,7 @@ make
 usage statement:
 
 ```
-usage: wham -t <STRING> -b <STRING> -r <STRING>
+usage: WHAM-BAM -t <STRING> -b <STRING> -r <STRING>
 
 option: t <STRING> -- comma separated list of target bam files
 option: b <STRING> -- comma separated list of background bam files
