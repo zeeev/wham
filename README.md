@@ -1,173 +1,37 @@
-Purpose:
-------
+### WHAM-BAM
 
-Whole-Genome Aligment Metrics BAM, or WhamBAM for short, is an ensemble of tools focused on identifying structural variants associated with a group of BAM Files / indviduals.  
-  
-
-The toolkit has three programs:
-
-### wham 
-
-Detecting alignment anomalies within a single bamfile.  Do not use.
+Structural variants (SVs) have largely been ignored in Genome Wide Association Studies.  SVs are difficult to call from NGS data.  Often the same SV allele is assigned different breakpoints across individuals.  WHAM-BAM takes a different approach and directly apply association tests on the BAM files.  WHAM-BAM does not call SVs, but rather examines the patterns of mate pair mapping across cases and controls.  If there is an enrichment of unmapped mates in the cases or controls WHAM-BAM performs an association test.
 
 
+### INSTALLING WHAM-BAM
 
-### whamy
+The first step is installing BamTools which is shipped with WHAM-BAM.
 
-Whamy is designed to look for anomalies across groups of bams.  Useful to run after raw to identify the component driving the LRT singal in raw.  
+```
+git clone --recusive git@github.com:jewmanchue/wham.git wham
+cd wham/src/bamtools
+mkdir build
+cd build
+cmake ..
+make
+```
 
-### raw
+The second step is to build WHAM-BAM.  From "wham" directory simply make.
 
-Raw has the ability to test for associations via a likelihood ratio test.
+``` 
+make
+```
 
-Installing:
------
-###Quick Install:
+### RUNNING WHAM-BAM
 
-Assuming that bamtools is installed and boost is present on your system skip strait to "Installing WhamBAM."
+usage statement:
 
+```
+usage: WHAM-BAM -t <STRING> -b <STRING> -r <STRING>
 
-###Dependencies:
+option: t <STRING> -- comma separated list of target bam files
+option: b <STRING> -- comma separated list of background bam files
+option: r <STRING> -- a genomic region in the format "seqid:start-end"
 
-  Cmake:
-    Cmake is designed to make compiling code easy across different operation systems. It can be installed from yum or other repository managers.  To check if cmake is installed type cmake --version.  Cmake 2.6 or higher is required.
-    
-
-  Boost:
-    Boost is required for probability density functions.  Most linux distirbutions should already have Boost installed.  If you NEED/WANT to do a local install set the enviromental variables as follows. 
-    
-    bash :
-    
-    export BOOST_ROOT=/xxx/boost/
-    
-    tcsh :
-    
-    setenv BOOST_ROOT /xxx/boost/
-    
-
-###Bamtools:
-
-  Bamtools provides an excellent API for reading and writing BAM files.  
-
-1.  git clone https://github.com/pezmaster31/bamtools
-2.  cd bamtools
-3.  mkdir build
-4.  cd build
-5.  cmake ..
-6.  make 
-
-
-Setting up the enviromental variables:
-
-  In order for WhamBAM to install you need to set several enviromental variables.  Copy the block of code into your profile.  Change "xxx" to the root Bamtools path.  If you are in Bamtools root and type ls you should see:
-  
-    "bin  build  CMakeLists.txt  docs  include  lib  LICENSE  README  src"
-
-
-bash users:
-
-    export BAMROOT="xxx"
-    export PATH=$BAMROOT/include:$PATH
-    export CPATH=$BAMROOT/lib:$CPATH
-    export CPATH=$BAMROOT/include:$CPATH
-    export LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
-    export LD_LIBRARY_PATH=$BAMROOT/lib:$LD_LIBRARY_PATH
-
-tcsh user (similar to C shell):
- 
-    setenv PATH            {$PATH}:/xxx/bamtools/include
-    setenv CPATH           {$CPATH}:/xxx/bamtools/include
-    setenv  LIBRARY_PATH    {$LIBRARY_PATH}:/xxx/bamtools/lib
-    setenv LD_LIBRARY_PATH {$LD_LIBRARY_PATH}:/xxx/bamtools/lib 
-
-###Installing WhamTools:
-   
-1.  git clone git://github.com/jewmanchue/wham.git
-2.  cd wham
-3.  mkdir build
-4.  cd build
-5.  cmake ..
-6.  make 
-7.  cd ..
-8.  rm -rf build
-
-
-Basic usage:
------
-
-### getting help
-
-Run the programs with the -? flag
-
-### wham
-
-    wham mybam.bam mybam.bai scaffoldX > stdout 2> stderr
-
-### whamy
-
-Whamy requires sorted BAMs.  To improve whamy's speeds it is a good idea to remove duplicates and index the BAMS (not required).  If the scaffold flag 
-is not set whamy will run the whole genome.
-
-    whamy --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --scaffold chr1 > stdout 2> stderr
-    
-### raw
-  Raw requires sorted BAMs.  To improve whamy's speeds it is a good idea to remove duplicates and index the BAMS (not required).  If the scaffold flag raw not set whamy will run the whole genome.
-  
-     raw --target a.bam,b.bam,c.bam --background d.bam,e.bam,f.bam --cpu 20 --scaffold chr1 > stdout 2> stderr
-     
-
-Output:
------
-
-###wham
-
-A tab delimited text file.
-Columns:
-
-1. Seqid.
-2. Position. 
-3. Number of "bad reads" covering the position in the pileup.
-4. Number of reads covering the position in the pileup.
-5. Fraction of "bad reads"
-6. Probability of observing K bad reads out of N trials (See Details)
-7. Global fraction of bad reads.
-
-###whamy
-
-A tab delimited text file.
-Columns:
-
-1. Seqid.
-2. Position. 
-3. Number of unmapped mates (target)
-4. Number of unmapped mates (background)
-5. Number of same strand mates (target)
-6. Number of same strand mates (background)
-7. Number of cross seqid mapped mates (target)
-8. Number of cross seqid mapped mates (background)
-9. Depth - Number of reads covering position (target)
-10. Depth - Number of reads covering position (background)
-11. Average insert length (target)
-12. Average insert length (background)
-13. Average mapping quality (target)
-14. Average mapping quality (background)
-15. Euclidean distances based on columns (3,4;5,6;7,8;13,14)
-
-
-###raw
-
-A tab delimited text file.
-Columns:
-
-1. Seqid
-2. Position
-3. Combined depth target + background
-3. LRT
-5. P-value from ChiSq LRT lookup
-6. Permutation to validate significance 
-
-
-When column 5 is much lower than column six the LRT is not valid.  The permutation test corrects for false positives due to discorance of the model and data. 
-
-
-
+Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
+```
