@@ -5,11 +5,19 @@ Structural variants (SVs) have largely been ignored in Genome Wide Association S
 
 ### INSTALLING WHAM-BAM
 
+The first step is installing BamTools which is shipped with WHAM-BAM.
+
 ```
-git clone --recusive xxx 
-cd src/bamtools
+git clone --recusive git@github.com:jewmanchue/wham.git wham
+cd wham/src/bamtools
 mkdir build
 cd build
 cmake ..
+make
+```
+
+The second step is to build WHAM-BAM.  From "wham" directory simply make.
+
+``` 
 make
 ```
