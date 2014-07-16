@@ -14,6 +14,7 @@ mkdir build
 cd build
 cmake ..
 make
+make install
 ```
 
 The second step is to build WHAM-BAM.  From "wham" directory simply make.
