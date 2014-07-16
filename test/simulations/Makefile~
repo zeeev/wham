@@ -1,0 +1,13 @@
+NSAMP=10
+
+
+all: generateDeletion splitDeletion simulateReads align
+
+generateDeletion:
+	perl  generateSVfasta -n $(NSAMP) -o scaffold612.fa -t DELETION > target_deletion.multi.fa
+splitDeletion:
+	perl ~/tools/fasta_tool --split target_deletion.multi.fa	
+simulateReads:
+	find Sample_* | xargs -I {} -P $(NSAMP) wgsim -N 1000000 -1 100 -2 100 {} {}.PE1.fastq {}.PE2.fastq
+align:
+	find *fastq | perl -lane '$_ =~ s/\.PE[12]\.fastq//g; print $_' | uniq | xargs -I {} -P $(NSAMP) ~/tools/bowtie2-2.0.2/bowtie2 -p 3 -x scaffold612.fa -1 {}.PE1.fastq -2 {}.PE2.fastq -S {}.sam
