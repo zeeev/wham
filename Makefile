@@ -11,7 +11,10 @@ WHAMINCLUDE=src/lib
 OUTFOLD=bin/
 RUNTIME= -Wl,-rpath
 
-all: buildWHAMBAM
+all: createBin buildWHAMBAM
+
+createBin:
+	mkdir bin
 
 buildWHAMBAM:
 	c++ $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing.cpp -L $(BAMLIB) -I $(BAMINCLUDE) -I $(WHAMINCLUDE) -lbamtools -o $(OUTFOLD)WHAM-BAM $(RUNTIME),src/bamtools/lib
