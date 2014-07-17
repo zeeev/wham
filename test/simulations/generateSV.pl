@@ -66,11 +66,12 @@ sub DELETION{
     my $uni = sprintf "%08X\n", rand(0xffffffff);
     
     foreach my $seq (@SEQS){
-	print ">Sample-$index-DELETION-$uni\n";
 	$index += 1;
-	my $start = $trueP + int(rand(100) - 100);
-	my $end   = $trueP + $trueL + int(rand(100) - 100);
+	my $start  = $trueP + int(rand(100) - 100);
+	my $end    = $trueP + $trueL + int(rand(100) - 100);
+	my $length = $end - $start; 
 	substr($seq, $start, $end-$start) = "";
+	print ">Sample-$index-DELETION-$trueP-$start-$end-$length-$uni";
 	print wrap('','', "$seq\n");
     }
 		 
