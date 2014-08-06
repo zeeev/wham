@@ -264,12 +264,13 @@ double unphred(double p){
 }
 
 
-
 bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
   
   bool alt = false;
   
-  double aal, abl, bbl;
+  double aal = 0;
+  double abl = 0;
+  double bbl = 0;
   (*geno) = "./.";
   
   double nreads = idat.data.size();
@@ -283,16 +284,25 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
     
   }
 
+  double nref = 0;
+  double nalt = 0;
+
+  stringstream m;
+
   for(vector<BamAlignment>::iterator it = idat.data.begin(); it != idat.data.end(); it++ ){
     
     double mappingP = unphred((*it).MapQuality);
+    
+    m << "\t" << mappingP ;
 
     if((*it).IsMateMapped()){
+      nref += 1;
       aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
       abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
       bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
     }
     else{
+      nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
       bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
@@ -302,7 +312,23 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
   aal = aal - log(pow(2,nreads));
   abl = abl - log(pow(2,nreads));
   bbl = bbl - log(pow(2,nreads));
+
+
+  if(nref == 0){
+    aal = -255.0;
+    abl = -255.0;
+  }
+  if(nalt == 0){
+    abl = -255.0;
+    bbl = -255.0;
+  }
+
+  double norm = log( exp(aal) + exp(abl) + exp(bbl) );
   
+//  aal = aal - norm;
+//  abl = abl - norm;
+//  bbl = bbl - norm;
+
   double max = aal;
   (*geno) = "0/0";
 
@@ -319,6 +345,9 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
   gls.push_back(abl);
   gls.push_back(bbl);
   
+
+  //  cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t" << nalt << m.str() << endl;
+
   return alt;
 
 }
@@ -353,12 +382,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
     string fname = (*tit).Filename;
-    if((*tit).IsMapped()){
-      if((*tit).MapQuality < 1 ){
-	continue;
-      }
+    if((*tit).IsMapped() && (*tit).MapQuality != 0){
       ti[fname].nReads++; 
-      ti[fname].notMapped   += (!(*tit).IsMapped());
+      //      ti[fname].notMapped   += (!(*tit).IsMapped());
       totalMateMissing +=  (!(*tit).IsMateMapped());
       ti[fname].mateMissing += (!(*tit).IsMateMapped());
       ti[fname].data.push_back(*tit);
@@ -367,12 +393,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
     string fname = (*bit).Filename;
-    if((*bit).IsMapped()){
-      if((*bit).MapQuality < 1 ){
-	continue;
-      }
+    if((*bit).IsMapped() && (*bit).MapQuality != 0){
       bi[fname].nReads++;
-      bi[fname].notMapped   += (*bit).IsMapped();
+      //      bi[fname].notMapped   += (*bit).IsMapped();
       bi[fname].mateMissing += (!(*bit).IsMateMapped());
       totalMateMissing +=  (!(*bit).IsMateMapped());
       bi[fname].data.push_back(*bit);
@@ -385,12 +408,19 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   vector< vector < double > > targetGls, backgroundGls, totalGls;
   vector<string> genotypes;
+  vector<int> depth;
+  vector<int> nMissingMate;
   string genotype;
+
+  int tdepth, bdepth = 0;
 
   int nAlt = 0;
 
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
     vector< double > Targ;
+    nMissingMate.push_back(ti[globalOpts.targetBams[t]].mateMissing);
+    tdepth += ti[globalOpts.targetBams[t]].nReads;
+    depth.push_back(ti[globalOpts.targetBams[t]].nReads);
     //    cerr << "about to process" << endl;
     nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype);
     // cerr << "processed" << endl;
@@ -402,6 +432,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   }
   for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
     vector< double > Back;
+    nMissingMate.push_back( bi[globalOpts.backgroundBams[b]].mateMissing);
+    bdepth += bi[globalOpts.backgroundBams[b]].nReads;
+    depth.push_back(bi[globalOpts.backgroundBams[b]].nReads);
     //    cerr << "about to process" << endl;
     nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype);
     //    cerr << "processed"<< endl;
@@ -412,25 +445,29 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     }
   }
   
-  if(nAlt < 1){
+  if(nAlt < 2){
     return true;
   }
 
-  double ta, tb, ba, bb, aa, ab = 0;
+  double ta, tb, ba, bb, aa, ab = 0.001;
 
   pseudoCounts(targetGls, &ta, &tb);
   pseudoCounts(backgroundGls, &ba, &bb);
   pseudoCounts(totalGls, &aa, & ab);
 
-  double taf = tb / (ta + tb);
-  double baf = bb / (ba + bb);
-  double aaf = (tb + bb) / (ta + tb + ba + bb);
+  double taf = bound(tb / (ta + tb));
+  double baf = bound(bb / (ba + bb));
+  double aaf = bound((tb + bb) / (ta + tb + ba + bb));
 
   double alt  = logLbinomial(tb, (tb+ta), taf) + logLbinomial(bb, (bb+ba), baf);
   double null = logLbinomial(tb, (tb+ta), aaf) + logLbinomial(bb, (bb+ba), aaf);
 
   double lrt = 2 * (alt - null);
   
+  if(lrt <= 0){
+    return true;
+  }
+
   cout << seqid   << "\t" ; // CHROM
   cout << pos     << "\t" ; // POS
   cout << "."     << "\t" ; // ID
@@ -450,7 +487,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     
     cout << (*it);
 
-    ss  << ";" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
+    ss  << ":"  <<  nMissingMate[index] << ":" << depth[index] << ":" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
     cout << ss.str();
 
     if(it + 1 != genotypes.end()){
