@@ -16,11 +16,19 @@ using namespace BamTools;
 
 struct indvDat{
   int nReads;
+  int nAboveAvg;
   int notMapped;
   int mateMissing;
   int mateCrossChromosome;
   vector<BamAlignment> data;
 };
+
+struct insertDat{
+  map<string, double> mus; // mean of insert length for each indvdual across 1e6 reads
+  map<string, double> sd;  // standard deviation
+  map<string, double> lq;  // 25% of data
+  map<string, double> up;  // 75% of the data
+} insertDists;
 
 struct global_opts {
   vector<string> targetBams    ;
@@ -32,13 +40,26 @@ struct global_opts {
 static const char *optString ="ht:b:r:";
 
 void printIndv(indvDat s, int t){
-  cerr << "INDV: " << t << endl;
-  cerr << " nReads      :" << s.nReads      << endl;
-  cerr << " notMapped   :" << s.notMapped   << endl;
-  cerr << " mateMissing :" << s.mateMissing << endl;
-  cerr << " crossChrom  :" << s.mateCrossChromosome << endl;
+  cout << "#INDV: " << t << endl;
+  cout << "# nReads      :" << s.nReads      << endl;
+  cout << "# notMapped   :" << s.notMapped   << endl;
+  cout << "# mateMissing :" << s.mateMissing << endl;
+  cout << "# crossChrom  :" << s.mateCrossChromosome << endl;
+  cout << "# n 1sd above :" << s.nAboveAvg           << endl;
 
-  cerr << endl;
+  double sum = 0;
+
+  string readNames = "# read names: ";
+
+  for(int i = 0; i <  s.data.size(); i++){
+    sum += double (s.data[i].MapQuality);
+    readNames.append(s.data[i].Name);
+    readNames.append(" ");
+  }
+
+  cout << "# average mapping q : " << sum/double(s.nReads) << endl;
+  cout << readNames << endl;
+  cout << endl;
 }
 
 void printHeader(void){
@@ -153,6 +174,100 @@ void parseOpts(int argc, char** argv){
   }
 }
 
+double bound(double v){
+  if(v <= 0.00001){
+    return  0.00001;
+  }
+  if(v >= 0.99999){
+    return 0.99999;
+  }
+  return v;
+}
+
+
+double mean(vector<double> & data){
+
+  double sum = 0;
+  double n   = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    sum += (*it);
+    n += 1;
+  }
+  return sum / n;
+}
+
+double var(vector<double> & data, double mu){
+  double variance = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    variance += pow((*it) - mu,2);
+  }
+
+  return variance / (data.size() - 1);
+}
+
+bool grabInsertLengths(string file){
+
+  BamReader bamR;
+  BamAlignment al;
+
+  vector<double> alIns;
+
+  bamR.Open(file);
+
+  int i = 1;
+  //  cerr << "c(" ;
+
+  while(i < 100000 && bamR.GetNextAlignment(al)){
+    if(al.IsFirstMate() && al.IsMapped() && al.IsMateMapped() && abs(double(al.InsertSize)) < 10000){
+      i += 1;
+      alIns.push_back(abs(double(al.InsertSize)));
+      //      cerr << abs(double(al.InsertSize)) << ",";
+    }
+  }
+  //  cerr << "0)" << endl;
+
+  bamR.Close();
+
+//  if(alIns.size() < 1000){
+//    return false;
+//  }
+
+  double mu  = mean(alIns        );
+  double variance = var(alIns, mu);
+  double sd  = sqrt(variance     );
+
+  insertDists.mus[file] = mu; 
+  insertDists.sd[file] = sd; 
+
+
+  cerr << "INFO: mean insert length, number of reads, file : " 
+       << mu << ", " 
+       << sd << ", "
+       << i  << ", " 
+       << file << endl; 
+
+  return true;
+  
+}
+
+bool getInsertDists(void){
+
+  bool flag = true;
+
+  for(int i = 0; i < globalOpts.targetBams.size(); i++){
+    flag = grabInsertLengths(globalOpts.targetBams[i]);
+  }
+  
+  for(int j = 0; j < globalOpts.backgroundBams.size(); j++){
+    flag = grabInsertLengths(globalOpts.backgroundBams[j]);
+  }
+
+  return true;
+  
+}
+
 void prepBams(BamMultiReader & bamMreader, string group){
 
   int errorFlag    = 3;
@@ -183,38 +298,6 @@ void prepBams(BamMultiReader & bamMreader, string group){
   }
 }
 
-double bound(double v){
-  if(v <= 0.00001){
-    return  0.00001;
-  }
-  if(v >= 0.99999){
-    return 0.99999;
-  }
-  return v;
-}
-
-
-double mean(vector<double> & data){
-  
-  double sum = 0;
-  double n   = 0;
-  
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-    n += 1;
-  }
-  return sum / n;
-}
-
-double var(vector<double> & data, double mu){
-  double variance = 0;
-
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    variance += pow((*it) - mu,2);
-  }
-
-  return variance / (data.size() - 1);
-}
 
 
 double logLbinomial(double x, double n, double p){
@@ -275,7 +358,7 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
   
   double nreads = idat.data.size();
 
-  if(nreads < 2){
+  if(nreads < 4){
     gls.push_back(-500.0);
     gls.push_back(-500.0);
     gls.push_back(-500.0);
@@ -289,30 +372,41 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
 
   stringstream m;
 
+  bool odd = false;
+  if(idat.mateMissing > 0 ){
+    odd = true;
+  }
+
   for(vector<BamAlignment>::iterator it = idat.data.begin(); it != idat.data.end(); it++ ){
     
     double mappingP = unphred((*it).MapQuality);
     
     m << "\t" << mappingP ;
+    
+    double insDiff = abs(abs(double((*it).InsertSize) ) - insertDists.mus[(*it).Filename]);
+    
+    //    cerr << abs(double((*it).InsertSize) ) << "\t" << insertDists.mus[(*it).Filename] << "\t" << insDiff << endl;
+    
+    double sd = insertDists.sd[(*it).Filename];
 
-    if((*it).IsMateMapped()){
-      nref += 1;
-      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
-      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
-      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
-    }
-    else{
+    if( (! (*it).IsMateMapped() ) || ((insDiff > sd) && odd) ){ 
+      //    if( (! (*it).IsMateMapped()) ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
       bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
     }
+    else{
+      nref += 1;
+      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
+      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
+      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+    } 
   }
   
   aal = aal - log(pow(2,nreads));
   abl = abl - log(pow(2,nreads));
   bbl = bbl - log(pow(2,nreads));
-
 
   if(nref == 0){
     aal = -255.0;
@@ -323,7 +417,7 @@ bool processGenotype(indvDat & idat, vector<double> & gls, string * geno){
     bbl = -255.0;
   }
 
-  double norm = log( exp(aal) + exp(abl) + exp(bbl) );
+//  double norm = log( exp(aal) + exp(abl) + exp(bbl) );
   
 //  aal = aal - norm;
 //  abl = abl - norm;
@@ -382,9 +476,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
     string fname = (*tit).Filename;
-    if((*tit).IsMapped() && (*tit).MapQuality != 0){
+    if((*tit).IsMapped() && (pos > ((*tit).Position)) && (*tit).MapQuality > 0){
+
       ti[fname].nReads++; 
-      //      ti[fname].notMapped   += (!(*tit).IsMapped());
       totalMateMissing +=  (!(*tit).IsMateMapped());
       ti[fname].mateMissing += (!(*tit).IsMateMapped());
       ti[fname].data.push_back(*tit);
@@ -393,31 +487,28 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
     string fname = (*bit).Filename;
+    
+
     if((*bit).IsMapped() && (*bit).MapQuality != 0){
       bi[fname].nReads++;
-      //      bi[fname].notMapped   += (*bit).IsMapped();
       bi[fname].mateMissing += (!(*bit).IsMateMapped());
       totalMateMissing +=  (!(*bit).IsMateMapped());
       bi[fname].data.push_back(*bit);
     }
   }
 
-  if(totalMateMissing < 2){
-    return true;
-  }
-
   vector< vector < double > > targetGls, backgroundGls, totalGls;
   vector<string> genotypes;
   vector<int> depth;
   vector<int> nMissingMate;
-  string genotype;
-
+ 
   int tdepth, bdepth = 0;
 
   int nAlt = 0;
 
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
-    vector< double > Targ;
+    string genotype; 
+   vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]].mateMissing);
     tdepth += ti[globalOpts.targetBams[t]].nReads;
     depth.push_back(ti[globalOpts.targetBams[t]].nReads);
@@ -431,6 +522,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     }
   }
   for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
+    string genotype; 
     vector< double > Back;
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]].mateMissing);
     bdepth += bi[globalOpts.backgroundBams[b]].nReads;
@@ -477,8 +569,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   cout << "."     << "\t" ; // FILTER
   cout << "LRT="  << lrt << "\t"; // INFO
   cout << "GT:GL" << "\t" ;
-  
-    
+      
   int index = 0;
 
   for(vector<string>::iterator it = genotypes.begin(); it != genotypes.end(); it++){
@@ -496,7 +587,19 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     index += 1;
   }
   cout << endl;
-
+  
+  if(lrt > 3){
+    printIndv(ti[globalOpts.targetBams[0]],0 );
+    printIndv(ti[globalOpts.targetBams[1]],1 );
+    printIndv(ti[globalOpts.targetBams[2]],2 );
+    printIndv(ti[globalOpts.targetBams[3]],3 );
+    printIndv(ti[globalOpts.targetBams[4]],4 );
+    printIndv(ti[globalOpts.targetBams[5]],5 );
+    printIndv(ti[globalOpts.targetBams[6]],6 );
+    printIndv(ti[globalOpts.targetBams[7]],7 );
+    printIndv(ti[globalOpts.targetBams[8]],8 );
+    printIndv(ti[globalOpts.targetBams[9]],9 );
+  }
   
   return true;
 }
@@ -591,6 +694,11 @@ int main(int argc, char** argv) {
   
   prepBams(targetReader, "target");
   prepBams(backgroundReader, "background");
+
+  if(!getInsertDists()){
+    cerr << "FATAL: " << "problem while generating insert lengths dists" << endl;
+    exit(1);
+  }
   
   RefVector sequences = targetReader.GetReferenceData();
 
@@ -600,7 +708,6 @@ int main(int argc, char** argv) {
   printHeader();
 
   int seqidIndex = 0;
-
 
   //#pragma omp parallel
   {
