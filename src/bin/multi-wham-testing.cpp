@@ -389,8 +389,10 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     
     m << "\t" << mappingP ;
     
+    double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
-    if( ! (*it).IsMateMapped()  ){ 
+    
+    if( ! (*it).IsMateMapped()  || (odd && iDiff > 1.5 * insertDists.sds[(*it).Filename] )){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
