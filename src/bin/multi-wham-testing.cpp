@@ -249,7 +249,7 @@ bool grabInsertLengths(string file){
   cerr << "INFO: mean insert length, number of reads, file : " 
        << insertDists.mus[file] << ", " 
        << insertDists.sds[file] << ", "
-    //       << i  << ", " 
+       << i  << ", " 
        << file << endl; 
 
   return true;
@@ -262,14 +262,10 @@ bool getInsertDists(void){
 
   bool flag = true;
 
-  for(int i = 0; i < globalOpts.targetBams.size(); i++){
-    flag = grabInsertLengths(globalOpts.targetBams[i]);
+  for(int i = 0; i < globalOpts.all.size(); i++){
+    flag = grabInsertLengths(globalOpts.all[i]);
   }
   
-  for(int j = 0; j < globalOpts.backgroundBams.size(); j++){
-    flag = grabInsertLengths(globalOpts.backgroundBams[j]);
-  }
-
   return true;
   
 }
@@ -378,6 +374,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
 
   stringstream m;
 
+
   bool odd = false;
   if(idat->mateMissing > 0 || idat->nAboveAvg > 2 ){
     odd = true;
@@ -386,13 +383,19 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
   for(vector<BamAlignment>::iterator it = idat->data.begin(); it != idat->data.end(); it++ ){
     
     double mappingP = unphred((*it).MapQuality);
+
+    bool sameStrand = false;
+    
+    if((*it).IsMateMapped() && ( (*it).IsReverseStrand() && (*it).IsMateReverseStrand() ) || ( !(*it).IsReverseStrand() && !(*it).IsMateReverseStrand() )  ){
+      sameStrand = true;
+    }
     
     m << "\t" << mappingP ;
     
     double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
     
-    if( ! (*it).IsMateMapped()  || (odd && iDiff > 1.5 * insertDists.sds[(*it).Filename] )){ 
+    if( ! (*it).IsMateMapped()  || (odd && iDiff > 1.5 * insertDists.sds[(*it).Filename] ) || sameStrand ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -613,18 +616,18 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   }
   cout << endl;
   
-  if(lrt > 3){
-    printIndv(ti[globalOpts.targetBams[0]],0 );
-    printIndv(ti[globalOpts.targetBams[1]],1 );
-    printIndv(ti[globalOpts.targetBams[2]],2 );
-    printIndv(ti[globalOpts.targetBams[3]],3 );
-    printIndv(ti[globalOpts.targetBams[4]],4 );
-    printIndv(ti[globalOpts.targetBams[5]],5 );
-    printIndv(ti[globalOpts.targetBams[6]],6 );
-    printIndv(ti[globalOpts.targetBams[7]],7 );
-    printIndv(ti[globalOpts.targetBams[8]],8 );
-    printIndv(ti[globalOpts.targetBams[9]],9 );
-  }
+//  if(lrt > 3){
+//    printIndv(ti[globalOpts.targetBams[0]],0 );
+//    printIndv(ti[globalOpts.targetBams[1]],1 );
+//    printIndv(ti[globalOpts.targetBams[2]],2 );
+//    printIndv(ti[globalOpts.targetBams[3]],3 );
+//    printIndv(ti[globalOpts.targetBams[4]],4 );
+//    printIndv(ti[globalOpts.targetBams[5]],5 );
+//    printIndv(ti[globalOpts.targetBams[6]],6 );
+//    printIndv(ti[globalOpts.targetBams[7]],7 );
+//    printIndv(ti[globalOpts.targetBams[8]],8 );
+//    printIndv(ti[globalOpts.targetBams[9]],9 );
+//  }
 
   for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
     delete ti[*all];
@@ -769,4 +772,9 @@ int main(int argc, char** argv) {
       seqidIndex += 1;
     }
   }
+
+  
+  cerr << "INFO: WHAM-BAM finished normally." << endl;
+  return 0;
+
 }
