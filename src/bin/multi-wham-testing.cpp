@@ -75,22 +75,17 @@ void printIndv(indvDat * s, int t){
 void printHeader(void){
   cout << "##fileformat=VCFv4.1" << endl;
   cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
-  //  cout << "#INFO=<PV,Number=1,type=Float,Description=\"Negative log 10 pvalue from Likelihood Ratio Test\">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">" << endl;
-  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood under a binomial model\">"   << endl;
+  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"   << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
-  for(int t = 0; t < globalOpts.targetBams.size(); t++){
-    cout << globalOpts.targetBams[t] << "\t";
-  }
-  for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
-    cout << globalOpts.backgroundBams[b] ;
-    if(b < globalOpts.backgroundBams.size() - 1){
+  for(int b = 0; b < globalOpts.all.size(); b++){
+    cout << globalOpts.all[b] ;
+    if(b < globalOpts.all.size() - 1){
       cout << "\t";
     }
   }
-  cout << endl;
-  
+  cout << endl;  
 }
 
 string join(vector<string> strings){
@@ -245,7 +240,6 @@ bool grabInsertLengths(string file){
   insertDists.mus[file] = mu; 
   insertDists.sds[file] = sd; 
 
-
   cerr << "INFO: mean insert length, number of reads, file : " 
        << insertDists.mus[file] << ", " 
        << insertDists.sds[file] << ", "
@@ -360,7 +354,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
   
   double nreads = idat->data.size();
 
-  if(nreads < 4){
+  if(nreads < 2){
     gls.push_back(-500.0);
     gls.push_back(-500.0);
     gls.push_back(-500.0);
@@ -376,7 +370,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
 
 
   bool odd = false;
-  if(idat->mateMissing > 0 || idat->nAboveAvg > 2 ){
+  if(idat->mateMissing > 2 ){
     odd = true;
   }
 
@@ -395,7 +389,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
     
-    if( ! (*it).IsMateMapped()  || (odd && iDiff > 1.5 * insertDists.sds[(*it).Filename] ) || sameStrand ){ 
+    if((odd && iDiff > 2 * insertDists.sds[(*it).Filename] ) || sameStrand || ! (*it).IsMateMapped() ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -421,12 +415,6 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     abl = -255.0;
     bbl = -255.0;
   }
-
-//  double norm = log( exp(aal) + exp(abl) + exp(bbl) );
-  
-//  aal = aal - norm;
-//  abl = abl - norm;
-//  bbl = bbl - norm;
 
   double max = aal;
   (*geno) = "0/0";
@@ -465,6 +453,10 @@ void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
 }
 
 bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
+
+  if(targDat.currentData.size() < 5 && backDat.currentData.size() < 5 ){
+    return true;
+  }
   
   map < string, indvDat*> ti, bi;
   
@@ -528,18 +520,16 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
     string genotype; 
-   vector< double > Targ;
+    vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
     tdepth += ti[globalOpts.targetBams[t]]->nReads;
     depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    //    cerr << "about to process" << endl;
     nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype);
-    // cerr << "processed" << endl;
     genotypes.push_back(genotype);
-    if(!Targ.empty()){
-      targetGls.push_back(Targ);
-      totalGls.push_back(Targ);
-    }
+    
+    targetGls.push_back(Targ);
+    totalGls.push_back(Targ);
+    
   }
   for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
     string genotype; 
@@ -547,29 +537,32 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
     bdepth += bi[globalOpts.backgroundBams[b]]->nReads;
     depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    //    cerr << "about to process" << endl;
     nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype);
-    //    cerr << "processed"<< endl;
     genotypes.push_back(genotype);
-    if(!Back.empty()){
-      backgroundGls.push_back(Back);
-      totalGls.push_back(Back);
-    }
+
+    backgroundGls.push_back(Back);
+    totalGls.push_back(Back);
+
   }
   
   if(nAlt < 2){
-    return true;
     for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
       delete ti[*all];
       delete bi[*all];
     }
+    return true;
   }
 
-  double ta, tb, ba, bb, aa, ab = 0.001;
+  double ta  = 0.0001; 
+  double tb  = 0.0001;
+  double ba  = 0.0001;
+  double bb  = 0.0001;
+  double aa  = 0.0001;
+  double ab  = 0.0001;
 
   pseudoCounts(targetGls, &ta, &tb);
   pseudoCounts(backgroundGls, &ba, &bb);
-  pseudoCounts(totalGls, &aa, & ab);
+  pseudoCounts(totalGls, &aa, &ab);
 
   double taf = bound(tb / (ta + tb));
   double baf = bound(bb / (ba + bb));
@@ -581,21 +574,24 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   double lrt = 2 * (alt - null);
   
   if(lrt <= 0){
-    return true;
     for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
       delete ti[*all];
       delete bi[*all];
     }
+    return true;
   }
 
-  cout << seqid   << "\t" ; // CHROM
-  cout << pos     << "\t" ; // POS
-  cout << "."     << "\t" ; // ID
-  cout << "NA"    << "\t" ; // REF
-  cout << "SV"    << "\t" ; // ALT
-  cout << "."     << "\t" ; // QUAL
-  cout << "."     << "\t" ; // FILTER
-  cout << "LRT="  << lrt << "\t"; // INFO
+  cout << seqid   << "\t" ;       // CHROM
+  cout << pos     << "\t" ;       // POS
+  cout << "."     << "\t" ;       // ID
+  cout << "NA"    << "\t" ;       // REF
+  cout << "SV"    << "\t" ;       // ALT
+  cout << "."     << "\t" ;       // QUAL
+  cout << "."     << "\t" ;       // FILTER
+  cout << "LRT="  << lrt  ;        // INFO
+  cout << ";AF="  << taf ;
+  cout << ","  << baf ;
+  cout << ","  << aaf << "\t";
   cout << "GT:GL" << "\t" ;
       
   int index = 0;
