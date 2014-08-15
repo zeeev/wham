@@ -346,7 +346,7 @@ double unphred(double p){
 }
 
 
-bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
+bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na){
   
   bool alt = false;
   
@@ -357,7 +357,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
   
   double nreads = idat->data.size();
 
-  if(nreads < 4){
+  if(nreads < 2){
     gls.push_back(-500.0);
     gls.push_back(-500.0);
     gls.push_back(-500.0);
@@ -373,7 +373,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
 
 
   bool odd = false;
-  if( idat->mateMissing > 2 || idat->nAboveAvg > 2 ){
+  if( idat->mateMissing > 1 || idat->nAboveAvg > 1 ){
     odd = true;
   }
 
@@ -392,7 +392,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
     
-    if((odd && iDiff > 2 * insertDists.sds[(*it).Filename] )  || ! (*it).IsMateMapped() ){ 
+    if( ( odd &&  (iDiff > 3 * insertDists.sds[(*it).Filename] ))  || ! (*it).IsMateMapped() ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -426,11 +426,18 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     (*geno) = "0/1";
     max = abl;
     alt = true;
+    *nr+=1;
+    *na+=1;
   }
   if(bbl > max){
     (*geno) = "1/1";
+    *na += 2 ;
     alt = true;
   }
+  if((*geno) == "0/0"){
+    *nr += 2;
+  }
+  
   gls.push_back(aal);
   gls.push_back(abl);
   gls.push_back(bbl);
@@ -483,7 +490,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
             
       double insdiff = double ( (*tit).InsertSize) - insertDists.mus[fname];
 
-      if(insdiff > 2 * insertDists.sds[fname]){
+      if(insdiff > 3.5 * insertDists.sds[fname]){
 	ti[fname]->nAboveAvg++;
       }
 
@@ -499,7 +506,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
     double insdiff = double ( (*bit).InsertSize) - insertDists.mus[fname];
 
-    if(insdiff > 2 * insertDists.sds[fname]){
+    if(insdiff > 3.5 * insertDists.sds[fname]){
       bi[fname]->nAboveAvg++;
     }
    
@@ -515,18 +522,21 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   vector<string> genotypes;
   vector<int> depth;
   vector<int> nMissingMate;
- 
-  int tdepth, bdepth = 0;
 
   int nAlt = 0;
+
+  double targetRef = 0;
+  double targetAlt = 0;
+  
+  double backgroundRef = 0;
+  double backgroundAlt = 0;
 
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
     string genotype; 
     vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
-    tdepth += ti[globalOpts.targetBams[t]]->nReads;
     depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype);
+    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt);
     genotypes.push_back(genotype);
     
     targetGls.push_back(Targ);
@@ -537,9 +547,8 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     string genotype; 
     vector< double > Back;
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
-    bdepth += bi[globalOpts.backgroundBams[b]]->nReads;
     depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype);
+    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt);
     genotypes.push_back(genotype);
 
     backgroundGls.push_back(Back);
@@ -547,7 +556,10 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   }
   
-  if(nAlt < 2){
+  double trueTaf = targetAlt / (targetAlt + targetRef) ;
+  double trueBaf = backgroundAlt / (backgroundAlt + backgroundRef);
+
+  if(nAlt < 2 ){
     for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
       delete ti[*all];
       delete bi[*all];
@@ -592,8 +604,10 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   cout << "."     << "\t" ;       // FILTER
   cout << "LRT="  << lrt  ;        // INFO
   cout << ";EAF="  << taf ;
-  cout << ","  << baf ;
-  cout << ","  << aaf << "\t";
+  cout << ","     << baf  ;
+  cout << ","     << aaf  ;
+  cout << ";AF="  << trueTaf << "," << trueBaf ;
+  cout << ";NALT=" << targetAlt << "," << backgroundAlt << "\t";
   cout << "GT:GL:MM:DP" << "\t" ;
       
   int index = 0;
