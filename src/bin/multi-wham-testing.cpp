@@ -75,7 +75,7 @@ void printIndv(indvDat * s, int t){
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
   cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
-  cout << "#INFO=<EAF,Number=3,type=Float,Description=\"Allele frequency aproximation based on mapping quality of: target,background,combined\">" << endl;
+  cout << "#INFO=<EAF,Number=3,type=Float,Description=\"Allele frequency approximation based on mapping quality of: target,background,combined\">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=MM,Number=1,Type=Int,Description=\"Number of Missing Mates\">"                                                            << endl;
   cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
