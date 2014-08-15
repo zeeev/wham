@@ -73,10 +73,13 @@ void printIndv(indvDat * s, int t){
 }
 
 void printHeader(void){
-  cout << "##fileformat=VCFv4.1" << endl;
-  cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
-  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">" << endl;
-  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"   << endl;
+  cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
+  cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
+  cout << "#INFO=<EAF,Number=3,type=Float,Description=\"Allele frequency aproximation based on mapping quality of: target,background,combined\">" << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
+  cout << "##FORMAT=<ID=MM,Number=1,Type=Int,Description=\"Number of Missing Mates\">"                                                            << endl;
+  cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
+  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(int b = 0; b < globalOpts.all.size(); b++){
@@ -354,7 +357,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
   
   double nreads = idat->data.size();
 
-  if(nreads < 2){
+  if(nreads < 4){
     gls.push_back(-500.0);
     gls.push_back(-500.0);
     gls.push_back(-500.0);
@@ -370,7 +373,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
 
 
   bool odd = false;
-  if(idat->mateMissing > 2 ){
+  if( idat->mateMissing > 2 || idat->nAboveAvg > 2 ){
     odd = true;
   }
 
@@ -380,7 +383,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
 
     bool sameStrand = false;
     
-    if((*it).IsMateMapped() && ( (*it).IsReverseStrand() && (*it).IsMateReverseStrand() ) || ( !(*it).IsReverseStrand() && !(*it).IsMateReverseStrand() )  ){
+    if((*it).IsMateMapped() && ( (*it).IsReverseStrand() && (*it).IsMateReverseStrand() ) || ( !(*it).IsReverseStrand() && !(*it).IsMateReverseStrand() ) || sameStrand ){
       sameStrand = true;
     }
     
@@ -389,7 +392,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno){
     double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
     
-    if((odd && iDiff > 2 * insertDists.sds[(*it).Filename] ) || sameStrand || ! (*it).IsMateMapped() ){ 
+    if((odd && iDiff > 2 * insertDists.sds[(*it).Filename] )  || ! (*it).IsMateMapped() ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -449,7 +452,6 @@ void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
     (*beta ) += 2 * exp(dat[i][2]);
 
   }
-
 }
 
 bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
@@ -546,7 +548,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   }
   
   if(nAlt < 2){
-    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
+    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
       delete ti[*all];
       delete bi[*all];
     }
@@ -574,7 +576,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   double lrt = 2 * (alt - null);
   
   if(lrt <= 0){
-    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
+    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
       delete ti[*all];
       delete bi[*all];
     }
@@ -589,10 +591,10 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   cout << "."     << "\t" ;       // QUAL
   cout << "."     << "\t" ;       // FILTER
   cout << "LRT="  << lrt  ;        // INFO
-  cout << ";AF="  << taf ;
+  cout << ";EAF="  << taf ;
   cout << ","  << baf ;
   cout << ","  << aaf << "\t";
-  cout << "GT:GL" << "\t" ;
+  cout << "GT:GL:MM:DP" << "\t" ;
       
   int index = 0;
 
@@ -625,7 +627,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 //    printIndv(ti[globalOpts.targetBams[9]],9 );
 //  }
 
-  for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.begin(); all++ ){
+  for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
     delete ti[*all];
     delete bi[*all];
   }
