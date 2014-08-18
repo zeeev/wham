@@ -346,7 +346,7 @@ double unphred(double p){
 }
 
 
-bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na){
+bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab){
   
   bool alt = false;
   
@@ -357,7 +357,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
   
   double nreads = idat->data.size();
 
-  if(nreads < 2){
+  if(nreads < 3){
     gls.push_back(-500.0);
     gls.push_back(-500.0);
     gls.push_back(-500.0);
@@ -373,7 +373,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
 
 
   bool odd = false;
-  if( idat->mateMissing > 1 || idat->nAboveAvg > 1 ){
+  if( idat->mateMissing > 1 || idat->nAboveAvg > 2 ){
     odd = true;
   }
 
@@ -438,6 +438,16 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
     *nr += 2;
   }
   
+  *ga += 2* exp(aal);
+  *aa += 2* exp(aal);
+  *ga += exp(abl);
+  *aa += exp(abl);
+  
+  *gb += 2* exp(bbl);
+  *ab += 2* exp(bbl);
+  *gb += exp(abl);
+  *ab += exp(abl);
+  
   gls.push_back(aal);
   gls.push_back(abl);
   gls.push_back(bbl);
@@ -463,10 +473,6 @@ void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
 
 bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
 
-  if(targDat.currentData.size() < 5 && backDat.currentData.size() < 5 ){
-    return true;
-  }
-  
   map < string, indvDat*> ti, bi;
   
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
@@ -482,7 +488,8 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     bi[globalOpts.backgroundBams[b]] = i;
   }
 
-  double totalMateMissing = 0;
+  int td = 0;
+  int bd = 0;
   
   for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
     string fname = (*tit).Filename;
@@ -495,9 +502,10 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
       }
 
       ti[fname]->nReads++; 
-      totalMateMissing +=  (!(*tit).IsMateMapped());
       ti[fname]->mateMissing += (!(*tit).IsMateMapped());
       ti[fname]->data.push_back(*tit);
+      
+      td += 1;
     }
   }
 
@@ -513,9 +521,21 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     if((*bit).IsMapped() && (pos > ( (*bit).Position) ) && ( (*bit).MapQuality > 0 )){
       bi[fname]->nReads++;
       bi[fname]->mateMissing += (!(*bit).IsMateMapped());
-      totalMateMissing +=  (!(*bit).IsMateMapped());
       bi[fname]->data.push_back(*bit);
+   
+      bd += 1;
+      
     }
+  }
+
+
+  if(td < 5 || bd < 5){
+    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
+      delete ti[*all];
+      delete bi[*all];
+    }
+    return true;
+  
   }
 
   vector< vector < double > > targetGls, backgroundGls, totalGls;
@@ -531,12 +551,20 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   double backgroundRef = 0;
   double backgroundAlt = 0;
 
+  double ta  = 0.0001;
+  double tb  = 0.0001;
+  double ba  = 0.0001;
+  double bb  = 0.0001;
+  double aa  = 0.0001;
+  double ab  = 0.0001;
+
+
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
     string genotype; 
     vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
     depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt);
+    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab);
     genotypes.push_back(genotype);
     
     targetGls.push_back(Targ);
@@ -548,7 +576,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     vector< double > Back;
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
     depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt);
+    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab);
     genotypes.push_back(genotype);
 
     backgroundGls.push_back(Back);
@@ -567,26 +595,36 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     return true;
   }
 
-  double ta  = 0.0001; 
-  double tb  = 0.0001;
-  double ba  = 0.0001;
-  double bb  = 0.0001;
-  double aa  = 0.0001;
-  double ab  = 0.0001;
 
-  pseudoCounts(targetGls, &ta, &tb);
-  pseudoCounts(backgroundGls, &ba, &bb);
-  pseudoCounts(totalGls, &aa, &ab);
 
+//  pseudoCounts(targetGls, &ta, &tb);
+//  pseudoCounts(backgroundGls, &ba, &bb);
+//  pseudoCounts(totalGls, &aa, &ab);
+  
   double taf = bound(tb / (ta + tb));
   double baf = bound(bb / (ba + bb));
   double aaf = bound((tb + bb) / (ta + tb + ba + bb));
+
+
+  double tafG = bound(targetAlt / (targetAlt + targetRef));
+  double bafG = bound(backgroundAlt / (backgroundAlt + backgroundRef));
+  double aafG = bound((targetAlt + backgroundAlt) / (targetAlt + targetRef + backgroundAlt + backgroundRef));
 
   double alt  = logLbinomial(tb, (tb+ta), taf) + logLbinomial(bb, (bb+ba), baf);
   double null = logLbinomial(tb, (tb+ta), aaf) + logLbinomial(bb, (bb+ba), aaf);
 
   double lrt = 2 * (alt - null);
+
+  double altG  = logLbinomial(targetAlt, (targetAlt+targetRef), tafG) + logLbinomial(backgroundAlt, (backgroundAlt+backgroundRef), bafG);
+  double nullG = logLbinomial(targetAlt, (targetAlt+targetRef), aafG) + logLbinomial(backgroundAlt, (backgroundAlt+backgroundRef), aafG);
+
+  double lrtG = 2 * (altG - nullG);
+
   
+  if(lrtG < lrt){
+    lrt = lrtG;
+  }
+
   if(lrt <= 0){
     for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
       delete ti[*all];
