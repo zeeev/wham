@@ -805,8 +805,7 @@ int main(int argc, char** argv) {
 	if((*sit).RefName == globalOpts.seqid){
 	  //	cerr << "runing region" << endl;
 	  if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
-	    cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
-	    cerr << "FATAL: Wham exiting" << endl;
+	    cerr << "WARNING: region failed to run properly: " << (*sit).RefName << endl;
 	  }
 	  //	cerr << "ran region" << endl;
 	}
@@ -814,8 +813,8 @@ int main(int argc, char** argv) {
       else{
 	//	cerr << "runing region" << endl;
 	if(! runRegion(seqidIndex, 0, (*sit).RefLength, sequences)){
-	  cerr << "FATAL: region failed to run properly: " << (*sit).RefName << endl;
-	  cerr << "FATAL: Wham exiting" << endl;
+	  cerr << "WARNING: region failed to run properly: " << (*sit).RefName << endl;
+
 	}
 	//      cerr << "ran region" << endl;
       }
