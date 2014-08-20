@@ -6,13 +6,19 @@
 #include <time.h>
 #include "split.h"
 
+#include <omp.h>
+
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
-#define MATHLIB_STANDALONE
-
 using namespace std;
 using namespace BamTools;
+
+struct regionDat{
+  int seqidIndex ;
+  int start      ;
+  int end        ;
+};
 
 struct indvDat{
   int nReads;
@@ -34,11 +40,15 @@ struct global_opts {
   vector<string> targetBams    ;
   vector<string> backgroundBams;
   vector<string> all           ;
+  int            nthreads      ;
   string         seqid         ;
   vector<int>    region        ; 
 } globalOpts;
 
-static const char *optString ="ht:b:r:";
+static const char *optString ="ht:b:r:x:";
+
+omp_lock_t lock;
+
 
 void initIndv(indvDat * s){
     s->nReads              = 0;
@@ -112,9 +122,10 @@ void printVersion(void){
 
 void printHelp(void){
   cerr << "usage: WHAM-BAM -t <STRING> -b <STRING> -r <STRING>" << endl << endl;
-  cerr << "option: t <STRING> -- comma separated list of target bam files"           << endl ;
-  cerr << "option: b <STRING> -- comma separated list of background bam files"       << endl ;
-  cerr << "option: r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
+  cerr << "required: t <STRING> -- comma separated list of target bam files"           << endl ;
+  cerr << "required: b <STRING> -- comma separated list of background bam files"       << endl ;
+  cerr << "option  : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
+  cerr << "option  : x <INT>    -- set the number of threads, otherwise max          " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -126,6 +137,12 @@ void parseOpts(int argc, char** argv){
 
   while(opt != -1){
     switch(opt){
+    case 'x':
+      {
+	globalOpts.nthreads = atoi(((string)optarg).c_str());
+	cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads << " threads" << endl;
+	break;
+      }
     case 't':
       {
 	globalOpts.targetBams     = split(optarg, ",");
@@ -289,12 +306,12 @@ void prepBams(BamMultiReader & bamMreader, string group){
 
   if(! bamMreader.Open(files)){
     errorMessage = bamMreader.GetErrorString();
-    cerr << "FATAL: issue opening bams" << endl;
+    cerr << "FATAL: issue opening bams: " << errorMessage << endl;
     exit(1);
   }
   if(! bamMreader.LocateIndexes()){
     errorMessage = bamMreader.GetErrorString();
-    cerr << "FATAL: locating bam indicies"<< endl;
+    cerr << "FATAL: locating bam indicies: " << errorMessage << endl;
     exit(1); 
   }
 }
@@ -348,7 +365,7 @@ double unphred(double p){
 }
 
 
-bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab, double * gc){
+bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab, double * gc, insertDat & localDists ){
   
   bool alt = false;
   
@@ -371,7 +388,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
   double nref = 0;
   double nalt = 0;
 
-  stringstream m;
+  //  stringstream m;
 
 
   bool odd = false;
@@ -389,9 +406,11 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
       sameStrand = true;
     }
     
-    m << "\t" << mappingP ;
+    // m << "\t" << mappingP ;
     
-    double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
+    //    cerr << localDists.mus[(*it).Filename] << endl;
+
+    double iDiff = abs ( abs ( double ( (*it).InsertSize ) - localDists.mus[(*it).Filename] ));
     
     
     if( ( odd &&  (iDiff > 3 * insertDists.sds[(*it).Filename] ))  || ! (*it).IsMateMapped() || sameStrand ){ 
@@ -474,7 +493,7 @@ void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
   }
 }
 
-bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp){
+bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp,  insertDat & localDists, string & results){
 
   map < string, indvDat*> ti, bi;
   
@@ -498,9 +517,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     string fname = (*tit).Filename;
     if((*tit).IsMapped() && (pos > ( (*tit).Position) ) && ( (*tit).MapQuality > 0 )){
             
-      double insdiff = double ( (*tit).InsertSize) - insertDists.mus[fname];
+      double insdiff = double ( (*tit).InsertSize) - localDists.mus[fname];
 
-      if(insdiff > 3.5 * insertDists.sds[fname]){
+      if(insdiff > 3.5 * localDists.sds[fname]){
 	ti[fname]->nAboveAvg++;
       }
 
@@ -515,9 +534,9 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
     string fname = (*bit).Filename;
 
-    double insdiff = double ( (*bit).InsertSize) - insertDists.mus[fname];
+    double insdiff = double ( (*bit).InsertSize) - localDists.mus[fname];
 
-    if(insdiff > 3.5 * insertDists.sds[fname]){
+    if(insdiff > 3.5 * localDists.sds[fname]){
       bi[fname]->nAboveAvg++;
     }
    
@@ -568,7 +587,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
     depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab, &tgc);
+    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab, &tgc, localDists);
     genotypes.push_back(genotype);
     
     targetGls.push_back(Targ);
@@ -580,7 +599,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     vector< double > Back;
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
     depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab, &bgc);
+    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab, &bgc, localDists);
     genotypes.push_back(genotype);
 
     backgroundGls.push_back(Back);
@@ -599,8 +618,6 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     return true;
   }
 
-
-
 //  pseudoCounts(targetGls, &ta, &tb);
 //  pseudoCounts(backgroundGls, &ba, &bb);
 //  pseudoCounts(totalGls, &aa, &ab);
@@ -608,7 +625,6 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   double taf = bound(tb / (ta + tb));
   double baf = bound(bb / (ba + bb));
   double aaf = bound((tb + bb) / (ta + tb + ba + bb));
-
 
   double tafG = bound(targetAlt / (targetAlt + targetRef));
   double bafG = bound(backgroundAlt / (backgroundAlt + backgroundRef));
@@ -624,12 +640,11 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   double lrtG = 2 * (altG - nullG);
 
-  
   if(lrtG < lrt){
     lrt = lrtG;
   }
 
-  if(lrt <= 0){
+  if(lrt <= 0 || tgc / double(globalOpts.targetBams.size()) < 0.25 || bgc / double(globalOpts.backgroundBams.size()) < 0.25 ){
     for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
       delete ti[*all];
       delete bi[*all];
@@ -637,52 +652,39 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     return true;
   }
 
-  cout << seqid   << "\t" ;       // CHROM
-  cout << pos     << "\t" ;       // POS
-  cout << "."     << "\t" ;       // ID
-  cout << "NA"    << "\t" ;       // REF
-  cout << "SV"    << "\t" ;       // ALT
-  cout << "."     << "\t" ;       // QUAL
-  cout << "."     << "\t" ;       // FILTER
-  cout << "LRT="  << lrt  ;        // INFO
-  cout << ";EAF="  << taf ;
-  cout << ","     << baf  ;
-  cout << ","     << aaf  ;
-  cout << ";AF="  << trueTaf << "," << trueBaf ;
-  cout << ";NALT=" << targetAlt << "," << backgroundAlt;
-  cout << ";GC="   << tgc       << "," << tgc << "\t";
-  cout << "GT:GL:MM:DP" << "\t" ;
+  stringstream tmpOutput;
+
+  tmpOutput  << seqid   << "\t" ;       // CHROM
+  tmpOutput  << pos +1  << "\t" ;       // POS
+  tmpOutput  << "."     << "\t" ;       // ID
+  tmpOutput  << "NA"    << "\t" ;       // REF
+  tmpOutput  << "SV"    << "\t" ;       // ALT
+  tmpOutput  << "."     << "\t" ;       // QUAL
+  tmpOutput  << "."     << "\t" ;       // FILTER
+  tmpOutput  << "LRT="  << lrt  ;        // INFO
+  tmpOutput  << ";EAF="  << taf ;
+  tmpOutput  << ","     << baf  ;
+  tmpOutput  << ","     << aaf  ;
+  tmpOutput  << ";AF="  << trueTaf << "," << trueBaf ;
+  tmpOutput  << ";NALT=" << targetAlt << "," << backgroundAlt;
+  tmpOutput  << ";GC="   << tgc       << "," << bgc << "\t";
+  tmpOutput  << "GT:GL:MM:DP" << "\t" ;
       
   int index = 0;
 
   for(vector<string>::iterator it = genotypes.begin(); it != genotypes.end(); it++){
     
-    stringstream ss ; 
-    
-    cout << (*it);
-
-    ss  << ":"  <<  nMissingMate[index] << ":" << depth[index] << ":" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
-    cout << ss.str();
-
+    tmpOutput << (*it);
+    tmpOutput  << ":"  <<  nMissingMate[index] << ":" << depth[index] << ":" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
     if(it + 1 != genotypes.end()){
-      cout << "\t";
+      tmpOutput << "\t";
     }
     index += 1;
   }
-  cout << endl;
+  tmpOutput << endl;
+
+  results.append(tmpOutput.str());
   
-//  if(lrt > 3){
-//    printIndv(ti[globalOpts.targetBams[0]],0 );
-//    printIndv(ti[globalOpts.targetBams[1]],1 );
-//    printIndv(ti[globalOpts.targetBams[2]],2 );
-//    printIndv(ti[globalOpts.targetBams[3]],3 );
-//    printIndv(ti[globalOpts.targetBams[4]],4 );
-//    printIndv(ti[globalOpts.targetBams[5]],5 );
-//    printIndv(ti[globalOpts.targetBams[6]],6 );
-//    printIndv(ti[globalOpts.targetBams[7]],7 );
-//    printIndv(ti[globalOpts.targetBams[8]],8 );
-//    printIndv(ti[globalOpts.targetBams[9]],9 );
-//  }
 
   for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
     delete ti[*all];
@@ -692,11 +694,16 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   return true;
 }
 
-  
-
-
-
+ 
 bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
+  
+  string regionResults;
+
+  omp_set_lock(&lock);
+  
+  insertDat localDists = insertDists;
+
+  omp_unset_lock(&lock);
 
   BamMultiReader targetReader, backgroundReader;
   
@@ -756,7 +763,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
     double s = 0;
 
-    if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, backgroundPileUp, &s, currentPos )){
+    if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, backgroundPileUp, &s, currentPos, localDists, regionResults )){
       cerr << "FATAL: problem during scoring" << endl;
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
@@ -764,7 +771,24 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
     currentPos += 50;
 
+    if(regionResults.size() > 100000){
+      omp_set_lock(&lock);
+      cout << regionResults;
+      omp_unset_lock(&lock);
+      regionResults.clear();
+      
+    }
+
   }
+
+  omp_set_lock(&lock);
+
+  cout << regionResults;
+
+  omp_unset_lock(&lock);
+  
+  regionResults.clear();
+  
 
   targetReader.Close();
   backgroundReader.Close();
@@ -774,9 +798,22 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
 int main(int argc, char** argv) {
 
+  omp_init_lock(&lock);
+
   srand((unsigned)time(NULL));
 
+  globalOpts.nthreads = -1;
+
   parseOpts(argc, argv);
+  
+  if(globalOpts.nthreads == -1){
+  
+  }
+  else{
+    omp_set_num_threads(globalOpts.nthreads);
+  }
+  
+
 
   globalOpts.all.reserve(globalOpts.targetBams.size()  + globalOpts.backgroundBams.size());
   globalOpts.all.insert( globalOpts.all.end(), globalOpts.targetBams.begin(), globalOpts.targetBams.end() );
@@ -801,33 +838,53 @@ int main(int argc, char** argv) {
 
   int seqidIndex = 0;
 
-  //#pragma omp parallel
-  {
-    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
-      //    cerr << (*sit).RefName << endl;
-      
-      if(globalOpts.region.size() == 2){
-	if((*sit).RefName == globalOpts.seqid){
-	  //	cerr << "runing region" << endl;
-	  if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
-	    cerr << "WARNING: region failed to run properly: " << (*sit).RefName << endl;
-	  }
-	  //	cerr << "ran region" << endl;
-	}
-      }
-      else{
-	//	cerr << "runing region" << endl;
-	if(! runRegion(seqidIndex, 0, (*sit).RefLength, sequences)){
-	  cerr << "WARNING: region failed to run properly: " << (*sit).RefName << endl;
-
-	}
-	//      cerr << "ran region" << endl;
+  if(globalOpts.region.size() == 2){
+    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){      
+      if((*sit).RefName == globalOpts.seqid){
+	break;
       }
       seqidIndex += 1;
     }
   }
 
+  if(seqidIndex != 0){
+    if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
+      cerr << "WARNING: region failed to run properly." << endl;
+    }
+    cerr << "INFO: WHAM-BAM finished normally." << endl;
+    return 0;
+  }
   
+  vector< regionDat* > regions; 
+
+  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+    int start = 0;
+    for(;start < ((*sit).RefLength + 10000000) ; start += 10000000){
+      regionDat * chunk = new regionDat;
+      chunk->seqidIndex = seqidIndex;
+      chunk->start      = start;
+      chunk->end        = start + 10000000 ;
+      regions.push_back(chunk);
+    }
+    regionDat * lastChunk = new regionDat;
+    lastChunk->seqidIndex = seqidIndex;
+    lastChunk->start = start;
+    lastChunk->end   = (*sit).RefLength;
+    seqidIndex += 1;
+    regions.push_back(lastChunk);
+  }
+
+#pragma omp parallel
+  {
+    for(vector<regionDat *>::iterator chunk = regions.begin(); chunk != regions.end(); chunk++){
+      if(! runRegion( (*chunk)->seqidIndex, (*chunk)->start, (*chunk)->end, sequences)){
+	cerr << "WARNING: region failed to run properly." << endl;
+      }
+    }
+    //    (*chunk) = NULL;
+    //    delete (*chunk);
+  }
+
   cerr << "INFO: WHAM-BAM finished normally." << endl;
   return 0;
 
