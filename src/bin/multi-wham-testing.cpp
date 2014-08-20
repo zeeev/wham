@@ -348,7 +348,7 @@ double unphred(double p){
 }
 
 
-bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab){
+bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab, double * gc){
   
   bool alt = false;
   
@@ -360,9 +360,9 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
   double nreads = idat->data.size();
 
   if(nreads < 3){
-    gls.push_back(-500.0);
-    gls.push_back(-500.0);
-    gls.push_back(-500.0);
+    gls.push_back(-255.0);
+    gls.push_back(-255.0);
+    gls.push_back(-255.0);
 
     return false;
     
@@ -375,7 +375,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
 
 
   bool odd = false;
-  if( idat->mateMissing > 1 || idat->nAboveAvg > 2 ){
+  if( idat->mateMissing > 2 || idat->nAboveAvg > 2 ){
     odd = true;
   }
 
@@ -394,7 +394,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
     double iDiff = abs ( abs ( double ( (*it).InsertSize ) - insertDists.mus[(*it).Filename] ));
     
     
-    if( ( odd &&  (iDiff > 3 * insertDists.sds[(*it).Filename] ))  || ! (*it).IsMateMapped() ){ 
+    if( ( odd &&  (iDiff > 3 * insertDists.sds[(*it).Filename] ))  || ! (*it).IsMateMapped() || sameStrand ){ 
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -453,7 +453,8 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
   gls.push_back(aal);
   gls.push_back(abl);
   gls.push_back(bbl);
-  
+
+  *gc += 1;
 
   //  cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t" << nalt << m.str() << endl;
 
@@ -559,14 +560,15 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   double bb  = 0.0001;
   double aa  = 0.0001;
   double ab  = 0.0001;
-
-
+  double tgc = 0;
+  double bgc = 0;
+  
   for(int t = 0; t < globalOpts.targetBams.size(); t++){
     string genotype; 
     vector< double > Targ;
     nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
     depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab);
+    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab, &tgc);
     genotypes.push_back(genotype);
     
     targetGls.push_back(Targ);
@@ -578,7 +580,7 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
     vector< double > Back;
     nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
     depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab);
+    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab, &bgc);
     genotypes.push_back(genotype);
 
     backgroundGls.push_back(Back);
@@ -647,7 +649,8 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   cout << ","     << baf  ;
   cout << ","     << aaf  ;
   cout << ";AF="  << trueTaf << "," << trueBaf ;
-  cout << ";NALT=" << targetAlt << "," << backgroundAlt << "\t";
+  cout << ";NALT=" << targetAlt << "," << backgroundAlt;
+  cout << ";GC="   << tgc       << "," << tgc << "\t";
   cout << "GT:GL:MM:DP" << "\t" ;
       
   int index = 0;
