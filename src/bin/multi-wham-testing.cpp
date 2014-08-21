@@ -859,7 +859,7 @@ int main(int argc, char** argv) {
 
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
-    for(;start < ((*sit).RefLength + 10000000) ; start += 10000000){
+    for(;start < ((*sit).RefLength) ; start += 10000000){
       regionDat * chunk = new regionDat;
       chunk->seqidIndex = seqidIndex;
       chunk->start      = start;
@@ -871,19 +871,32 @@ int main(int argc, char** argv) {
     lastChunk->start = start;
     lastChunk->end   = (*sit).RefLength;
     seqidIndex += 1;
-    regions.push_back(lastChunk);
+    if(start < (*sit).RefLength){
+      regions.push_back(lastChunk);
+    }
   }
 
-#pragma omp parallel
-  {
-    for(vector<regionDat *>::iterator chunk = regions.begin(); chunk != regions.end(); chunk++){
-      if(! runRegion( (*chunk)->seqidIndex, (*chunk)->start, (*chunk)->end, sequences)){
-	cerr << "WARNING: region failed to run properly." << endl;
-      }
+ #pragma omp parallel for
+  
+  for(int re = 0; re < regions.size(); re++){
+
+    //    cerr << regions[re]->seqidIndex << "\t" << regions[re]->start << "\t" << regions[re]->end << endl;
+
+    if(! runRegion( regions[re]->seqidIndex, regions[re]->start, regions[re]->end, sequences)){
+      omp_set_lock(&lock);
+      cerr << "WARNING: region failed to run properly: " 
+	   << sequences[regions[re]->seqidIndex].RefName 
+	   << ":"  << regions[re]->start << "-" 
+	   << regions[re]->end 
+	   <<  endl;
+      omp_unset_lock(&lock);
     }
+
+  }
+
     //    (*chunk) = NULL;
     //    delete (*chunk);
-  }
+
 
   cerr << "INFO: WHAM-BAM finished normally." << endl;
   return 0;
