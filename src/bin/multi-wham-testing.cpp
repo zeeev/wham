@@ -304,16 +304,27 @@ void prepBams(BamMultiReader & bamMreader, string group){
     exit(1);
   }
 
-  if(! bamMreader.Open(files)){
-    errorMessage = bamMreader.GetErrorString();
-    cerr << "FATAL: issue opening bams: " << errorMessage << endl;
+  bool attempt = true;
+  int  tried   = 0   ;
+  
+  while(attempt && tried < 500){
+    
+    sleep(int(rand() % 500)+1);
+
+    if( bamMreader.Open(files) && bamMreader.LocateIndexes() ){
+      attempt = false;
+    }
+    else{
+      tried += 1;
+    }
+  }
+  if(attempt == true){
+    cerr << "FATAL: unable to open BAMs or indices after: " << tried << " attempts"  << endl;  
+    cerr << "Bamtools error message:\n" <<  bamMreader.GetErrorString()  << endl;
+    cerr << "INFO : try using less CPUs in the -x option" << endl;
     exit(1);
   }
-  if(! bamMreader.LocateIndexes()){
-    errorMessage = bamMreader.GetErrorString();
-    cerr << "FATAL: locating bam indicies: " << errorMessage << endl;
-    exit(1); 
-  }
+
 }
 
 
@@ -859,6 +870,10 @@ int main(int argc, char** argv) {
 
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
+    if((*sit).RefLength < 1000){
+      continue;
+    }
+
     for(;start < ((*sit).RefLength) ; start += 10000000){
       regionDat * chunk = new regionDat;
       chunk->seqidIndex = seqidIndex;
