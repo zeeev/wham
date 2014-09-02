@@ -6,9 +6,9 @@
 #include <time.h>
 #include <algorithm>
 #include "split.h"
+#include "JenksBreaks.h"
 
 #include <omp.h>
-
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
@@ -22,13 +22,25 @@ struct regionDat{
 };
 
 struct indvDat{
-  int nReads;
-  int nAboveAvg;
-  int notMapped;
-  int mateMissing;
-  int mateCrossChromosome;
-  double insertSum;
-  vector<BamAlignment> data;
+  bool   support;
+  int    nReads;
+  int    mappedPairs;
+  int    nAboveAvg;
+  int    notMapped;
+  int    mateMissing;
+  int    sameStrand;
+  int    mateCrossChromosome;
+  int    maxLength ;
+  double insertSum ;
+  double insertMean;
+  double lengthSum;
+  double clipped; 
+  vector< BamAlignment > alignments;
+  vector<double> inserts;
+  vector<double> hInserts;
+  map<string, int> badFlag;
+  vector<int> MapQ;
+  map<int, vector<string> > cluster;
 };
 
 struct insertDat{
@@ -39,9 +51,7 @@ struct insertDat{
 } insertDists;
 
 struct global_opts {
-  vector<string> targetBams    ;
-  vector<string> backgroundBams;
-  vector<string> all           ;
+  string         targetBam     ;
   int            nthreads      ;
   string         seqid         ;
   vector<int>    region        ; 
@@ -51,14 +61,24 @@ static const char *optString ="ht:b:r:x:";
 
 omp_lock_t lock;
 
-
 void initIndv(indvDat * s){
-    s->nReads              = 0;
-    s->nAboveAvg           = 0;
-    s->notMapped           = 0;
-    s->mateMissing         = 0;
-    s->mateCrossChromosome = 0;
-    s->data.clear();
+  s->support             = false;
+  s->nReads              = 0;
+  s->nAboveAvg           = 0;
+  s->notMapped           = 0;
+  s->mappedPairs         = 0;
+  s->mateMissing         = 0;
+  s->insertSum           = 0;
+  s->sameStrand          = 0; 
+  s->maxLength           = 0;
+  s->mateCrossChromosome = 0;
+  s->lengthSum           = 0;
+  s->clipped             = 0;
+  s->alignments.clear();
+  s->inserts.clear();
+  s->hInserts.clear();
+  s->badFlag.clear();
+  s->MapQ.clear();
 }
 
 void printIndv(indvDat * s, int t){
@@ -71,16 +91,11 @@ void printIndv(indvDat * s, int t){
 
   double sum = 0;
 
-  string readNames = "# read names: ";
-
-  for(int i = 0; i <  s->data.size(); i++){
-    sum += double (s->data[i].MapQuality);
-    readNames.append(s->data[i].Name);
-    readNames.append(" ");
+  for(int i = 0; i <  s->MapQ.size(); i++){
+    sum += double (s->MapQ[i]);
   }
 
   cout << "# average mapping q : " << sum/double(s->nReads) << endl;
-  cout << readNames << endl;
   cout << endl;
 }
 
@@ -96,25 +111,8 @@ void printHeader(void){
   cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
-  for(int b = 0; b < globalOpts.all.size(); b++){
-    cout << globalOpts.all[b] ;
-    if(b < globalOpts.all.size() - 1){
-      cout << "\t";
-    }
-  }
-  cout << endl;  
-}
-
-string join(vector<string> strings){
-
-  string joined = "";
-
-  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
-    joined = joined + " " + (*sit) + "\n";
-  }
-
-  return joined;
-
+    cout << globalOpts.targetBam ;
+    cout << endl;  
 }
 
 void printVersion(void){
@@ -147,14 +145,8 @@ void parseOpts(int argc, char** argv){
       }
     case 't':
       {
-	globalOpts.targetBams     = split(optarg, ",");
-	cerr << "INFO: target bams:\n" << join(globalOpts.targetBams) ;
-	break;
-      }
-    case 'b':
-      {
-	globalOpts.backgroundBams = split(optarg, ",");
-	cerr << "INFO: background bams:\n" << join(globalOpts.backgroundBams) ;
+	globalOpts.targetBam     = optarg;
+	cerr << "INFO: target bam:\n" << globalOpts.targetBam ;
 	break;
       }
     case 'h':
@@ -194,12 +186,6 @@ void parseOpts(int argc, char** argv){
     }
     }
     opt = getopt( argc, argv, optString );
-  }
-  if( globalOpts.targetBams.empty() || globalOpts.backgroundBams.empty() ){
-    cerr << "FATAL: Failure to specify target or background bam files." << endl;
-    cerr << "FATAL: Now exiting wham." << endl;
-    printHelp();
-    exit(1);
   }
 }
 
@@ -243,15 +229,24 @@ bool grabInsertLengths(string file){
 
   vector<double> alIns;
 
+  double clipped  = 0;
+  double naligned = 0;
+
   bamR.Open(file);
 
   int i = 1;
-
   while(i < 100000 && bamR.GetNextAlignment(al) && abs(double(al.InsertSize)) < 10000){
     if(al.IsFirstMate() && al.IsMapped() && al.IsMateMapped()){
       i += 1;
       alIns.push_back(abs(double(al.InsertSize)));
+    }
+    if(al.IsMapped()){
+      naligned += 1;
+      vector< CigarOp > cd = al.CigarData;
 
+      if(cd.back().Type == 'H' || cd.back().Type == 'S'){
+	clipped += double(cd.back().Length) / double (al.Length);
+      }
     }
   }
 
@@ -269,51 +264,35 @@ bool grabInsertLengths(string file){
        << insertDists.sds[file] << ", "
        << i  << ", " 
        << file << endl; 
+  cerr << "INFO: fraction of total length clipped, file : " << clipped / naligned 
+       << ", " 
+       << file << endl;
+
 
   return true;
   
 }
-
 
 
 bool getInsertDists(void){
 
-  bool flag = true;
-
-  for(int i = 0; i < globalOpts.all.size(); i++){
-    flag = grabInsertLengths(globalOpts.all[i]);
-  }
+    grabInsertLengths(globalOpts.targetBam);
   
-  return true;
-  
+    return true;
+    
 }
 
-void prepBams(BamMultiReader & bamMreader, string group){
+void prepBams(BamReader & bamReader, string group){
 
   int errorFlag    = 3;
   string errorMessage ;
-
-  vector<string> files;
-
-  if(group == "target"){
-    files = globalOpts.targetBams;
-  }
-  if(group == "background"){
-    files = globalOpts.backgroundBams;
-  }
-  if(files.empty()){
-    cerr << "FATAL: no files ?" << endl;
-    exit(1);
-  }
-
+ 
   bool attempt = true;
   int  tried   = 0   ;
   
   while(attempt && tried < 500){
     
-    //    sleep(int(rand() % 10)+1);
-
-    if( bamMreader.Open(files) && bamMreader.LocateIndexes() ){
+    if( bamReader.Open(globalOpts.targetBam) && bamReader.LocateIndex() ){
       attempt = false;
     }
     else{
@@ -322,7 +301,7 @@ void prepBams(BamMultiReader & bamMreader, string group){
   }
   if(attempt == true){
     cerr << "FATAL: unable to open BAMs or indices after: " << tried << " attempts"  << endl;  
-    cerr << "Bamtools error message:\n" <<  bamMreader.GetErrorString()  << endl;
+    cerr << "Bamtools error message:\n" <<  bamReader.GetErrorString()  << endl;
     cerr << "INFO : try using less CPUs in the -x option" << endl;
     exit(1);
   }
@@ -376,56 +355,42 @@ double unphred(double p){
 }
 
 
-bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab, double * gc, insertDat & localDists, int * ss, int * insert ){
-  
-  bool alt = false;
+int processGenotype(indvDat * idat, vector<double> & gls, string * geno, double * nr, double * na, double * ga, double * gb, double * aa, double * ab, double * gc, insertDat & localDists, int * ss, int * insert ){
+
+  int alt = 0;
   
   double aal = 0;
   double abl = 0;
   double bbl = 0;
   (*geno) = "./.";
   
-  double nreads = idat->data.size();
+  int nreads = idat->badFlag.size();
 
   if(nreads < 3){
     gls.push_back(-255.0);
     gls.push_back(-255.0);
     gls.push_back(-255.0);
 
-    return false;
+    return alt;
     
   }
 
   double nref = 0;
   double nalt = 0;
 
-  bool odd = false;
-  if( idat->mateMissing > 2 || idat->nAboveAvg > 2 ){
-    odd = true;
-  }
+  int ri = 0;
 
-  for(vector<BamAlignment>::iterator it = idat->data.begin(); it != idat->data.end(); it++ ){
+  for(map< string, int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
     
-    double mappingP = unphred((*it).MapQuality);
+    double mappingP = unphred(idat->MapQ[ri]);
 
-    bool sameStrand = false;
-    
-    if((*it).IsMateMapped() && ( (*it).IsReverseStrand() && (*it).IsMateReverseStrand() ) || ( !(*it).IsReverseStrand() && !(*it).IsMateReverseStrand() ) ){
-      sameStrand = true;
-      (*ss) += 1;
-    }
-    
-    double iDiff = abs ( abs ( double ( (*it).InsertSize ) - localDists.mus[(*it).Filename] ));
-    
-    if(iDiff > 3 * insertDists.sds[(*it).Filename] ){
-      *(insert) += 1;
-    }
-
-    if( ( odd &&  (iDiff > 3 * insertDists.sds[(*it).Filename] ))  || ! (*it).IsMateMapped() || sameStrand ){ 
+    if( idat->badFlag[rit->first] == 1 && idat->support == true){ 
       nalt += 1;
+      alt  += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
       bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
+            
     }
     else{
       nref += 1;
@@ -433,6 +398,7 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
       abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
       bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
     } 
+    ri++;
   }
   
   aal = aal - log(pow(2,nreads));
@@ -483,9 +449,9 @@ bool processGenotype(indvDat * idat, vector<double> & gls, string * geno, double
 
   *gc += 1;
 
-  //  cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t" << nalt << m.str() << endl;
+  //   cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t"  << endl;
 
-  return alt;
+  return nalt;
 
 }
 
@@ -562,82 +528,109 @@ double permute(vector< vector<double> > & dat, int tsize, int bsize, double scor
 
 }
     
-bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDat, double * s, long int cp,  insertDat & localDists, string & results, global_opts localOpts){
+bool loadIndv(map<string, indvDat*> & ti, readPileUp & pileup, global_opts localOpts, insertDat & localDists, long int pos){
 
-  map < string, indvDat*> ti, bi;
-  
-  for(int t = 0; t < localOpts.targetBams.size(); t++){
-    indvDat * i;
-    i = new indvDat;
-    initIndv(i);
-    ti[globalOpts.targetBams[t]] = i;
-  }
-  for(int b = 0; b < localOpts.backgroundBams.size(); b++){
-    indvDat * i;
-    i = new indvDat;
-    initIndv(i);
-    bi[localOpts.backgroundBams[b]] = i;
-  }
+  for(list<BamAlignment>::iterator r = pileup.currentData.begin(); r != pileup.currentData.end(); r++){
 
-  
-  int global_unmapped = 0;
+    if( (*r).IsMapped() && (pos > ( (*r).Position) ) && ( (*r).MapQuality > 0 )){
 
-  int td = 0;
-  int bd = 0;
-  
-  for(list<BamAlignment>::iterator tit = targDat.currentData.begin(); tit != targDat.currentData.end(); tit++){
-    string fname = (*tit).Filename;
-    if( (pos > ( (*tit).Position) ) && ( (*tit).MapQuality > 0 )){
-       
-      if((*tit).IsMapped() && (*tit).IsMateMapped()){
-     
-	double insdiff = abs( abs(double ( (*tit).InsertSize)) - localDists.mus[fname]);
+      string fname = (*r).Filename;
+
+      int bad = 0;      
+
+      ti[fname]->alignments.push_back(*r);
+
+      ti[fname]->nReads += 1;
+
+      vector< CigarOp > cd = (*r).CigarData;
+
+      ti[fname]->lengthSum += (*r).Length;
+      
+      if(cd.back().Type == 'H' || cd.back().Type == 'S'){
+	ti[fname]->clipped += cd.back().Length;
+	int location = (*r).GetEndPosition();
+	ti[fname]->cluster[location].push_back((*r).Name);
+      }
+      
+      if(!(*r).IsMateMapped()){
+	ti[fname]->mateMissing  += (!(*r).IsMateMapped());
+      	bad = 1;
+      }
+
+      if((*r).IsMapped() && (*r).IsMateMapped()){
 	
-	if(insdiff > 3.5 * localDists.sds[fname] ){
-	  ti[fname]->nAboveAvg++;
+	ti[fname]->insertSum    += abs(double((*r).InsertSize));	
+	ti[fname]->mappedPairs  += 1;
+
+	if(( (*r).IsReverseStrand() && (*r).IsMateReverseStrand() ) || ( !(*r).IsReverseStrand() && !(*r).IsMateReverseStrand() )){
+	  bad = 1;
+	  ti[fname]->sameStrand += 1;
+	}
+	
+	double ilength = abs ( double ( (*r).InsertSize ));
+
+	double iDiff = abs ( ilength - localDists.mus[(*r).Filename] );
+
+	ti[fname]->inserts.push_back(ilength);
+
+	if(iDiff > (3.0 * insertDists.sds[(*r).Filename]) ){
+	  bad = 1;
+	  ti[fname]->nAboveAvg += 1;
+	  ti[fname]->hInserts.push_back(ilength);
 	}
       }
       
-      ti[fname]->nReads++; 
-      ti[fname]->mateMissing += (!(*tit).IsMateMapped());
-      global_unmapped        += (!(*tit).IsMateMapped());
-      ti[fname]->data.push_back(*tit);
-      
-      td += 1;
+      ti[fname]->badFlag[(*r).Name] = bad;
+      ti[fname]->MapQ.push_back((*r).MapQuality);      
     }
   }
 
-  for(list<BamAlignment>::iterator bit = backDat.currentData.begin(); bit != backDat.currentData.end(); bit++){
-    string fname = (*bit).Filename;
 
-    if((pos > ( (*bit).Position) ) && ( (*bit).MapQuality > 0 )){      
-   
-      if((*bit).IsMapped() && (*bit).IsMateMapped()){   
-	
-	double insdiff = abs (abs(double ( (*bit).InsertSize)) - localDists.mus[fname]);
-	if(insdiff > 3.5 * localDists.sds[fname] && (*bit).IsMateMapped() ){
-	  bi[fname]->nAboveAvg++;
+  // looping over indviduals
+  for(map < string, indvDat*>::iterator indvs = ti.begin(); indvs != ti.end(); indvs++){
+    // looping over clusters
+    for( map< int, vector<string> >::iterator ci = ti[indvs->first]->cluster.begin(); ci != ti[indvs->first]->cluster.end(); ci++){
+      if(ci->second.size() > 1){
+	// setting support
+	ti[indvs->first]->support = true;
+	// looping over reads
+	for(vector<string>::iterator readName = ti[indvs->first]->cluster[ci->first].begin(); readName != ti[indvs->first]->cluster[ci->first].end(); readName++ ){
+	  ti[indvs->first]->badFlag[(*readName)] = 1;
 	}
       }
-      
-      bi[fname]->nReads++;
-      bi[fname]->mateMissing += (!(*bit).IsMateMapped());
-      global_unmapped        += (!(*bit).IsMateMapped());
-      bi[fname]->data.push_back(*bit);
-      
-      bd += 1;
-      
     }
   }
 
-  if(td < 5 || bd < 5 || global_unmapped == 0){
-    for(vector<string>::iterator all = localOpts.all.begin(); all != localOpts.all.end(); all++ ){
-      delete ti[*all];
-      delete bi[*all];
+  return true;
+}
+
+  bool score(string seqid, long int pos, readPileUp & targDat, long int cp,  insertDat & localDists, string & results, global_opts localOpts){
+
+    map < string, indvDat*> ti, bi;
+
+    indvDat * i;
+    i = new indvDat;
+    initIndv(i);
+    ti[globalOpts.targetBam] = i;
+
+    stringstream oddInsert;
+
+    loadIndv(ti, targDat, localOpts, localDists, pos);
+    if(ti[globalOpts.targetBam]->nReads < 3){
+      return true;
     }
-    return true;
-  
-  }
+
+    for( map< int, vector<string> >::iterator ci = ti[globalOpts.targetBam]->cluster.begin(); ci != ti[globalOpts.targetBam]->cluster.end(); ci++){
+      oddInsert << "cluster:";
+      oddInsert << ci->first << "->" << ci->second.size() << ",";
+    }
+
+//  CJenksBreaks TwoAlleles   (&ti[globalOpts.targetBam]->hInserts, 2);
+//  CJenksBreaks ThreeAlleles (&ti[globalOpts.targetBam]->hInserts, 3);
+//    
+//  vector <long> * TwoBreaks     = TwoAlleles.get_Results();
+//  vector <long> * ThreeBreaks   = ThreeAlleles.get_Results();
+
 
   vector< vector < double > > targetGls, backgroundGls, totalGls;
   vector<string> genotypes;
@@ -649,94 +642,31 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
 
   int nAlt = 0;
 
-  double targetRef = 0;
+  string genotype;
+  int ss     = 0;
+  int insert = 0;
+
+  double ta        = 0;
+  double tb        = 0;
+  double aa        = 0;
+  double ab        = 0;
+  double tgc       = 0;
   double targetAlt = 0;
+  double targetRef = 0;
+
+  vector<double> Targ;
+
+  nMissingMate.push_back(ti[globalOpts.targetBam]->mateMissing);
+  depth.push_back(ti[globalOpts.targetBam]->nReads);
+  nAlt += processGenotype(ti[globalOpts.targetBam], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab, &tgc, localDists, &ss, &insert);
+  genotypes.push_back(genotype);
+      
+
+  double clipper =   double(ti[globalOpts.targetBam]->clipped) / double(ti[globalOpts.targetBam]->lengthSum);
   
-  double backgroundRef = 0;
-  double backgroundAlt = 0;
-
-  double ta  = 0.0001;
-  double tb  = 0.0001;
-  double ba  = 0.0001;
-  double bb  = 0.0001;
-  double aa  = 0.0001;
-  double ab  = 0.0001;
-  double tgc = 0;
-  double bgc = 0;
+  oddInsert << clipper << ";";
   
-  for(int t = 0; t < globalOpts.targetBams.size(); t++){
-    int ss     = 0;
-    int insert = 0;
-    string genotype; 
-    vector< double > Targ;
-    nMissingMate.push_back(ti[globalOpts.targetBams[t]]->mateMissing);
-    depth.push_back(ti[globalOpts.targetBams[t]]->nReads);
-    nAlt += processGenotype(ti[globalOpts.targetBams[t]], Targ, &genotype, &targetRef, &targetAlt, &ta, &tb, &aa, &ab, &tgc, localDists, &ss, &insert);
-    genotypes.push_back(genotype);
-    
-    targetGls.push_back(Targ);
-    totalGls.push_back(Targ);
 
-    sameStrand.push_back(ss);
-    inserts.push_back(insert);
-    
-  }
-  for(int b = 0; b < globalOpts.backgroundBams.size(); b++){
-    int ss     = 0;
-    int insert = 0;
-    string genotype; 
-    vector< double > Back;
-    nMissingMate.push_back( bi[globalOpts.backgroundBams[b]]->mateMissing);
-    depth.push_back(bi[globalOpts.backgroundBams[b]]->nReads);
-    nAlt += processGenotype(bi[globalOpts.backgroundBams[b]], Back, &genotype, &backgroundRef, &backgroundAlt, &ba, &bb, &aa, &ab, &bgc, localDists, &ss, &insert);
-    genotypes.push_back(genotype);
-
-    backgroundGls.push_back(Back);
-    totalGls.push_back(Back);
-    
-    sameStrand.push_back(ss);
-    inserts.push_back(insert);
-
-  }
-  
-  double trueTaf = targetAlt / (targetAlt + targetRef) ;
-  double trueBaf = backgroundAlt / (backgroundAlt + backgroundRef);
-
-  if(nAlt < 2 ){
-    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
-      delete ti[*all];
-      delete bi[*all];
-    }
-    return true;
-  }
-  
-  double taf = bound(tb / (ta + tb));
-  double baf = bound(bb / (ba + bb));
-  double aaf = bound((tb + bb) / (ta + tb + ba + bb));
-
-  double tafG = bound(targetAlt / (targetAlt + targetRef));
-  double bafG = bound(backgroundAlt / (backgroundAlt + backgroundRef));
-  double aafG = bound((targetAlt + backgroundAlt) / (targetAlt + targetRef + backgroundAlt + backgroundRef));
-
-  double alt  = logLbinomial(tb, (tb+ta), taf) + logLbinomial(bb, (bb+ba), baf);
-  double null = logLbinomial(tb, (tb+ta), aaf) + logLbinomial(bb, (bb+ba), aaf);
-
-  double lrt = 2 * (alt - null);
-
-  double pv = -1;
-
-  if(lrt > 10){
-    pv= permute( totalGls, globalOpts.targetBams.size(), globalOpts.backgroundBams.size(), lrt );
-  }
-
-  if(lrt <= 0 || tgc / double(globalOpts.targetBams.size()) < 0.75 || bgc / double(globalOpts.backgroundBams.size()) < 0.75 ){
-    for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
-      delete ti[*all];
-      delete bi[*all];
-    }
-    return true;
-  }  
-  
   stringstream tmpOutput;
 
   tmpOutput  << seqid   << "\t" ;       // CHROM
@@ -746,36 +676,25 @@ bool score(string seqid, long int pos, readPileUp & targDat, readPileUp & backDa
   tmpOutput  << "SV"    << "\t" ;       // ALT
   tmpOutput  << "."     << "\t" ;       // QUAL
   tmpOutput  << "."     << "\t" ;       // FILTER
-  tmpOutput  << "LRT="  << lrt  ;        // INFO
-  tmpOutput  << ";PV="   << pv  ;
-  tmpOutput  << ";EAF="  << taf ;
-  tmpOutput  << ","     << baf  ;
-  tmpOutput  << ","     << aaf  ;
-  tmpOutput  << ";AF="  << trueTaf << "," << trueBaf ;
-  tmpOutput  << ";NALT=" << targetAlt << "," << backgroundAlt;
-  tmpOutput  << ";GC="   << tgc       << "," << bgc << "\t";
-  tmpOutput  << "GT:GL:MM:DP" << "\t" ;
-      
-  int index = 0;
-
-  for(vector<string>::iterator it = genotypes.begin(); it != genotypes.end(); it++){
-    
-    tmpOutput << (*it);
-    tmpOutput  << ":"  <<  nMissingMate[index] << ":" << sameStrand[index] << ":" << inserts[index] << ":"  << depth[index] << ":" << totalGls[index][0] << "," << totalGls[index][1] << "," << totalGls[index][2];
-    if(it + 1 != genotypes.end()){
-      tmpOutput << "\t";
-    }
-    index += 1;
-  }
-  tmpOutput << endl;
+  tmpOutput  << nAlt     << "\t" ;       // INFO
+  tmpOutput  << "GT:GL:MM:DP" << "\t" ; // FORMAT
+  tmpOutput  << genotype << "\t";
+  tmpOutput  << ti[globalOpts.targetBam]->notMapped   << "\t"
+	     << ti[globalOpts.targetBam]->nAboveAvg   << "\t"
+	     << ti[globalOpts.targetBam]->sameStrand  << "\t"
+	     << ti[globalOpts.targetBam]->mateMissing << "\t"
+    //         << clipper << "\t" 
+    //             << (*TwoBreaks)[1] << ":" << (*ThreeBreaks)[2] <<  ":" << ti[globalOpts.targetBam]->hInserts.size() << "\t"
+         << oddInsert.str() << "\t"
+    // 	     << ti[globalOpts.targetBam]->maxLength  << "\t"
+	     << ti[globalOpts.targetBam]->insertSum  / double (ti[globalOpts.targetBam]->mappedPairs)  << "\t"
+	     << ti[globalOpts.targetBam]->nReads     << endl;
+  
+  
 
   results.append(tmpOutput.str());
-  
-  for(vector<string>::iterator all = globalOpts.all.begin(); all != globalOpts.all.end(); all++ ){
-    delete ti[*all];
-    delete bi[*all];
-  }
-  
+      
+  delete ti[globalOpts.targetBam];
   return true;
 }
 
@@ -785,7 +704,6 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   string regionResults;
 
 
-
   omp_set_lock(&lock);
 
   global_opts localOpts = globalOpts;
@@ -793,43 +711,34 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
   omp_unset_lock(&lock);
 
-  BamMultiReader targetReader, backgroundReader;
+  BamReader targetReader;
   
   prepBams(targetReader, "target");
-  prepBams(backgroundReader, "background");
+
   
   int setRegionErrorFlag = 0;
 
   setRegionErrorFlag += targetReader.SetRegion(seqidIndex, start, seqidIndex, end);
-  setRegionErrorFlag += backgroundReader.SetRegion(seqidIndex, start, seqidIndex, end);
-  
-  if(setRegionErrorFlag != 2){
+
+  if(setRegionErrorFlag != 1){
     return false;
   }
     
-  BamAlignment alt, alb;
+  BamAlignment alt;
   
-  readPileUp targetPileUp, backgroundPileUp;
+  readPileUp targetPileUp;
 
   if(! targetReader.GetNextAlignment(alt)){
     targetReader.Close();
-    backgroundReader.Close();
-    return false;
-  }
-  if(! backgroundReader.GetNextAlignment(alb)){
-    targetReader.Close();
-    backgroundReader.Close();
     return false;
   }
 
   long int currentPos = -1;
 
   targetPileUp.processAlignment(alt,     currentPos);
-  backgroundPileUp.processAlignment(alb, currentPos);
 
 
   bool getTarget     = true;
-  bool getBackground = true;  
 
   while(1){
     
@@ -837,27 +746,20 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       getTarget = targetReader.GetNextAlignment(alt);
       targetPileUp.processAlignment(alt, currentPos);
     }
-    while(currentPos > backgroundPileUp.CurrentStart && getBackground){
-      getBackground = backgroundReader.GetNextAlignment(alb);
-      backgroundPileUp.processAlignment(alb, currentPos);
-    }
     
-    if(getTarget == false && getBackground == false){
+    if(getTarget == false ){
       break;
     }
     
     targetPileUp.purgePast();
-    backgroundPileUp.purgePast();
 
-    double s = 0;
-
-    if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, backgroundPileUp, &s, currentPos, localDists, regionResults, localOpts )){
+    if(! score(seqNames[seqidIndex].RefName, currentPos, targetPileUp, currentPos, localDists, regionResults, localOpts )){
       cerr << "FATAL: problem during scoring" << endl;
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
     }
 
-    currentPos += 50;
+    currentPos += 1;
 
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
@@ -877,9 +779,8 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   
   regionResults.clear();
   
-
   targetReader.Close();
-  backgroundReader.Close();
+  
   return true;
 }
 
@@ -895,19 +796,16 @@ int main(int argc, char** argv) {
   parseOpts(argc, argv);
   
   if(globalOpts.nthreads == -1){
+  
   }
   else{
     omp_set_num_threads(globalOpts.nthreads);
   }
  
-  globalOpts.all.reserve(globalOpts.targetBams.size()  + globalOpts.backgroundBams.size());
-  globalOpts.all.insert( globalOpts.all.end(), globalOpts.targetBams.begin(), globalOpts.targetBams.end() );
-  globalOpts.all.insert( globalOpts.all.end(), globalOpts.backgroundBams.begin(), globalOpts.backgroundBams.end() );
 
-  BamMultiReader targetReader, backgroundReader;
+  BamReader targetReader;
   
   prepBams(targetReader, "target");
-  prepBams(backgroundReader, "background");
 
   if(!getInsertDists()){
     cerr << "FATAL: " << "problem while generating insert lengths dists" << endl;
@@ -917,7 +815,6 @@ int main(int argc, char** argv) {
   RefVector sequences = targetReader.GetReferenceData();
 
   targetReader.Close();
-  backgroundReader.Close();
 
   printHeader();
 
