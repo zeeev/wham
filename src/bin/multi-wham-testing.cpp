@@ -21,16 +21,16 @@ struct regionDat{
   int end        ;
 };
 
-
 struct indvDat{
   bool   support ;
-  string genotype    ;
-  int    nReads      ;
-  int    mappedPairs ;
-  int    nAboveAvg ;
-  int    notMapped ;
-  int    mateMissing ;
-  int    sameStrand ;
+  string genotype      ;
+  int    genotypeIndex ; 
+  int    nReads        ;
+  int    mappedPairs   ;
+  int    nAboveAvg     ;
+  int    notMapped     ;
+  int    mateMissing   ;
+  int    sameStrand    ;
   int    mateCrossChromosome ;
   int    maxLength ;
   double    nBad        ;
@@ -65,15 +65,48 @@ struct global_opts {
   vector<int>    region        ; 
 } globalOpts;
 
+
+struct info_field{
+  double lrt;
+
+  double taf;
+  double baf;
+  double aaf;
+
+  double nat;
+  double nbt;
+
+  double nab;
+  double nbb;
+
+  double tgc;
+  double bgc;
+
+};
+
 static const char *optString ="ht:b:r:x:";
 
 // this lock prevents threads from printing on top of each other
 
 omp_lock_t lock;
 
+void initInfo(info_field * s){
+  s->lrt = 0;
+  s->taf = 0.000001;
+  s->baf = 0.000001;
+  s->aaf = 0.000001;
+  s->nat = 0;
+  s->nbt = 0;
+  s->nab = 0;
+  s->nbb = 0;
+  s->tgc = 0;
+  s->bgc = 0;
+}
+
 void initIndv(indvDat * s){
   s->support             = false;
   s->genotype            = "./.";
+  s->genotypeIndex       = -1;
   s->nBad                = 0;
   s->nGood               = 0;
   s->nReads              = 0;
@@ -447,7 +480,6 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
   idat->nBad  = nalt;
   idat->nGood = nref;
-  (*totalAlt) = nalt;
 
   aal = aal - log(pow(2,idat->nReads));
   abl = abl - log(pow(2,idat->nReads));
@@ -463,14 +495,19 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   }
 
   double max = aal;
-  genotype = "0/0";
+  genotype     = "0/0";
+  idat->genotypeIndex = 0;
 
   if(abl > max){
     genotype = "0/1";
+    idat->genotypeIndex = 1;
+    (*totalAlt) += 1;
     max = abl;
   }
   if(bbl > max){
     genotype = "1/1";
+    idat->genotypeIndex = 2;
+    (*totalAlt) += 2;
   }
 
   idat->genotype = genotype;
@@ -493,67 +530,6 @@ void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
     (*beta ) += 2 * exp(dat[i][2]);
 
   }
-}
-
-double permute(vector< vector<double> > & dat, int tsize, int bsize, double high){
-  
-  double nrep = 0;
-  double nsuc = 0;
-  
-  for(int i = 0; i < 1000000; i++){
-    nrep += 1;
-    
-    if(nsuc > 1){
-      break;
-    }
-
-    double tr = 0.000001;
-    double ta = 0.000001;
-    double br = 0.000001;
-    double ba = 0.000001;
-    double ar = 0.000001;
-    double aa = 0.000001;
-
-    random_shuffle(dat.begin(), dat.end());
-
-    //    cerr << "TEST" << endl;
-
-    int index = 0;
-    
-    for(; index < tsize; index++){
-      tr += 2 * exp(dat[index][0]);
-      tr +=     exp(dat[index][1]);
-      ta +=     exp(dat[index][1]);
-      ta += 2 * exp(dat[index][2]);
-    }
-    for(; index < dat.size(); index++){
-      br += 2 * exp(dat[index][0]);
-      br +=     exp(dat[index][1]);
-      ba +=     exp(dat[index][1]);
-      ba += 2 * exp(dat[index][2]);
-    }
-    
-    ar += tr + br;
-    aa += ta + ba;
-
-    double taf = bound(ta / (ta+tr));
-    double baf = bound(ba / (ba+br));
-    
-    double aaf = bound((ta+ba)/ (ta+ba+tr+br));
-    
-    double alt  = logLbinomial(ta, (tr+ta), taf) + logLbinomial(ba, (br+ba), baf);
-    double null = logLbinomial(ta, (tr+ta), aaf) + logLbinomial(ba, (br+ba), aaf);
-
-    double lrt = 2 * (alt - null);
-    
-    if(lrt > high){
-      nsuc += 1;
-    }
-
-  }
-
-  return nsuc / nrep;
-
 }
 
 bool loadIndv(map<string, indvDat*> & ti, readPileUp & pileup, global_opts localOpts, insertDat & localDists, long int pos){    
@@ -650,15 +626,58 @@ bool cleanUp( map < string, indvDat*> & ti, global_opts localOpts){
   }
 }
 
+bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & opts){
+  
+  for(int b = 0; b < opts.backgroundBams.size(); b++){
+
+    if( dat[opts.backgroundBams[b]]->genotypeIndex == -1){
+      continue;
+    }
+    info->nat += 2 - dat[opts.backgroundBams[b]]->genotypeIndex;
+    info->nbt +=     dat[opts.backgroundBams[b]]->genotypeIndex;
+    info->tgc += 1;
+  }
+
+  for(int t = 0; t < opts.targetBams.size(); t++){
+    if(dat[opts.targetBams[t]]->genotypeIndex == -1){
+      continue;
+    }
+    info->nab += 2 - dat[opts.targetBams[t]]->genotypeIndex;
+    info->nbb +=     dat[opts.targetBams[t]]->genotypeIndex;
+    info->bgc += 1;
+  }
+
+  info->taf += info->nbt / (info->nat + info->nbt);
+  info->baf += info->nbb / (info->nab + info->nbb);
+  info->aaf += (info->nbt + info->nbb) / (info->nat + info->nbt + info->nab + info->nbb);
+
+  double alt  = logLbinomial(info->nbt, (info->tgc * 2), info->taf) + logLbinomial(info->nbb, (2* info->bgc), info->baf);
+  double null = logLbinomial(info->nbt, (info->tgc * 2), info->aaf) + logLbinomial(info->nbb, (2* info->bgc), info->aaf);
+
+  info->lrt = 2 * (alt - null);
+  
+  return true;
+
+}
+
+
+string infoText(info_field * info){
+  
+  stringstream ss;
+
+  ss << "LRT=" << info->lrt << ";";
+  ss << "AF="  << info->taf << "," << info->baf << "," << info->aaf << ";";
+  ss << "GC="  << info->tgc << "," << info->bgc << ";";
+
+  return ss.str();
+
+}
+
 
 bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long int cp,  insertDat & localDists, string & results, global_opts localOpts){
-
-  //if(pos != 357084){
-  //  return true;
-  //}
-
-  //  cerr << "INFO: scoring" << endl;
-
+  
+  // cerr << "scoring" << endl;
+  
   map < string, indvDat*> ti;
   
   for(int t = 0; t < localOpts.all.size(); t++){
@@ -667,33 +686,39 @@ bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long i
     initIndv(i);
     ti[localOpts.all[t]] = i;
   }
-
+  
   loadIndv(ti, totalDat, localOpts, localDists, pos);
-  //  cerr << "INFO: loaded indviduals" << endl;
 
-
-  double tAlt = 0;
+  double nAlt = 0;
 
   for(int t = 0; t < localOpts.all.size(); t++){
-    processGenotype(ti[localOpts.all[t]], &tAlt);
+    processGenotype(ti[localOpts.all[t]], &nAlt);
   }
 
+  if(nAlt == 0 ){
+    cleanUp(ti, localOpts);
+    return true;
+  }
 
-  //if(tAlt == 0 && bAlt == 0){
-  //  cleanUp(ti, bi, localOpts);
-  //  return true;
-  //}
+  info_field * info = new info_field; 
+
+  initInfo(info);
+
+  loadInfoField(ti, info, localOpts);
+
+  string infoToPrint = infoText(info);
   
   stringstream tmpOutput;
 
   tmpOutput  << seqid   << "\t" ;       // CHROM
-  tmpOutput  << pos +1  << "\t" ;       // POS
+  tmpOutput  << pos+1   << "\t" ;       // POS
   tmpOutput  << "."     << "\t" ;       // ID
   tmpOutput  << "NA"    << "\t" ;       // REF
   tmpOutput  << "SV"    << "\t" ;       // ALT
   tmpOutput  << "."     << "\t" ;       // QUAL
   tmpOutput  << "."     << "\t" ;       // FILTER
-  tmpOutput  << "GT:GL:MM:DP" << "\t" ;
+  tmpOutput  << infoToPrint << "\t";
+  tmpOutput  << "GT:GL:NB:NG:CL:DP" << "\t" ;
       
   for(int t = 0; t < localOpts.all.size(); t++){
     tmpOutput << ti[localOpts.all[t]]->genotype 
@@ -709,13 +734,15 @@ bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long i
       tmpOutput << "\t";
     }
   }
-
+  
   tmpOutput << endl;
-
+  
   results.append(tmpOutput.str());
  
   cleanUp(ti, localOpts);
-   
+  
+  delete info;
+  
   return true;
 }
 
@@ -756,6 +783,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   while(1){  
     while(currentPos >= allPileUp.CurrentStart  && getNextAl){
       getNextAl = All.GetNextAlignment(al);
+      //      cerr << currentPos << "\t" << al.Filename << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
       if(al.IsMapped() &&  al.MapQuality > 0 ){
 	allPileUp.processAlignment(al, currentPos);
       }
@@ -764,6 +792,8 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       break;
     }
     
+    //    cerr << endl;
+
     allPileUp.purgePast();
 
     double s = 0;
@@ -775,7 +805,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       exit(1);
     }
 
-    currentPos += 1;
+    currentPos += 10;
 
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
@@ -821,7 +851,17 @@ int main(int argc, char** argv) {
 
   BamMultiReader allReader;
   
+
+  // checking for bam 
   prepBams(allReader, "all");
+  SamHeader SH = allReader.GetHeader();
+  if(!SH.HasSortOrder()){
+    cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header." << endl;
+    exit(1);
+  }
+  
+
+
   allReader.Close();
 
   if(!getInsertDists()){
