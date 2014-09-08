@@ -131,13 +131,14 @@ void initIndv(indvDat * s){
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
   cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
-  cout << "#INFO=<EAF,Number=3,type=Float,Description=\"Allele frequency approximation based on mapping quality of: target,background,combined\">" << endl;
   cout << "#INFO=<AF,Number=3,type=Float,Description=\"Allele frequency of: target,background,combined\">" << endl;
   cout << "#INFO=<NALT,Number=2,type=Int,Description=\"Number of alternative pseuod alleles for target and background \">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
-  cout << "##FORMAT=<ID=MM,Number=1,Type=Int,Description=\"Number of Missing Mates\">"                                                            << endl;
-  cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
+  cout << "##FORMAT=<ID=NG,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=NB,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=CL,Number=1,Type=Int,Description=\"Number of bases that have been softclipped\">"                                            << endl;
+  cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(int b = 0; b < globalOpts.all.size(); b++){
