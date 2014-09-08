@@ -62,6 +62,7 @@ struct global_opts {
   vector<string> all           ;
   int            nthreads      ;
   string         seqid         ;
+  string         bed           ; 
   vector<int>    region        ; 
 } globalOpts;
 
@@ -166,11 +167,14 @@ void printVersion(void){
 }
 
 void printHelp(void){
-  cerr << "usage: WHAM-BAM -t <STRING> -b <STRING> -r <STRING>" << endl << endl;
+  cerr << "usage  : WHAM-BAM -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>   " << endl << endl;
+  cerr << "example: WHAM-BAM -x 20    -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
+
   cerr << "required: t <STRING> -- comma separated list of target bam files"           << endl ;
-  cerr << "required: b <STRING> -- comma separated list of background bam files"       << endl ;
+  cerr << "option  : b <STRING> -- comma separated list of background bam files"       << endl ;
   cerr << "option  : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
   cerr << "option  : x <INT>    -- set the number of threads, otherwise max          " << endl ; 
+  cerr << "option  : e <STRING> -- a bedfile that defines regions to score           " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -178,10 +182,18 @@ void printHelp(void){
 void parseOpts(int argc, char** argv){
   int opt = 0;
 
+  globalOpts.bed = "NA";
+
   opt = getopt(argc, argv, optString);
 
   while(opt != -1){
     switch(opt){
+    case 'e':
+      {
+	globalOpts.bed = optarg;
+	cerr << "INFO: WHAM-BAM will only score within bed coordiates provided: " << globalOpts.bed << endl;
+	break;
+      }
     case 'x':
       {
 	globalOpts.nthreads = atoi(((string)optarg).c_str());
@@ -805,7 +817,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       exit(1);
     }
 
-    currentPos += 10;
+    currentPos += 1;
 
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
@@ -828,6 +840,44 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   return true;
 }
 
+bool loadBed(vector<regionDat*> & features, RefVector seqs){
+
+  map<string, int> seqidToInt;
+
+  int index = 0;
+
+  for(vector< RefData >::iterator sit = seqs.begin(); sit != seqs.end(); sit++){
+
+    seqidToInt[ (*sit).RefName ] = index;
+
+    index+=1;
+  }
+
+  ifstream featureFile (globalOpts.bed);
+
+  string line;
+
+  if(featureFile.is_open()){
+
+    while(getline(featureFile, line)){
+
+      vector<string> region = split(line, "\t");
+
+      int start = atoi(region[1].c_str()) ;
+      int end   = atoi(region[2].c_str()) ;
+  
+      regionDat * r = new regionDat;
+      r->seqidIndex = seqidToInt[region[0]];
+      r->start      = start;
+      r->end        = end  ;
+      features.push_back(r);
+    }
+  }
+  else{
+    return false;
+  }
+  return true;
+}
 
 int main(int argc, char** argv) {
 
@@ -896,35 +946,42 @@ int main(int argc, char** argv) {
   }
   
   vector< regionDat* > regions; 
-
-  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
-    int start = 0;
-    if((*sit).RefLength < 1000){
-      continue;
+  if(globalOpts.bed == "NA"){
+    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+      int start = 500;
+      if((*sit).RefLength < 2000){
+	cerr << "WARNING: " << (*sit).RefName << " is too short for WHAM-BAM: " << (*sit).RefLength << endl;
+	continue;
+      }
+      
+      for(;start < ( (*sit).RefLength - 500) ; start += 10000000){
+	regionDat * chunk = new regionDat;
+	chunk->seqidIndex = seqidIndex;
+	chunk->start      = start;
+	chunk->end        = start + 10000000 ;
+	regions.push_back(chunk);
+      }
+      regionDat * lastChunk = new regionDat;
+      lastChunk->seqidIndex = seqidIndex;
+      lastChunk->start = start;
+      lastChunk->end   = (*sit).RefLength;
+      seqidIndex += 1;
+      if(start < (*sit).RefLength){
+	regions.push_back(lastChunk);
+      }
     }
-
-    for(;start < ((*sit).RefLength) ; start += 10000000){
-      regionDat * chunk = new regionDat;
-      chunk->seqidIndex = seqidIndex;
-      chunk->start      = start;
-      chunk->end        = start + 10000000 ;
-      regions.push_back(chunk);
-    }
-    regionDat * lastChunk = new regionDat;
-    lastChunk->seqidIndex = seqidIndex;
-    lastChunk->start = start;
-    lastChunk->end   = (*sit).RefLength;
-    seqidIndex += 1;
-    if(start < (*sit).RefLength){
-      regions.push_back(lastChunk);
-    }
+  }
+  else{
+    loadBed(regions, sequences);
   }
 
  #pragma omp parallel for
   
   for(int re = 0; re < regions.size(); re++){
 
-    //    cerr << regions[re]->seqidIndex << "\t" << regions[re]->start << "\t" << regions[re]->end << endl;
+    omp_set_lock(&lock);
+    cerr << "INFO: running region: " << sequences[regions[re]->seqidIndex].RefName << ":" << regions[re]->start << "-" << regions[re]->end << endl;
+    omp_unset_lock(&lock);
 
     if(! runRegion( regions[re]->seqidIndex, regions[re]->start, regions[re]->end, sequences)){
       omp_set_lock(&lock);
