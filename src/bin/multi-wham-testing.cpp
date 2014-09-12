@@ -818,7 +818,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       exit(1);
     }
 
-    currentPos += 1;
+    currentPos += 5;
 
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
