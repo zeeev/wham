@@ -31,8 +31,9 @@ struct indvDat{
   int    notMapped     ;
   int    mateMissing   ;
   int    sameStrand    ;
+  int    nClipping     ; 
   int    mateCrossChromosome ;
-  int    maxLength ;
+  int    maxLength      ;
   double    nBad        ;
   double    nGood       ;
   double insertSum ;
@@ -314,10 +315,10 @@ bool grabInsertLengths(string file){
       naligned += 1;
       vector< CigarOp > cd = al.CigarData;
 
-      if(cd.back().Type == 'H' || cd.back().Type == 'S'){
+      if(cd.back().Type == 'S' || cd.back().Type == 'H' ){
         clipped += double(cd.back().Length) / double (al.Length);
       }
-      if(cd.front().Type == 'H' || cd.front().Type == 'S'){
+      if(cd.front().Type == 'S' || cd.front().Type == 'H'){
 	clipped += double(cd.front().Length) / double (al.Length);
       }
 
@@ -462,9 +463,7 @@ bool processGenotype(indvDat * idat, double * totalAlt){
     idat->gls.push_back(-255.0);
     idat->gls.push_back(-255.0);
     idat->gls.push_back(-255.0);
-
     return true;
-
   }
 
   double nref = 0.0;
@@ -533,29 +532,28 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   //   cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t"  << endl;
 }
 
-void pseudoCounts(vector< vector <double> > &dat, double *alpha, double * beta){
+bool loadIndv(map<string, indvDat*> & ti, 
+	      readPileUp & pileup, 
+	      global_opts localOpts, 
+	      insertDat & localDists, 
+	      long int * pos,
+	      map <long int, int> & clusters
+	      ){    
+
   
-  for(int i = 0; i < dat.size(); i++){
-
-    (*alpha) += 2 * exp(dat[i][0]);
-    (*alpha) +=     exp(dat[i][1]);
-    (*beta ) +=     exp(dat[i][1]);
-    (*beta ) += 2 * exp(dat[i][2]);
-
-  }
-}
-
-bool loadIndv(map<string, indvDat*> & ti, readPileUp & pileup, global_opts localOpts, insertDat & localDists, long int pos){    
-
   for(list<BamAlignment>::iterator r = pileup.currentData.begin(); r != pileup.currentData.end(); r++){
-
-    if(((*r).GetEndPosition() < pos ) || (*r).Position > pos){
+   
+    if((*r).Position > *pos){
       continue;
     }
-
+    
     string fname = (*r).Filename;
     
-    //    cerr << pos << ": " << (*r).Name << "\t" << (*r).Position << "\t" << (*r).GetEndPosition() ;
+    //  cerr << pos << ": " 
+    //  << (*r).Name << "\t" 
+    //  << (*r).Position 
+    //  << "\t" 
+    // << (*r).GetEndPosition() ;
 
     int bad = 0;
     
@@ -567,13 +565,13 @@ bool loadIndv(map<string, indvDat*> & ti, readPileUp & pileup, global_opts local
     
     ti[fname]->lengthSum += (*r).Length;
     
-    if(cd.back().Type == 'H' || cd.back().Type == 'S'){
+    if(cd.back().Type == 'S' || cd.back().Type == 'H'){
       ti[fname]->clipped += cd.back().Length;
       int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
     }
     
-    if(cd.front().Type == 'H' || cd.front().Type == 'S'){
+    if(cd.front().Type == 'S' || cd.front().Type == 'H'){
       ti[fname]->clipped += cd.front().Length;
       int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
@@ -615,19 +613,22 @@ bool loadIndv(map<string, indvDat*> & ti, readPileUp & pileup, global_opts local
   }
 
   // looping over indviduals
+  
   for(map < string, indvDat*>::iterator indvs = ti.begin(); indvs != ti.end(); indvs++){
     // looping over clusters
     for( map< int, vector<string> >::iterator ci = ti[indvs->first]->cluster.begin(); ci != ti[indvs->first]->cluster.end(); ci++){
       if(ci->second.size() > 1){
 	// setting support
         ti[indvs->first]->support = true;
-        // looping over reads
-        for(vector<string>::iterator readName = ti[indvs->first]->cluster[ci->first].begin(); readName != ti[indvs->first]->cluster[ci->first].end(); readName++ ){
-          ti[indvs->first]->badFlag[(*readName)] = 1;
-        }
+	clusters[((long) ci->first) + 1] += ci->second.size();
+	// looping over reads
+	for(vector<string>::iterator readName = ti[indvs->first]->cluster[ci->first].begin(); readName != ti[indvs->first]->cluster[ci->first].end(); readName++ ){
+	  ti[indvs->first]->badFlag[(*readName)] = 1;
+	}
       }
     }
   }
+
   //  cerr << "loading indv" << endl;
   return true;
 }
@@ -686,10 +687,15 @@ string infoText(info_field * info){
 
 }
 
-
-bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long int cp,  insertDat & localDists, string & results, global_opts localOpts){
+bool score(string seqid, 
+	   long int * pos, 
+	   readPileUp & totalDat, 
+	   insertDat & localDists, 
+	   string & results, 
+	   global_opts localOpts){
   
   // cerr << "scoring" << endl;
+  // cerr << (*pos) << endl;
   
   map < string, indvDat*> ti;
   
@@ -700,7 +706,20 @@ bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long i
     ti[localOpts.all[t]] = i;
   }
   
-  loadIndv(ti, totalDat, localOpts, localDists, pos);
+  map<long int, int> clusters;
+
+  loadIndv(ti, totalDat, localOpts, localDists, pos, clusters);
+
+  if(clusters.find( ( *pos)+1 ) == clusters.end()){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
+  stringstream cl;
+
+  for(map<long int, int>::iterator zit = clusters.begin(); zit != clusters.end(); zit++){
+    cl << zit->first << "->" << zit->second << "," ;
+  }
 
   double nAlt = 0;
 
@@ -723,14 +742,16 @@ bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long i
   
   stringstream tmpOutput;
 
-  tmpOutput  << seqid   << "\t" ;       // CHROM
-  tmpOutput  << pos+1   << "\t" ;       // POS
-  tmpOutput  << "."     << "\t" ;       // ID
-  tmpOutput  << "NA"    << "\t" ;       // REF
-  tmpOutput  << "SV"    << "\t" ;       // ALT
-  tmpOutput  << "."     << "\t" ;       // QUAL
-  tmpOutput  << "."     << "\t" ;       // FILTER
-  tmpOutput  << infoToPrint << "\t";
+  tmpOutput  << seqid       << "\t" ;       // CHROM
+  tmpOutput  << (*pos) +1   << "\t" ;       // POS
+  tmpOutput  << "."         << "\t" ;       // ID
+  tmpOutput  << "NA"        << "\t" ;       // REF
+  tmpOutput  << "SV"        << "\t" ;       // ALT
+  tmpOutput  << "."         << "\t" ;       // QUAL
+  tmpOutput  << "."         << "\t" ;       // FILTER
+  tmpOutput  << infoToPrint << ""  ;
+  tmpOutput  << cl.str()    << "\t";
+  
   tmpOutput  << "GT:GL:NB:NG:CL:DP" << "\t" ;
       
   for(int t = 0; t < localOpts.all.size(); t++){
@@ -754,6 +775,7 @@ bool score(string seqid, long int pos, readPileUp & totalDat, double * s, long i
  
   cleanUp(ti, localOpts);
   
+
   delete info;
   
   return true;
@@ -796,7 +818,6 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   while(1){  
     while(currentPos >= allPileUp.CurrentStart  && getNextAl){
       getNextAl = All.GetNextAlignment(al);
-      //      cerr << currentPos << "\t" << al.Filename << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
       if(al.IsMapped() &&  al.MapQuality > 0 ){
 	allPileUp.processAlignment(al, currentPos);
       }
@@ -805,21 +826,23 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       break;
     }
     
-    //    cerr << endl;
-
     allPileUp.purgePast();
 
-    double s = 0;
-
-    //    cerr << "INFO: about to score" << endl;
-    if(! score(seqNames[seqidIndex].RefName, currentPos, allPileUp, &s, currentPos, localDists, regionResults, localOpts )){
-      cerr << "FATAL: problem during scoring" << endl;
-      cerr << "FATAL: wham exiting"           << endl;
-      exit(1);
+    if(allPileUp.softClipAtEnds()){
+      if(! score(seqNames[seqidIndex].RefName, 
+		 &currentPos, 
+		 allPileUp,
+		 localDists, 
+		 regionResults, 
+		 localOpts )){
+	cerr << "FATAL: problem during scoring" << endl;
+	cerr << "FATAL: wham exiting"           << endl;
+	exit(1);
+      }
     }
-
-    currentPos += 5;
-
+    
+    currentPos += 1;
+    
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
       cout << regionResults;
