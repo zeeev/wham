@@ -29,6 +29,7 @@ class readPileUp {
   void processAlignment( BamTools::BamAlignment Current_alignment, long int pos);
   void purgeAll(void);
   void purgePast(void);
+  bool softClipAtEnds(void);
   std::list<BamTools::BamAlignment> pileup(void);
   int  currentPos(void);
   int  currentStart(void);

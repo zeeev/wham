@@ -23,21 +23,45 @@ void readPileUp::purgeAll(void){
   currentData.clear();
 }
 
-void readPileUp::purgePast(void){
-  while (!currentData.empty()) {
-    BamAlignment read = currentData.front();
-    if (read.GetEndPosition() > CurrentPos) {
+bool readPileUp::softClipAtEnds(void){
+  
+  bool clipped = false;
+  
+  for( list< BamAlignment >::iterator it = currentData.begin(); it != currentData.end(); it++ ){
+
+    vector< CigarOp > cd = (*it).CigarData;
+    if(cd.back().Type == 'S' || cd.front().Type == 'S' || cd.back().Type == 'H' ||  cd.front().Type == 'H'){
+      clipped = true;
       break;
-    }
-    else {
+    }  
+  }
+  return clipped;
+}
+
+void readPileUp::purgePast(void){
+  
+  int nreads  = currentData.size();
+  int counter = 0;
+  
+  while (!currentData.empty()) {
+    
+    BamAlignment read = currentData.front();
+    
+    if( (read.Position + read.Length) < CurrentStart){ 
       currentData.pop_front();
+    } 
+   
+    counter += 1;
+    
+    if(counter == nreads){
+      break;
     }
   }
 }
 
 std::list<BamAlignment> readPileUp::pileup(void){
   readPileUp::purgePast();
-  BamTools::BamAlignment last_read_in_pile =  currentData.back();
+  //  BamTools::BamAlignment last_read_in_pile =  currentData.back();
   return currentData;
 }
 
