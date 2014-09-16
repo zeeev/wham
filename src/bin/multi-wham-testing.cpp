@@ -567,13 +567,13 @@ bool loadIndv(map<string, indvDat*> & ti,
     
     if(cd.back().Type == 'S' || cd.back().Type == 'H'){
       ti[fname]->clipped += cd.back().Length;
-      int location = (*r).GetEndPosition();
+            int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
     }
     
     if(cd.front().Type == 'S' || cd.front().Type == 'H'){
       ti[fname]->clipped += cd.front().Length;
-      int location = (*r).GetEndPosition();
+      int location = (*r).Position;
       ti[fname]->cluster[location].push_back((*r).Name);
     }
     
@@ -620,7 +620,7 @@ bool loadIndv(map<string, indvDat*> & ti,
       if(ci->second.size() > 1){
 	// setting support
         ti[indvs->first]->support = true;
-	clusters[((long) ci->first) + 1] += ci->second.size();
+	clusters[((long) ci->first) ] += ci->second.size();
 	// looping over reads
 	for(vector<string>::iterator readName = ti[indvs->first]->cluster[ci->first].begin(); readName != ti[indvs->first]->cluster[ci->first].end(); readName++ ){
 	  ti[indvs->first]->badFlag[(*readName)] = 1;
@@ -710,7 +710,7 @@ bool score(string seqid,
 
   loadIndv(ti, totalDat, localOpts, localDists, pos, clusters);
 
-  if(clusters.find( ( *pos)+1 ) == clusters.end()){
+  if(clusters.find( ( *pos) ) == clusters.end()){
     cleanUp(ti, localOpts);
     return true;
   }
@@ -743,7 +743,7 @@ bool score(string seqid,
   stringstream tmpOutput;
 
   tmpOutput  << seqid       << "\t" ;       // CHROM
-  tmpOutput  << (*pos) +1   << "\t" ;       // POS
+  tmpOutput  << (*pos)      << "\t" ;       // POS
   tmpOutput  << "."         << "\t" ;       // ID
   tmpOutput  << "NA"        << "\t" ;       // REF
   tmpOutput  << "SV"        << "\t" ;       // ALT
@@ -961,7 +961,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if(seqidIndex != 0){
+  if(seqidIndex != 0 || globalOpts.region.size() == 2 ){
     if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
       cerr << "WARNING: region failed to run properly." << endl;
     }
