@@ -4,20 +4,20 @@
 ######################################
 
 CC=g++
-CFLAGS=-std=c++0x
+CFLAGS=-std=c++0x -Wall
 INCLUDE=-Isrc/lib -Isrc/bamtools/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm
 RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
-all: createBin libbamtools.a buildWHAMBAM clean
+all: createBin bamtools libbamtools.a buildWHAMBAM clean
 
 createBin:
 	-mkdir bin
-
+bamtools:
+	cd src/bamtools && mkdir -p build && cd build && cmake .. && make
 libbamtools.a:
 	cp src/bamtools/lib/libbamtools.a .
-
 buildWHAMBAM:
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing.cpp $(INCLUDE) $(LIBS)  -o $(OUTFOLD)WHAM-BAM $(RUNTIME)
 buildWHAMDUMPER:
@@ -32,7 +32,7 @@ runTest:
 
 clean:
 
-	-rm t2.txt
-	-rm t.txt
-	-rm t.err
-	-rm *.a
+	-@rm t2.txt
+	-@rm t.txt
+	-@rm t.err
+	-@rm *.a

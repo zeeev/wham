@@ -86,7 +86,7 @@ struct info_field{
 
 };
 
-static const char *optString ="ht:b:r:x:";
+static const char *optString ="ht:b:r:x:e:";
 
 // this lock prevents threads from printing on top of each other
 
