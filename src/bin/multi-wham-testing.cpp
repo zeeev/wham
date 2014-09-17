@@ -142,7 +142,7 @@ void printHeader(void){
   cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
-  for(int b = 0; b < globalOpts.all.size(); b++){
+  for(unsigned int b = 0; b < globalOpts.all.size(); b++){
     cout << globalOpts.all[b] ;
     if(b < globalOpts.all.size() - 1){
       cout << "\t";
@@ -352,7 +352,7 @@ bool getInsertDists(void){
 
   bool flag = true;
 
-  for(int i = 0; i < globalOpts.all.size(); i++){
+  for(unsigned int i = 0; i < globalOpts.all.size(); i++){
     flag = grabInsertLengths(globalOpts.all[i]);
   }
   
@@ -362,7 +362,6 @@ bool getInsertDists(void){
 
 void prepBams(BamMultiReader & bamMreader, string group){
 
-  int errorFlag    = 3;
   string errorMessage ;
 
   vector<string> files;
@@ -436,15 +435,6 @@ double totalLL(vector<double> & data, double alpha, double beta){
   return total;
 }
 
-double methodOfMoments(double mu, double var, double * aHat, double * bHat){
-
-  double mui = 1 - mu;
-  double right = ( (mu*mui / var) - 1 );
-
-  (*aHat)  = mu *  right;
-  (*bHat)  = mui * right; 
-  
-}
 
 double unphred(double p){
   return pow(10, (-p/10));
@@ -638,11 +628,12 @@ bool cleanUp( map < string, indvDat*> & ti, global_opts localOpts){
   for(vector<string>::iterator all = localOpts.all.begin(); all != localOpts.all.end(); all++ ){
     delete ti[*all];
   }
+  return true;
 }
 
 bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & opts){
   
-  for(int b = 0; b < opts.backgroundBams.size(); b++){
+  for(unsigned int b = 0; b < opts.backgroundBams.size(); b++){
 
     if( dat[opts.backgroundBams[b]]->genotypeIndex == -1){
       continue;
@@ -652,7 +643,7 @@ bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & o
     info->tgc += 1;
   }
 
-  for(int t = 0; t < opts.targetBams.size(); t++){
+  for(unsigned int t = 0; t < opts.targetBams.size(); t++){
     if(dat[opts.targetBams[t]]->genotypeIndex == -1){
       continue;
     }
@@ -694,12 +685,10 @@ bool score(string seqid,
 	   string & results, 
 	   global_opts localOpts){
   
-  // cerr << "scoring" << endl;
-  // cerr << (*pos) << endl;
   
   map < string, indvDat*> ti;
   
-  for(int t = 0; t < localOpts.all.size(); t++){
+  for(unsigned int t = 0; t < localOpts.all.size(); t++){
     indvDat * i;
     i = new indvDat;
     initIndv(i);
@@ -723,7 +712,7 @@ bool score(string seqid,
 
   double nAlt = 0;
 
-  for(int t = 0; t < localOpts.all.size(); t++){
+  for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
   }
 
@@ -754,7 +743,7 @@ bool score(string seqid,
   
   tmpOutput  << "GT:GL:NB:NG:CL:DP" << "\t" ;
       
-  for(int t = 0; t < localOpts.all.size(); t++){
+  for(unsigned int t = 0; t < localOpts.all.size(); t++){
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
 	      << "," << ti[localOpts.all[t]]->gls[1]
@@ -809,39 +798,61 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
     return false;
   }
 
-  long int currentPos = -1;
-
-  allPileUp.processAlignment(al , currentPos);
-
-  bool getNextAl     = true;
+  long int currentPos = 0;
+  bool getNextAl      = true;
 
   while(1){  
-    while(currentPos >= allPileUp.CurrentStart  && getNextAl){
-      getNextAl = All.GetNextAlignment(al);
-      if(al.IsMapped() &&  al.MapQuality > 0 ){
-	allPileUp.processAlignment(al, currentPos);
-      }
-    }
+  
+    bool clipped = false;
+    
     if(getNextAl == false){
       break;
     }
     
+    while(clipped == false && getNextAl){
+      
+      if(allPileUp.currentData.size() > 10000){
+	allPileUp.purgePast();
+      }
+
+      getNextAl = All.GetNextAlignment(al);
+      
+      if(al.IsMapped() &&  al.MapQuality > 0 ){
+	
+	allPileUp.processAlignment(al, currentPos);
+	
+	vector< CigarOp > cd = al.CigarData;
+	
+	if(cd.back().Type == 'S' || cd.back().Type == 'H' ){
+	  currentPos = al.GetEndPosition();
+	  clipped = true;
+	}
+	if(cd.front().Type == 'S' || cd.front().Type == 'H'){
+	  currentPos = al.Position;
+	  clipped = true;
+	}
+       	while(al.Position <= currentPos && getNextAl && clipped){
+	  getNextAl = All.GetNextAlignment(al);
+	  if(al.IsMapped() &&  al.MapQuality > 0 ){
+	    
+	    allPileUp.processAlignment(al, currentPos);
+	  }
+	}
+      }	
+    }
+  
     allPileUp.purgePast();
 
-    if(allPileUp.softClipAtEnds()){
-      if(! score(seqNames[seqidIndex].RefName, 
-		 &currentPos, 
-		 allPileUp,
-		 localDists, 
-		 regionResults, 
-		 localOpts )){
-	cerr << "FATAL: problem during scoring" << endl;
-	cerr << "FATAL: wham exiting"           << endl;
-	exit(1);
-      }
+    if(! score(seqNames[seqidIndex].RefName, 
+	       &currentPos, 
+	       allPileUp,
+	       localDists, 
+	       regionResults, 
+	       localOpts )){
+      cerr << "FATAL: problem during scoring" << endl;
+      cerr << "FATAL: wham exiting"           << endl;
+      exit(1);
     }
-    
-    currentPos += 1;
     
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
@@ -1001,7 +1012,7 @@ int main(int argc, char** argv) {
 
  #pragma omp parallel for
   
-  for(int re = 0; re < regions.size(); re++){
+  for(unsigned int re = 0; re < regions.size(); re++){
 
     omp_set_lock(&lock);
     cerr << "INFO: running region: " << sequences[regions[re]->seqidIndex].RefName << ":" << regions[re]->start << "-" << regions[re]->end << endl;
