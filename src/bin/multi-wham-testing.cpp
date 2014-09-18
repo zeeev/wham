@@ -817,7 +817,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
       getNextAl = All.GetNextAlignment(al);
       
-      if(al.IsMapped() &&  al.MapQuality > 0 ){
+      if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate()){
 	
 	allPileUp.processAlignment(al, currentPos);
 	
@@ -833,7 +833,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 	}
        	while(al.Position <= currentPos && getNextAl && clipped){
 	  getNextAl = All.GetNextAlignment(al);
-	  if(al.IsMapped() &&  al.MapQuality > 0 ){
+	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate()){
 	    
 	    allPileUp.processAlignment(al, currentPos);
 	  }
