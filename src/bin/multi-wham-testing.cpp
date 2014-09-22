@@ -134,10 +134,11 @@ void printHeader(void){
   cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
   cout << "#INFO=<AF,Number=3,type=Float,Description=\"Allele frequency of: target,background,combined\">" << endl;
   cout << "#INFO=<NALT,Number=2,type=Int,Description=\"Number of alternative pseuod alleles for target and background \">" << endl;
+  cout << "#INFO=<CU,Number=1,type=Int,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
-  cout << "##FORMAT=<ID=NG,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=NB,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=NR,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=NA,Number=1,Type=Int,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=CL,Number=1,Type=Int,Description=\"Number of bases that have been softclipped\">"                                            << endl;
   cout << "##FORMAT=<ID=DP,Number=1,Type=Int,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
@@ -706,9 +707,9 @@ bool score(string seqid,
 
   stringstream cl;
 
-  for(map<long int, int>::iterator zit = clusters.begin(); zit != clusters.end(); zit++){
-    cl << zit->first << "->" << zit->second << "," ;
-  }
+//  for(map<long int, int>::iterator zit = clusters.begin(); zit != clusters.end(); zit++){
+//    cl << zit->first << "->" << zit->second << "," ;
+//  }
 
   double nAlt = 0;
 
@@ -739,19 +740,19 @@ bool score(string seqid,
   tmpOutput  << "."         << "\t" ;       // QUAL
   tmpOutput  << "."         << "\t" ;       // FILTER
   tmpOutput  << infoToPrint << ""  ;
-  tmpOutput  << cl.str()    << "\t";
+  tmpOutput  << "CU=" << clusters.size() << ";"  << "\t";
   
-  tmpOutput  << "GT:GL:NB:NG:CL:DP" << "\t" ;
+  tmpOutput  << "GT:GL:NR:NA:DP:CL" << "\t" ;
       
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
 	      << "," << ti[localOpts.all[t]]->gls[1]
 	      << "," << ti[localOpts.all[t]]->gls[2]
-	      << ":" << ti[localOpts.all[t]]->nBad
 	      << ":" << ti[localOpts.all[t]]->nGood
-              << ":" << ti[localOpts.all[t]]->clipped
+	      << ":" << ti[localOpts.all[t]]->nBad
 	      << ":" << ti[localOpts.all[t]]->nReads
+              << ":" << ti[localOpts.all[t]]->clipped
 	      << "\t";
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
