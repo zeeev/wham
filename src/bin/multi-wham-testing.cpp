@@ -306,8 +306,8 @@ bool grabInsertLengths(string file){
   bamR.Open(file);
 
   int i = 1;
-  while(i < 100000 && bamR.GetNextAlignment(al) && abs(double(al.InsertSize)) < 10000){
-    if(al.IsFirstMate() && al.IsMapped() && al.IsMateMapped()){
+  while(i < 100000 && bamR.GetNextAlignment(al)){
+    if(al.IsFirstMate() && al.IsMapped() && al.IsMateMapped() && abs(double(al.InsertSize)) < 10000){
       i += 1;
       alIns.push_back(abs(double(al.InsertSize)));
     }
