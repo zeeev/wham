@@ -109,6 +109,7 @@ void initIndv(indvDat * s){
   s->genotype            = "./.";
   s->genotypeIndex       = -1;
   s->nBad                = 0;
+  s->nClipping           = 0;
   s->nGood               = 0;
   s->nReads              = 0;
   s->nAboveAvg           = 0;
@@ -137,6 +138,7 @@ void printHeader(void){
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
+  cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=CL,Number=1,Type=Integer,Description=\"Number of bases that have been soft clipped\">"                                            << endl;
@@ -569,6 +571,7 @@ bool loadIndv(map<string, indvDat*> & ti,
       int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
       clusters[location].push_back((*r));
+      ti[fname]->nClipping +=1;
       bad = 1;
     }
     
@@ -577,6 +580,7 @@ bool loadIndv(map<string, indvDat*> & ti,
       int location = (*r).Position;
       ti[fname]->cluster[location].push_back((*r).Name);
       clusters[location].push_back((*r));
+      ti[fname]->nClipping +=1;
       bad = 1;
     }
     
@@ -822,9 +826,15 @@ bool score(string seqid,
   tmpOutput  << infoToPrint << ""  ;
   tmpOutput  << "CU=" << clusters.size() << ";"  << "\t";
   
-  tmpOutput  << "GT:GL:NR:NA:DP:CL" << "\t" ;
-      
+  tmpOutput  << "GT:GL:NR:NA:DP:CL:FR" << "\t" ;
+        
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
+
+    double fr = 0;
+    if(ti[localOpts.all[t]]->nClipping > 0 && ti[localOpts.all[t]]->nReads > 0){
+      fr = double(ti[localOpts.all[t]]->nClipping) / double(ti[localOpts.all[t]]->nReads);
+    }
+
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
 	      << "," << ti[localOpts.all[t]]->gls[1]
@@ -833,6 +843,7 @@ bool score(string seqid,
 	      << ":" << ti[localOpts.all[t]]->nBad
 	      << ":" << ti[localOpts.all[t]]->nReads
               << ":" << ti[localOpts.all[t]]->clipped
+              << ":" << fr 
 	      << "\t";
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
