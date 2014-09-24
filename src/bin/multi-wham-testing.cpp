@@ -49,7 +49,6 @@ struct indvDat{
   map<int, vector<string> > cluster;
 };
 
-
 struct insertDat{
   map<string, double> mus; // mean of insert length for each indvdual across 1e6 reads
   map<string, double> sds;  // standard deviation
@@ -151,6 +150,20 @@ void printHeader(void){
     }
   }
   cout << endl;  
+}
+
+string joinComma(vector<string> & strings){
+
+  stringstream ss;
+
+  for(unsigned int i = 0; i < strings.size() -1 ; i++){
+    ss << strings[i] << "," ;
+  }
+  
+  ss << strings.back();
+  
+  return ss.str();
+  
 }
 
 string join(vector<string> strings){
@@ -467,7 +480,7 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
     double mappingP = unphred(idat->MapQ[ri]);
 
-    if( idat->badFlag[rit->first] == 1 && idat->support == true){
+    if( idat->badFlag[rit->first] == 1 ){
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
@@ -529,7 +542,7 @@ bool loadIndv(map<string, indvDat*> & ti,
 	      global_opts localOpts, 
 	      insertDat & localDists, 
 	      long int * pos,
-	      map <long int, int> & clusters
+	      map <long int, vector< BamAlignment > > & clusters
 	      ){    
 
   
@@ -541,12 +554,6 @@ bool loadIndv(map<string, indvDat*> & ti,
     
     string fname = (*r).Filename;
     
-    //  cerr << pos << ": " 
-    //  << (*r).Name << "\t" 
-    //  << (*r).Position 
-    //  << "\t" 
-    // << (*r).GetEndPosition() ;
-
     int bad = 0;
     
     ti[fname]->alignments.push_back(*r);
@@ -559,14 +566,18 @@ bool loadIndv(map<string, indvDat*> & ti,
     
     if(cd.back().Type == 'S' || cd.back().Type == 'H'){
       ti[fname]->clipped += cd.back().Length;
-            int location = (*r).GetEndPosition();
+      int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
+      clusters[location].push_back((*r));
+      bad = 1;
     }
     
     if(cd.front().Type == 'S' || cd.front().Type == 'H'){
       ti[fname]->clipped += cd.front().Length;
       int location = (*r).Position;
       ti[fname]->cluster[location].push_back((*r).Name);
+      clusters[location].push_back((*r));
+      bad = 1;
     }
     
     if(!(*r).IsMateMapped()){
@@ -596,32 +607,11 @@ bool loadIndv(map<string, indvDat*> & ti,
 	ti[fname]->hInserts.push_back(ilength);
       }
     }
-  
-    //    cerr << endl;
-
+    
     ti[fname]->badFlag[(*r).Name] = bad;
     ti[fname]->MapQ.push_back((*r).MapQuality);
    
   }
-
-  // looping over indviduals
-  
-  for(map < string, indvDat*>::iterator indvs = ti.begin(); indvs != ti.end(); indvs++){
-    // looping over clusters
-    for( map< int, vector<string> >::iterator ci = ti[indvs->first]->cluster.begin(); ci != ti[indvs->first]->cluster.end(); ci++){
-      if(ci->second.size() > 1){
-	// setting support
-        ti[indvs->first]->support = true;
-	clusters[((long) ci->first) ] += ci->second.size();
-	// looping over reads
-	for(vector<string>::iterator readName = ti[indvs->first]->cluster[ci->first].begin(); readName != ti[indvs->first]->cluster[ci->first].end(); readName++ ){
-	  ti[indvs->first]->badFlag[(*readName)] = 1;
-	}
-      }
-    }
-  }
-
-  //  cerr << "loading indv" << endl;
   return true;
 }
 
@@ -680,6 +670,80 @@ string infoText(info_field * info){
 
 }
 
+bool uniqClips(long int * pos, map<long int, vector < BamAlignment > > & clusters, vector<string> & alts){
+
+  //  vector< string > clippedSeqs;
+
+  map<string , vector<string> > clippedSeqs;
+
+  int bcount = 0;
+  int fcount = 0;
+  string key = "F";
+
+  for( vector < BamAlignment > ::iterator it = clusters[(*pos)].begin(); it != clusters[(*pos)].end(); it++){
+    
+    vector< CigarOp > cd = (*it).CigarData;
+  
+    if((*it).Position == (*pos) &&  cd.front().Type != 'H'){
+
+      fcount+=1;
+      
+      string clip = (*it).QueryBases.substr(0, cd.front().Length - 1);
+    
+     reverse( clip.begin(), clip.end() ); 
+     //      cerr << "F" << "\t" << (*pos) << "\t" << (*it).Position << "\t" << (*it).QueryBases << "\t" << clip << endl;
+    
+     clippedSeqs["F"].push_back(clip);      
+
+    }
+    if((*it).GetEndPosition() == (*pos) && cd.back().Type != 'H'){
+
+      bcount+=1;
+
+      string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length - 1);
+
+      //      cerr << "B" << "\t" << (*pos) << "\t" << (*it).Position << "\t" << (*it).QueryBases << "\t" << clip << endl;
+
+      clippedSeqs["B"].push_back(clip);      
+
+    }
+  }
+  
+
+  //  vector<string> collapse;
+
+  for(unsigned int seq = 0; seq < clippedSeqs[key].size(); seq++){
+    
+    bool unique = true;
+
+    string ra = clippedSeqs[key][seq];
+
+    for(unsigned int seqb = seq + 1; seqb < clippedSeqs[key].size(); seqb++){
+      
+      string rb = clippedSeqs[key][seq];
+      
+      if(ra.size() <= rb.size()){
+	if( ra.compare(rb.substr(0,ra.size())) == 0){
+	  unique = false;
+	}
+      }
+    
+    }
+    if(unique == true){
+      if(key.compare("F") == 0){
+	reverse( ra.begin(), ra.end() );
+      }
+      alts.push_back(ra);
+    }
+  }
+
+  
+  //  cerr << join(collapse) << endl;
+
+  return true;
+}
+
+
 bool score(string seqid, 
 	   long int * pos, 
 	   readPileUp & totalDat, 
@@ -697,31 +761,38 @@ bool score(string seqid,
     ti[localOpts.all[t]] = i;
   }
   
-  map<long int, int> clusters;
+  map<long int, vector< BamAlignment > > clusters;
 
   loadIndv(ti, totalDat, localOpts, localDists, pos, clusters);
-
+  
+  // cout << "Before:" << clusters.size() << endl;
+  
   if(clusters.find( ( *pos) ) == clusters.end()){
     cleanUp(ti, localOpts);
     return true;
   }
-
-  stringstream cl;
-
-//  for(map<long int, int>::iterator zit = clusters.begin(); zit != clusters.end(); zit++){
-//    cl << zit->first << "->" << zit->second << "," ;
-//  }
-
+  
+  if(clusters[(*pos)].size() < 2){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+  
+  // cout << "After:" << clusters.size() << endl;
+  
   double nAlt = 0;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
   }
-
+  
   if(nAlt == 0 ){
     cleanUp(ti, localOpts);
     return true;
   }
+  
+  vector<string> alts;
+
+  uniqClips(pos, clusters, alts);
 
   info_field * info = new info_field; 
 
@@ -733,13 +804,21 @@ bool score(string seqid,
   
   stringstream tmpOutput;
 
-  tmpOutput  << seqid       << "\t" ;       // CHROM
-  tmpOutput  << (*pos)      << "\t" ;       // POS
-  tmpOutput  << "."         << "\t" ;       // ID
-  tmpOutput  << "NA"        << "\t" ;       // REF
-  tmpOutput  << "SV"        << "\t" ;       // ALT
-  tmpOutput  << "."         << "\t" ;       // QUAL
-  tmpOutput  << "."         << "\t" ;       // FILTER
+  string altSeq = ".";
+  if(alts.size() == 1){
+    altSeq = alts[0];
+  }
+  if(alts.size() > 1){
+    altSeq = joinComma(alts);
+  }
+
+  tmpOutput  << seqid           << "\t" ;       // CHROM
+  tmpOutput  << (*pos)          << "\t" ;       // POS
+  tmpOutput  << "."             << "\t" ;       // ID
+  tmpOutput  << "NA"             << "\t" ;       // REF
+  tmpOutput  << altSeq          << "\t" ;       // ALT
+  tmpOutput  << "."             << "\t" ;       // QUAL
+  tmpOutput  << "."             << "\t" ;       // FILTER
   tmpOutput  << infoToPrint << ""  ;
   tmpOutput  << "CU=" << clusters.size() << ";"  << "\t";
   
