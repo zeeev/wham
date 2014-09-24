@@ -8,7 +8,7 @@ Structural variants (SVs) have largely been ignored in Genome Wide Association S
 WHAM-BAM builds in two simple steps... assuming that you have the depedancies.  Most linux enviroments have cmake, and OpenMP the two requiresments for WHAM-BAM.  If an install fails you might have to install a few libraries. 
 
 ```
-git clone --recursive git@github.com:jewmanchue/wham.git wham
+git clone --recursive https://github.com/jewmanchue/wham.git wham
 cd wham
 make
 ```
