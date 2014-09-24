@@ -131,18 +131,18 @@ void initIndv(indvDat * s){
 
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
-  cout << "#INFO=<LRT,Number=1,type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
-  cout << "#INFO=<AF,Number=3,type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
-  cout << "#INFO=<GC,Number=2,type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
-  cout << "#INFO=<NALT,Number=2,type=Integer,Description=\"Number of alternative pseudo alleles for target and background\">" << endl;
-  cout << "#INFO=<CU,Number=1,type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
+  cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
+  cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
+  cout << "##INFO=<ID=NALT,Number=2,Type=Integer,Description=\"Number of alternative pseudo alleles for target and background\">" << endl;
+  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
-  cout << "##FORMAT=<GL,Number=A,type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
+  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
+  cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=CL,Number=1,Type=Integer,Description=\"Number of bases that have been soft clipped\">"                                            << endl;
   cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
-  cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(unsigned int b = 0; b < globalOpts.all.size(); b++){
