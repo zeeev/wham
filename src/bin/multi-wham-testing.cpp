@@ -843,8 +843,7 @@ bool score(string seqid,
 	      << ":" << ti[localOpts.all[t]]->nBad
 	      << ":" << ti[localOpts.all[t]]->nReads
               << ":" << ti[localOpts.all[t]]->clipped
-              << ":" << fr 
-	      << "\t";
+              << ":" << fr ;
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
     }
