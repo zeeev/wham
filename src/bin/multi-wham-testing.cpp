@@ -783,7 +783,7 @@ bool uniqClips(long int * pos,
     
     bool isUnique = true;
     
-    cerr << clippedSeqs[key][seq] << endl;
+    //    cerr << clippedSeqs[key][seq] << endl;
 
     for(unsigned int seqb = seq+1; seqb < clippedSeqs[key].size(); seqb++){
       
@@ -801,7 +801,7 @@ bool uniqClips(long int * pos,
     }
   }
 
-  cerr << endl;
+  //  cerr << endl;
   //  cerr << join(collapse) << endl;
 
   return true;
