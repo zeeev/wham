@@ -794,6 +794,9 @@ bool uniqClips(long int * pos,
       }
     }
     if(isUnique){
+      if(key.compare("F") == 0){
+	reverse(clippedSeqs[key][seq].begin(), clippedSeqs[key][seq].end());
+      }
       alts.push_back(clippedSeqs[key][seq]);
     }
   }
