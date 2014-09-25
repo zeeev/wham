@@ -91,6 +91,8 @@ static const char *optString ="ht:b:r:x:e:";
 
 omp_lock_t lock;
 
+bool sortStringSize(string i, string j) {return (i.size() < j.size());}
+
 void initInfo(info_field * s){
   s->lrt = 0;
   s->taf = 0.000001;
@@ -544,7 +546,9 @@ bool loadIndv(map<string, indvDat*> & ti,
 	      global_opts localOpts, 
 	      insertDat & localDists, 
 	      long int * pos,
-	      map <long int, vector< BamAlignment > > & clusters
+	      map <long int, vector< BamAlignment > > & clusters,
+	      map <long int, vector< BamAlignment > > & cluster_pair
+	    
 	      ){    
 
   
@@ -552,6 +556,22 @@ bool loadIndv(map<string, indvDat*> & ti,
    
     if((*r).Position > *pos){
       continue;
+    }
+
+    vector< CigarOp > cd = (*r).CigarData;
+
+    if( ((*r).AlignmentFlag & 0x0800) != 0){
+      if(cd.back().Type == 'S' || cd.back().Type == 'H'){
+	int location = (*r).GetEndPosition();
+	clusters[location].push_back((*r));
+	cluster_pair[location].push_back((*r));
+      }
+      if(cd.front().Type == 'S' || cd.front().Type == 'H'){
+	int location = (*r).Position;
+	clusters[location].push_back((*r));
+	cluster_pair[location].push_back((*r));
+      }
+      continue; 
     }
     
     string fname = (*r).Filename;
@@ -561,8 +581,6 @@ bool loadIndv(map<string, indvDat*> & ti,
     ti[fname]->alignments.push_back(*r);
     
     ti[fname]->nReads += 1;
-  
-    vector< CigarOp > cd = (*r).CigarData;
     
     ti[fname]->lengthSum += (*r).Length;
     
@@ -674,7 +692,44 @@ string infoText(info_field * info){
 
 }
 
-bool uniqClips(long int * pos, map<long int, vector < BamAlignment > > & clusters, vector<string> & alts){
+bool otherBreak(long int * pos,
+		map<long int, vector < BamAlignment > > & supliment,
+		vector<string> & otherBreakpoints){
+  
+  map<string, int> otherPositions;
+
+  for(vector<BamAlignment>::iterator it = supliment[*pos].begin(); 
+      it != supliment[*pos].end(); it++){
+
+    string saTag;
+
+    if(! (*it).GetTag("SA", saTag)){
+      cerr << "no sa\n";
+      return false;
+
+    }
+    vector<string> saInfo = split(saTag, ";");
+
+    for(vector<string>::iterator ch = saInfo.begin(); 
+	ch != saInfo.end(); ch++){
+      
+      vector<string> chimera  = split((*ch), ",");
+
+      //      otherPositions[chimera[0]];
+      
+    }
+
+
+  }
+
+
+  return true;
+
+}
+
+bool uniqClips(long int * pos, 
+	       map<long int, vector < BamAlignment > > & clusters, 
+	       vector<string> & alts){
 
   //  vector< string > clippedSeqs;
 
@@ -686,9 +741,14 @@ bool uniqClips(long int * pos, map<long int, vector < BamAlignment > > & cluster
 
   for( vector < BamAlignment > ::iterator it = clusters[(*pos)].begin(); it != clusters[(*pos)].end(); it++){
     
+    if(((*it).AlignmentFlag & 0x0800) != 0){
+      continue;
+    }
+    
+
     vector< CigarOp > cd = (*it).CigarData;
   
-    if((*it).Position == (*pos) &&  cd.front().Type != 'H'){
+    if((*it).Position == (*pos)){
 
       fcount+=1;
       
@@ -700,7 +760,7 @@ bool uniqClips(long int * pos, map<long int, vector < BamAlignment > > & cluster
      clippedSeqs["F"].push_back(clip);      
 
     }
-    if((*it).GetEndPosition() == (*pos) && cd.back().Type != 'H'){
+    if((*it).GetEndPosition() == (*pos)){
 
       bcount+=1;
 
@@ -716,32 +776,29 @@ bool uniqClips(long int * pos, map<long int, vector < BamAlignment > > & cluster
 
   //  vector<string> collapse;
 
+
+  sort(clippedSeqs[key].begin(), clippedSeqs[key].end(), sortStringSize);
+
   for(unsigned int seq = 0; seq < clippedSeqs[key].size(); seq++){
     
-    bool unique = true;
-
-    string ra = clippedSeqs[key][seq];
-
-    for(unsigned int seqb = seq + 1; seqb < clippedSeqs[key].size(); seqb++){
-      
-      string rb = clippedSeqs[key][seq];
-      
-      if(ra.size() <= rb.size()){
-	if( ra.compare(rb.substr(0,ra.size())) == 0){
-	  unique = false;
-	}
-      }
+    bool isUnique = true;
     
-    }
-    if(unique == true){
-      if(key.compare("F") == 0){
-	reverse( ra.begin(), ra.end() );
+    cerr << clippedSeqs[key][seq] << endl;
+
+    for(unsigned int seqb = seq+1; seqb < clippedSeqs[key].size(); seqb++){
+      
+      string rb = clippedSeqs[key][seqb].substr(0, clippedSeqs[key][seq].size() ) ;
+
+      if(clippedSeqs[key][seq].compare(rb) == 0){
+	isUnique = false;
       }
-      alts.push_back(ra);
+    }
+    if(isUnique){
+      alts.push_back(clippedSeqs[key][seq]);
     }
   }
 
-  
+  cerr << endl;
   //  cerr << join(collapse) << endl;
 
   return true;
@@ -765,9 +822,9 @@ bool score(string seqid,
     ti[localOpts.all[t]] = i;
   }
   
-  map<long int, vector< BamAlignment > > clusters;
+  map<long int, vector< BamAlignment > > clusters, cluster_pair;
 
-  loadIndv(ti, totalDat, localOpts, localDists, pos, clusters);
+  loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair);
   
   // cout << "Before:" << clusters.size() << endl;
   
@@ -794,9 +851,10 @@ bool score(string seqid,
     return true;
   }
   
-  vector<string> alts;
+  vector<string> alts ; // pairBreaks;
 
   uniqClips(pos, clusters, alts);
+  //  otherBreak(pos, cluster_pair, pairBreaks);
 
   info_field * info = new info_field; 
 
