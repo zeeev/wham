@@ -16,9 +16,9 @@ createBin:
 	-mkdir bin
 bamtools:
 	cd src/bamtools && mkdir -p build && cd build && cmake .. && make
-libbamtools.a:
+libbamtools.a: bamtools
 	cp src/bamtools/lib/libbamtools.a .
-buildWHAMBAM:
+buildWHAMBAM: libbamtools.a
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing.cpp $(INCLUDE) $(LIBS)  -o $(OUTFOLD)WHAM-BAM $(RUNTIME)
 buildWHAMDUMPER:
 	$(CC) $(CFLAGS) -g src/lib/*cpp   src/bin/multi-wham.cpp $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-DUMPER $(RUNTIME)
