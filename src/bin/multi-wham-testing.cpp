@@ -541,6 +541,21 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   //   cerr << (*geno) << "\t" << aal << "\t" << abl << "\t" << bbl << "\t" << nref << "\t"  << endl;
 }
 
+bool checkN(string & s){
+
+  int num = 0;
+
+  for ( string::iterator it=s.begin(); it!=s.end(); it++){
+    if(*it == 'N'){
+      num +=1;
+    }
+    if(num > 4){
+      return true;
+    }
+  }
+  return false;
+}
+
 bool loadIndv(map<string, indvDat*> & ti, 
 	      readPileUp & pileup, 
 	      global_opts localOpts, 
@@ -560,7 +575,7 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     vector< CigarOp > cd = (*r).CigarData;
 
-    if( ((*r).AlignmentFlag & 0x0800) != 0){
+    if( ((*r).AlignmentFlag & 0x0800) != 0 || ! (*r).IsPrimaryAlignment()){
       if(cd.back().Type == 'S' || cd.back().Type == 'H'){
 	int location = (*r).GetEndPosition();
 	clusters[location].push_back((*r));
@@ -578,13 +593,15 @@ bool loadIndv(map<string, indvDat*> & ti,
     
     int bad = 0;
     
-    ti[fname]->alignments.push_back(*r);
-    
-    ti[fname]->nReads += 1;
-    
-    ti[fname]->lengthSum += (*r).Length;
-    
-    if(cd.back().Type == 'S' || cd.back().Type == 'H'){
+    if(cd.back().Type == 'S' ){
+
+      string seq = (*r).QueryBases.substr((*r).Length - cd.back().Length);
+      if(checkN(seq)){
+	continue;
+      }
+
+      //      cerr << seq << endl;
+
       ti[fname]->clipped += cd.back().Length;
       int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
@@ -593,7 +610,14 @@ bool loadIndv(map<string, indvDat*> & ti,
       bad = 1;
     }
     
-    if(cd.front().Type == 'S' || cd.front().Type == 'H'){
+    if(cd.front().Type == 'S' ){
+
+      string seq = (*r).QueryBases.substr(0,cd.front().Length);
+
+      if(checkN(seq)){
+	continue;
+      }
+
       ti[fname]->clipped += cd.front().Length;
       int location = (*r).Position;
       ti[fname]->cluster[location].push_back((*r).Name);
@@ -601,6 +625,12 @@ bool loadIndv(map<string, indvDat*> & ti,
       ti[fname]->nClipping +=1;
       bad = 1;
     }
+
+    ti[fname]->alignments.push_back(*r);
+
+    ti[fname]->nReads += 1;
+
+    ti[fname]->lengthSum += (*r).Length;
     
     if(!(*r).IsMateMapped()){
       ti[fname]->mateMissing  += (!(*r).IsMateMapped());
@@ -741,13 +771,16 @@ bool uniqClips(long int * pos,
 
   for( vector < BamAlignment > ::iterator it = clusters[(*pos)].begin(); it != clusters[(*pos)].end(); it++){
     
-    if(((*it).AlignmentFlag & 0x0800) != 0){
+    if(((*it).AlignmentFlag & 0x0800) != 0 || !(*it).IsPrimaryAlignment()){
       continue;
     }
     
 
     vector< CigarOp > cd = (*it).CigarData;
   
+//    cerr << (*it).Name   << endl;
+//    cerr << (*it).QueryBases << endl << endl;
+
     if((*it).Position == (*pos)){
 
       fcount+=1;
