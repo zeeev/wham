@@ -163,12 +163,47 @@ string joinComma(vector<string> & strings){
   for(unsigned int i = 0; i < strings.size() -1 ; i++){
     ss << strings[i] << "," ;
   }
-  
+
   ss << strings.back();
-  
+
   return ss.str();
-  
+
 }
+
+string printIndvDat(  indvDat * d ){
+
+  stringstream ss;
+
+  ss << "Genotype       : .......... " << d->genotype << endl;
+  ss << "Genotype index : .......... " << d->genotypeIndex << endl;
+  ss << "Number of reads: .......... " << d->nReads << endl;
+  ss << "Number of mapped mates: ... " << d->mappedPairs << endl;
+  ss << "Number of odd insert size:  " << d->nAboveAvg   << endl;
+  ss << "Number of reads not mapped: " << d->notMapped   << endl;
+  ss << "Number of mates missing: .. " << d->mateMissing << endl;
+  ss << "Number of mates same strand:" << d->sameStrand  << endl;
+  ss << "Number of reads clipped: .. " << d->nClipping   << endl;
+  ss << "Number of alternative reads:" << d->nBad        << endl;
+  ss << "Number of reference reads:  " << d->nGood       << endl;
+  ss << "Genotype likelihoods: ..... " << d->gls[0] 
+     << ":" << d->gls[1] 
+     << ":" << d->gls[2] 
+     << endl;
+  ss << endl;
+  ss << "Reads: " << endl;
+  for(vector< BamAlignment >::iterator it = d->alignments.begin(); it != d->alignments.end(); it++){
+   
+    ss   << " " << (*it).Name << " " 
+	 << (*it).Position << " " 
+	 << (*it).QueryBases 
+	 << endl;
+  }
+
+  return ss.str();
+
+}
+
+
 
 string join(vector<string> strings){
 
@@ -562,8 +597,10 @@ bool loadIndv(map<string, indvDat*> & ti,
 	      insertDat & localDists, 
 	      long int * pos,
 	      map <long int, vector< BamAlignment > > & clusters,
-	      map <long int, vector< BamAlignment > > & cluster_pair
-	    
+	      map <long int, vector< BamAlignment > > & cluster_pair,
+	      int * primary,
+	      int * frontS,
+	      int * backS
 	      ){    
 
   
@@ -608,6 +645,8 @@ bool loadIndv(map<string, indvDat*> & ti,
       clusters[location].push_back((*r));
       ti[fname]->nClipping +=1;
       bad = 1;
+      *primary += 1;
+      *backS   += 1;
     }
     
     if(cd.front().Type == 'S' ){
@@ -624,6 +663,8 @@ bool loadIndv(map<string, indvDat*> & ti,
       clusters[location].push_back((*r));
       ti[fname]->nClipping +=1;
       bad = 1;
+      *primary += 1;
+      *frontS  += 1;
     }
 
     ti[fname]->alignments.push_back(*r);
@@ -759,15 +800,12 @@ bool otherBreak(long int * pos,
 
 bool uniqClips(long int * pos, 
 	       map<long int, vector < BamAlignment > > & clusters, 
-	       vector<string> & alts){
+	       vector<string> & alts, int * collapse){
 
-  //  vector< string > clippedSeqs;
-
-  map<string , vector<string> > clippedSeqs;
+  vector<string>  clippedSeqs;
 
   int bcount = 0;
   int fcount = 0;
-  string key = "F";
 
   for( vector < BamAlignment > ::iterator it = clusters[(*pos)].begin(); it != clusters[(*pos)].end(); it++){
     
@@ -778,68 +816,95 @@ bool uniqClips(long int * pos,
 
     vector< CigarOp > cd = (*it).CigarData;
   
-//    cerr << (*it).Name   << endl;
-//    cerr << (*it).QueryBases << endl << endl;
-
     if((*it).Position == (*pos)){
-
-      fcount+=1;
-      
       string clip = (*it).QueryBases.substr(0, cd.front().Length - 1);
-    
-     reverse( clip.begin(), clip.end() ); 
-     //      cerr << "F" << "\t" << (*pos) << "\t" << (*it).Position << "\t" << (*it).QueryBases << "\t" << clip << endl;
-    
-     clippedSeqs["F"].push_back(clip);      
-
+      reverse( clip.begin(), clip.end() );  
+      clippedSeqs.push_back(clip);
+      fcount += 1;
     }
     if((*it).GetEndPosition() == (*pos)){
-
-      bcount+=1;
-
       string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length - 1);
-
-      //      cerr << "B" << "\t" << (*pos) << "\t" << (*it).Position << "\t" << (*it).QueryBases << "\t" << clip << endl;
-
-      clippedSeqs["B"].push_back(clip);      
-
+      clippedSeqs.push_back(clip);    
+      bcount += 1;
     }
   }
   
+  sort(clippedSeqs.begin(), clippedSeqs.end(), sortStringSize);
 
-  //  vector<string> collapse;
-
-
-  sort(clippedSeqs[key].begin(), clippedSeqs[key].end(), sortStringSize);
-
-  for(unsigned int seq = 0; seq < clippedSeqs[key].size(); seq++){
+  for(unsigned int i = 0; i < clippedSeqs.size(); i++){
     
-    bool isUnique = true;
+    int seqAsize = clippedSeqs[i].size();
     
-    //    cerr << clippedSeqs[key][seq] << endl;
+    bool u = true;
 
-    for(unsigned int seqb = seq+1; seqb < clippedSeqs[key].size(); seqb++){
-      
-      string rb = clippedSeqs[key][seqb].substr(0, clippedSeqs[key][seq].size() ) ;
+    for(unsigned int j = i + 1; j < clippedSeqs.size(); j++ ){
 
-      if(clippedSeqs[key][seq].compare(rb) == 0){
-	isUnique = false;
+      string seqB = clippedSeqs[j].substr(0, seqAsize );
+    
+      //      cerr << clippedSeqs[i] <<  " " << seqB << endl;
+
+      if(seqB.compare(clippedSeqs[i]) == 0){
+	u = false;
+	*collapse += 1;
+	break;
       }
     }
-    if(isUnique){
-      if(key.compare("F") == 0){
-	reverse(clippedSeqs[key][seq].begin(), clippedSeqs[key][seq].end());
-      }
-      alts.push_back(clippedSeqs[key][seq]);
+    if(u == true){
+      alts.push_back(clippedSeqs[i]);
+      
     }
   }
-
-  //  cerr << endl;
-  //  cerr << join(collapse) << endl;
 
   return true;
 }
 
+
+
+string consensus(vector<string> & s, double * avg, double * nn){
+
+  if(s.empty()){
+    return ".";
+  }
+  
+  if(s.size() == 1){
+    return s[0];
+  }
+
+  stringstream ss;
+
+  for(unsigned int l = 0; l < s.back().length(); l++){
+    
+    string base;
+
+    map<string, int> bases;
+
+    for(unsigned int i = 0; i < s.size(); i++){
+      if( l >= s[i].size()){
+	continue;
+      }
+      base = s[i].substr(l, 1);
+      bases[base] = 1;
+    }
+
+    if(bases.size() > 1){
+      ss << "N";
+      *nn += 1;
+    }
+    else{
+      ss << base;
+    }
+  }
+
+  double sl = 0;
+
+  for(unsigned int i = 0; i < s.size(); i++){
+    sl += s[i].length();
+  }
+
+  *avg = sl / double(s.size());
+
+  return ss.str();
+}
 
 bool score(string seqid, 
 	   long int * pos, 
@@ -858,28 +923,26 @@ bool score(string seqid,
     ti[localOpts.all[t]] = i;
   }
   
+
   map<long int, vector< BamAlignment > > clusters, cluster_pair;
 
-  loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair);
+  int primary = 0;
+  int frontS  = 0;
+  int backS   = 0;
   
-  // cout << "Before:" << clusters.size() << endl;
+  loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair, &primary, &frontS, &backS);
   
-  if(clusters.find( ( *pos) ) == clusters.end()){
+  if(clusters[(*pos)].size() < 3 || primary == 0 || (frontS < 2 && backS < 2) ){
     cleanUp(ti, localOpts);
     return true;
   }
   
-  if(clusters[(*pos)].size() < 2){
-    cleanUp(ti, localOpts);
-    return true;
-  }
-  
-  // cout << "After:" << clusters.size() << endl;
   
   double nAlt = 0;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
+    //cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
   }
   
   if(nAlt == 0 ){
@@ -889,8 +952,25 @@ bool score(string seqid,
   
   vector<string> alts ; // pairBreaks;
 
-  uniqClips(pos, clusters, alts);
-  //  otherBreak(pos, cluster_pair, pairBreaks);
+  //  cerr << joinComma(alts);
+  
+  int ncollapsed = 0;
+
+  uniqClips(pos, clusters, alts, &ncollapsed);
+
+  sort(alts.begin(), alts.end(), sortStringSize);
+  
+  double avgL = 0;
+  double nn   = 0;
+
+  string altSeq = consensus(alts, &avgL, &nn);
+
+//  otherBreak(pos, cluster_pair, pairBreaks);
+
+  if(nn >= (avgL/2) ){
+    cleanUp(ti, localOpts);
+    return true;
+  }
 
   info_field * info = new info_field; 
 
@@ -902,23 +982,25 @@ bool score(string seqid,
   
   stringstream tmpOutput;
 
-  string altSeq = ".";
-  if(alts.size() == 1){
-    altSeq = alts[0];
-  }
-  if(alts.size() > 1){
-    altSeq = joinComma(alts);
-  }
+//  string altSeq = ".";
+//  if(alts.size() == 1){
+//    altSeq = alts[0];
+//  }
+//  if(alts.size() > 1){
+//    altSeq = joinComma(alts);
+//  }
 
-  tmpOutput  << seqid           << "\t" ;       // CHROM
-  tmpOutput  << (*pos)          << "\t" ;       // POS
-  tmpOutput  << "."             << "\t" ;       // ID
+  tmpOutput  << seqid           << "\t"  ;       // CHROM
+  tmpOutput  << (*pos)          << "\t"  ;       // POS
+  tmpOutput  << "."             << "\t"  ;       // ID
   tmpOutput  << "NA"             << "\t" ;       // REF
-  tmpOutput  << altSeq          << "\t" ;       // ALT
-  tmpOutput  << "."             << "\t" ;       // QUAL
-  tmpOutput  << "."             << "\t" ;       // FILTER
+  tmpOutput  << altSeq          << "\t"  ;       // ALT
+  tmpOutput  << "."             << "\t"  ;       // QUAL
+  tmpOutput  << "."             << "\t"  ;       // FILTER
+  //  tmpOutput  << "CO=" << con    << ";"   ;
   tmpOutput  << infoToPrint << ""  ;
-  tmpOutput  << "CU=" << clusters.size() << ";"  << "\t";
+  tmpOutput  << "CU=" << clusters.size() << ";"  ;
+  tmpOutput  << "NC=" << ncollapsed      << ";" << "\t";
   
   tmpOutput  << "GT:GL:NR:NA:DP:CL:FR" << "\t" ;
         
@@ -1019,14 +1101,30 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
        	while(al.Position <= currentPos && getNextAl && clipped){
 	  getNextAl = All.GetNextAlignment(al);
 	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate()){
-	    
 	    allPileUp.processAlignment(al, currentPos);
 	  }
 	}
       }	
     }
-  
-    allPileUp.purgePast();
+    
+
+    allPileUp.purgePast();    
+
+//    if(currentPos !=   88948047){
+//      allPileUp.purgePast();
+//      continue;
+//    }
+//    else{
+//      cerr << "before purge:" << allPileUp.currentData.size() << endl;
+//      cerr << allPileUp.printPileUp() << endl;
+//      allPileUp.purgePast();
+//      cerr << "after purge:" << allPileUp.currentData.size() << endl;
+//      cerr << allPileUp.printPileUp() << endl;
+//    }
+    //    omp_set_lock(&lock);
+    //    cerr << "About to score "  << seqNames[seqidIndex].RefName << "\t" << currentPos << endl;
+    //    omp_unset_lock(&lock);      
+
 
     if(! score(seqNames[seqidIndex].RefName, 
 	       &currentPos, 
