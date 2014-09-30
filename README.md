@@ -36,7 +36,6 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ##INFO=<ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic">
 ##INFO=<ID=AF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined">
 ##INFO=<ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target">
-##INFO=<ID=NALT,Number=2,Type=Integer,Description="Number of alternative pseudo alleles for target and background">
 ##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup position ">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Pseudo genotype">
 ##FORMAT=<ID=GL,Number=A,Type=Float,Desciption="Genotype likelihood ">
@@ -59,6 +58,10 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
   
 ### GC:
 
-
+  WHAM does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.
   
+### CU
+
+  WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. 
+
   
