@@ -47,6 +47,8 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878D_HiSeqX_R1.bam
 ```
 
+====
+
 #### LRT:
 
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
@@ -68,3 +70,5 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ### NC:
   
   The number of soft-clipped segments there were collapsed into the consensus sequence.
+  
+====  
