@@ -65,3 +65,6 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
   WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. 
 
   
+### NC:
+  
+  The number of soft-clipped segments there were collapsed into the consensus sequence.
