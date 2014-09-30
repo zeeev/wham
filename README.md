@@ -49,3 +49,6 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ```
 
 #### LRT:
+
+  This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
+  
