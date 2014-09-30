@@ -932,7 +932,7 @@ bool score(string seqid,
   
   loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair, &primary, &frontS, &backS);
   
-  if((clusters[(*pos)].size() < 2 || cluster_pair[(*pos)].size() < 1 ) && clusters[(*pos)].size() < 3){
+  if(clusters[(*pos)].size() < 3 && cluster_pair[(*pos)].size() < 1 ){
     cleanUp(ti, localOpts);
     return true;
   }
