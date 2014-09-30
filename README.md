@@ -51,4 +51,4 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 #### LRT:
 
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
-  
+  If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  casess (target) and controls (background) bams must be specified using the -t & -b flags to get an LRT score.
