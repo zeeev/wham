@@ -29,7 +29,7 @@ Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
 
 ### UNDERSTANDING WHAM OUTPUT
 
-WHAM outputs an unsorted VCFv4.1 file.
+WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.  
 
 ```
 ##fileformat=VCFv4.1
@@ -48,5 +48,4 @@ WHAM outputs an unsorted VCFv4.1 file.
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878D_HiSeqX_R1.bam
 ```
 
-```
-```
+#### LRT:
