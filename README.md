@@ -79,21 +79,15 @@ The format field is comprised of 7 colon delimited fields.
 
 ##GT:
   A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.
-
 ##GL:
-  -log10 genotype likelihood under a bi-allelic model.
-
+  log10 genotype likelihood under a bi-allelic model.
 ##FR:
-  Fraction of the primary alignments that have soft-clipping
-  
+  Fraction of the primary alignments that have soft-clipping.
 ##NR:
-  The number of reads that do not support any type of structural variant
-
+  The number of reads that do not support any type of structural variant.
 ##NA:
-  The number of reads that do support any type of structural variant
-  
+  The number of reads that do support any type of structural variant.
 ###CL:
   The number of soft clipped bases across all reads 
-  
 ###DP:
-  The number of high-quality primary reads covering the position
+  The number of high-quality primary reads covering the position.
