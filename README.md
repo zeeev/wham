@@ -49,6 +49,8 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 
 ====
 
+The info field is comprised of 4 key value pairs.
+
 #### LRT:
 
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
@@ -72,3 +74,26 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
   The number of soft-clipped segments there were collapsed into the consensus sequence.
   
 ====  
+
+The format field is comprised of 7 colon delimited fields.
+
+##GT:
+  A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.
+
+##GL:
+  -log10 genotype likelihood under a bi-allelic model.
+
+##FR:
+  Fraction of the primary alignments that have soft-clipping
+  
+##NR:
+  The number of reads that do not support any type of structural variant
+
+##NA:
+  The number of reads that do support any type of structural variant
+  
+###CL:
+  The number of soft clipped bases across all reads 
+  
+###DP:
+  The number of high-quality primary reads covering the position
