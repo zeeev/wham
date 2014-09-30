@@ -52,3 +52,13 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
   If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  casess (target) and controls (background) bams must be specified using the -t & -b flags to get an LRT score.
+  
+#### AF:
+
+  A comma seperated list of allele frequences of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoin as a bi-allelic variant and esimates the frequency based on the genotype counts.
+  
+### GC:
+
+
+  
+  
