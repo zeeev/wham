@@ -613,12 +613,14 @@ bool loadIndv(map<string, indvDat*> & ti,
     vector< CigarOp > cd = (*r).CigarData;
 
     if( ((*r).AlignmentFlag & 0x0800) != 0 || ! (*r).IsPrimaryAlignment()){
-      if(cd.back().Type == 'S' || cd.back().Type == 'H'){
+
+      if(cd.back().Type == 'H'){
 	int location = (*r).GetEndPosition();
 	clusters[location].push_back((*r));
 	cluster_pair[location].push_back((*r));
       }
-      if(cd.front().Type == 'S' || cd.front().Type == 'H'){
+
+      if(cd.front().Type == 'H'){
 	int location = (*r).Position;
 	clusters[location].push_back((*r));
 	cluster_pair[location].push_back((*r));
@@ -932,7 +934,7 @@ bool score(string seqid,
   
   loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair, &primary, &frontS, &backS);
   
-  if(clusters[(*pos)].size() < 3 && cluster_pair[(*pos)].size() < 1 ){
+  if(clusters[(*pos)].size() < 3 && cluster_pair[(*pos)].size() < 1){
     cleanUp(ti, localOpts);
     return true;
   }
@@ -942,7 +944,7 @@ bool score(string seqid,
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
-    //cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
+    //    cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
   }
   
   if(nAlt == 0 ){
@@ -967,10 +969,7 @@ bool score(string seqid,
 
 //  otherBreak(pos, cluster_pair, pairBreaks);
 
-  if(nn >= (avgL/2) ){
-    cleanUp(ti, localOpts);
-    return true;
-  }
+
 
   info_field * info = new info_field; 
 
@@ -1028,10 +1027,11 @@ bool score(string seqid,
   tmpOutput << endl;
   
   results.append(tmpOutput.str());
- 
+  
+  //  cerr << tmpOutput.str() << endl;
+  
   cleanUp(ti, localOpts);
   
-
   delete info;
   
   return true;
@@ -1090,17 +1090,27 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 	
 	vector< CigarOp > cd = al.CigarData;
 	
-	if(cd.back().Type == 'S' || cd.back().Type == 'H' ){
-	  currentPos = al.GetEndPosition();
-	  clipped = true;
-	}
-	if(cd.front().Type == 'S' || cd.front().Type == 'H'){
+	if(cd.front().Type == 'S' ){
 	  currentPos = al.Position;
 	  clipped = true;
+	  //	  cerr << al.Name << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
 	}
+
+	if(cd.back().Type == 'S' && ! clipped){
+          currentPos = al.GetEndPosition();
+          clipped = true;
+	  //          cerr << al.Name << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
+	}
+
+	// gather all the reads covering the current softClipped location.
+
        	while(al.Position <= currentPos && getNextAl && clipped){
 	  getNextAl = All.GetNextAlignment(al);
-	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate()){
+	  
+	  //	  cerr << "Inner: " << al.Name << endl;
+
+	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate() && getNextAl){
+	    
 	    allPileUp.processAlignment(al, currentPos);
 	  }
 	}
@@ -1110,20 +1120,20 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
     allPileUp.purgePast();    
 
-//    if(currentPos !=   88948047){
+//    if(currentPos !=  99850878){
 //      allPileUp.purgePast();
 //      continue;
 //    }
 //    else{
-//      cerr << "before purge:" << allPileUp.currentData.size() << endl;
-//      cerr << allPileUp.printPileUp() << endl;
-//      allPileUp.purgePast();
-//      cerr << "after purge:" << allPileUp.currentData.size() << endl;
-//      cerr << allPileUp.printPileUp() << endl;
-//    }
-    //    omp_set_lock(&lock);
+//    cerr << "before purge:" << allPileUp.currentData.size() << endl;
+//    cerr << allPileUp.printPileUp() << endl;
+//    allPileUp.purgePast();
+//    cerr << "after purge:" << allPileUp.currentData.size() << endl;
+//    cerr << allPileUp.printPileUp() << endl;
+    //}
+    //omp_set_lock(&lock);
     //    cerr << "About to score "  << seqNames[seqidIndex].RefName << "\t" << currentPos << endl;
-    //    omp_unset_lock(&lock);      
+    //omp_unset_lock(&lock);      
 
 
     if(! score(seqNames[seqidIndex].RefName, 
