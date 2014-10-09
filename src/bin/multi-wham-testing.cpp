@@ -10,10 +10,16 @@
 #include <omp.h>
 
 #include "api/BamMultiReader.h"
+#include "api/internal/bam/BamWriter_p.h"
 #include "readPileUp.h"
 
 using namespace std;
 using namespace BamTools;
+
+struct cigar{
+  char type;
+  unsigned int length;
+};
 
 struct regionDat{
   int seqidIndex ;
@@ -138,8 +144,9 @@ void printHeader(void){
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=NALT,Number=2,Type=Integer,Description=\"Number of alternative pseudo alleles for target and background\">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=ED,Numper=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos\">" << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
-  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Desciption=\"Genotype likelihood \">"                                                                 << endl;
+  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
   cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting no SV\">"                                                      << endl;
@@ -195,6 +202,7 @@ string printIndvDat(  indvDat * d ){
    
     ss   << " " << (*it).Name << " " 
 	 << (*it).Position << " " 
+	 << (*it).GetEndPosition() << " "
 	 << (*it).QueryBases 
 	 << endl;
   }
@@ -765,11 +773,141 @@ string infoText(info_field * info){
 
 }
 
-bool otherBreak(long int * pos,
-		map<long int, vector < BamAlignment > > & supliment,
-		vector<string> & otherBreakpoints){
+bool burnCigar(string s, vector<cigar> & cigs){
   
-  map<string, int> otherPositions;
+  unsigned int offset = 0;
+  unsigned int index  = 0; 
+
+  cerr << "burning: " << s << endl;
+
+  for(string::iterator it = s.begin() ; it != s.end(); it++){
+
+    switch(*it){
+    case 'M':
+      {
+	cigar c;
+	c.type   = 'M';
+	c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'I':
+      {
+        cigar c;
+	c.type   = 'I';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'D':
+      {
+        cigar c;
+	c.type   = 'D';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'N':
+      {
+        cigar c;
+	c.type   = 'N';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'S':
+      {
+        cigar c;
+	c.type   = 'S';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'H':
+      {
+        cigar c;
+	c.type   = 'H';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'P':
+      {
+        cigar c;
+	c.type   = 'P';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    case 'X':
+      {
+        cigar c;
+	c.type   = 'X';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      } 
+    case '=':
+      {
+        cigar c;
+	c.type   = '=';
+        c.length = atoi(s.substr(offset, index-offset).c_str());
+	cigs.push_back(c);
+	offset = index + 1;
+	break;
+      }
+    default:
+      break;
+    }
+    index += 1;
+  }
+  //cerr << "done burning" << endl;
+  return true;
+}
+
+void endPos(vector<cigar> & cigs, long int * pos){
+  
+  for(vector<cigar>::iterator it = cigs.begin(); 
+      it != cigs.end(); it++){
+    
+    switch( (*it).type ){
+    case 'I':
+      {
+	*pos += (*it).length;
+	break;
+      }
+    case 'M':
+      {
+	*pos += (*it).length;
+	break;
+      }
+    default:
+      break;
+    }
+  }
+}
+
+
+
+int otherBreak(long int * pos,
+	       map<long int, vector < BamAlignment > > & supliment, 
+	       string & otherside,
+	       string & bestEnd){
+  
+
+  if(supliment[*pos].empty()){
+    return 0;
+  }
+
+  map<string, map< long int, int > > otherPositions;
 
   for(vector<BamAlignment>::iterator it = supliment[*pos].begin(); 
       it != supliment[*pos].end(); it++){
@@ -778,25 +916,79 @@ bool otherBreak(long int * pos,
 
     if(! (*it).GetTag("SA", saTag)){
       cerr << "no sa\n";
-      return false;
+      return 0;
 
     }
+
     vector<string> saInfo = split(saTag, ";");
 
     for(vector<string>::iterator ch = saInfo.begin(); 
 	ch != saInfo.end(); ch++){
       
+      if((*ch).empty()){
+	break;
+      }
+      
       vector<string> chimera  = split((*ch), ",");
 
-      //      otherPositions[chimera[0]];
+      vector<cigar> c;
+
+      burnCigar(chimera[3], c);
+
+      if(c.front().type == 'S' && c.back().type == 'S'){
       
+	if(c.front().length > c.back().length){
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
+	}
+	else{
+	  long int endP = atoi(chimera[1].c_str());
+	  endPos(c, &endP);
+	  otherPositions[chimera[0]][endP]++;
+	  
+	}
+	continue;
+      }
+
+      if(c.front().type == 'S'){
+	otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
+      }
+      if(c.back().type  == 'S'){
+	long int endP = atoi(chimera[1].c_str());
+	endPos(c, &endP);
+	otherPositions[chimera[0]][endP]++;
+	
+      }
+ 
     }
+    
+  }
+    
+  stringstream ends;
+  string bestOpt; 
+  int    nbe = 0;
 
+  for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
+      ab != otherPositions.end(); ab++){
 
+    for(map<long int, int>::iterator pos = ab->second.begin();
+	pos != ab->second.end(); pos++){
+
+      ends << ab->first << "," << pos->first << ":";
+
+      if(pos->second > nbe){
+	nbe =  pos->second;
+	stringstream best;
+	best << ab->first << "," << pos->first;
+	bestOpt = best.str();
+      }
+    }
   }
 
+  bestEnd.append(bestOpt);
+  
+  otherside.append(ends.str());
 
-  return true;
+  return otherPositions.size();
 
 }
 
@@ -843,8 +1035,6 @@ bool uniqClips(long int * pos,
 
       string seqB = clippedSeqs[j].substr(0, seqAsize );
     
-      //      cerr << clippedSeqs[i] <<  " " << seqB << endl;
-
       if(seqB.compare(clippedSeqs[i]) == 0){
 	u = false;
 	*collapse += 1;
@@ -938,13 +1128,27 @@ bool score(string seqid,
     cleanUp(ti, localOpts);
     return true;
   }
+
+  string ends, bestEnd;
+  int otherSeqids = otherBreak(pos, cluster_pair, ends, bestEnd);  
   
-  
+  if(ends.empty()){
+    ends = "nan";
+  }
+  if(bestEnd.empty()){
+    bestEnd = "nan";
+  }
+
+  if(otherSeqids > 3){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
   double nAlt = 0;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
-    //    cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
+    // cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
   }
   
   if(nAlt == 0 ){
@@ -967,10 +1171,6 @@ bool score(string seqid,
 
   string altSeq = consensus(alts, &avgL, &nn);
 
-//  otherBreak(pos, cluster_pair, pairBreaks);
-
-
-
   info_field * info = new info_field; 
 
   initInfo(info);
@@ -981,14 +1181,6 @@ bool score(string seqid,
   
   stringstream tmpOutput;
 
-//  string altSeq = ".";
-//  if(alts.size() == 1){
-//    altSeq = alts[0];
-//  }
-//  if(alts.size() > 1){
-//    altSeq = joinComma(alts);
-//  }
-
   tmpOutput  << seqid           << "\t"  ;       // CHROM
   tmpOutput  << (*pos)          << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
@@ -996,11 +1188,11 @@ bool score(string seqid,
   tmpOutput  << altSeq          << "\t"  ;       // ALT
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
-  //  tmpOutput  << "CO=" << con    << ";"   ;
   tmpOutput  << infoToPrint << ""  ;
   tmpOutput  << "CU=" << clusters.size() << ";"  ;
-  tmpOutput  << "NC=" << ncollapsed      << ";" << "\t";
-  
+  tmpOutput  << "NC=" << ncollapsed      << ";"  ;
+  tmpOutput  << "ED=" << ends   << ";";
+  tmpOutput  << "BE=" << bestEnd << "\t";
   tmpOutput  << "GT:GL:NR:NA:DP:CL:FR" << "\t" ;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
