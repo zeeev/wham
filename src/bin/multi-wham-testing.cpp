@@ -778,8 +778,6 @@ bool burnCigar(string s, vector<cigar> & cigs){
   unsigned int offset = 0;
   unsigned int index  = 0; 
 
-  cerr << "burning: " << s << endl;
-
   for(string::iterator it = s.begin() ; it != s.end(); it++){
 
     switch(*it){
