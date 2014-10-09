@@ -5,7 +5,7 @@ Structural variants (SVs) have largely been ignored in Genome Wide Association S
 
 ### INSTALLING WHAM
 
-WHAM builds in two simple steps... assuming that you have the depedancies.  Most linux enviroments have cmake, and OpenMP the two requiresments for WHAM.  If an install fails you might have to install a few libraries. 
+WHAM builds in two simple steps... assuming that you have the dependancies.  Most linux environments have cmake, and OpenMP the two requirements for WHAM.  If an install fails you might have to install a few libraries. 
 
 ```
 git clone --recursive https://github.com/jewmanchue/wham.git wham
@@ -38,7 +38,7 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ##INFO=<ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target">
 ##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup position ">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Pseudo genotype">
-##FORMAT=<ID=GL,Number=A,Type=Float,Desciption="Genotype likelihood ">
+##FORMAT=<ID=GL,Number=A,Type=Float,Description="Genotype likelihood ">
 ##FORMAT=<ID=FR,Number=1,Type=Float,Description="Fraction of reads with soft or hard clipping">
 ##FORMAT=<ID=NR,Number=1,Type=Integer,Description="Number of reads supporting no SV">
 ##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads supporting no SV">
@@ -54,11 +54,11 @@ The info field is comprised of 4 key value pairs.
 #### LRT:
 
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
-  If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  casess (target) and controls (background) bams must be specified using the -t & -b flags to get an LRT score.
+  If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  cases (target) and controls (background) bams must be specified using the -t & -b flags to get an LRT score.
   
 #### AF:
 
-  A comma seperated list of allele frequences of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoin as a bi-allelic variant and esimates the frequency based on the genotype counts.
+  A comma separated list of allele frequencies of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoint as a bi-allelic variant and estimates the frequency based on the genotype counts.
   
 ### GC:
 
