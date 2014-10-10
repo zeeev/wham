@@ -994,55 +994,44 @@ bool uniqClips(long int * pos,
 	       map<long int, vector < BamAlignment > > & clusters, 
 	       vector<string> & alts, int * collapse){
 
-  vector<string>  clippedSeqs;
+  map<string, vector<string> >  clippedSeqs;
 
   int bcount = 0;
   int fcount = 0;
 
-  for( vector < BamAlignment > ::iterator it = clusters[(*pos)].begin(); it != clusters[(*pos)].end(); it++){
+  for( vector < BamAlignment >::iterator it = clusters[(*pos)].begin(); 
+       it != clusters[(*pos)].end(); it++){
     
     if(((*it).AlignmentFlag & 0x0800) != 0 || !(*it).IsPrimaryAlignment()){
       continue;
     }
     
-
     vector< CigarOp > cd = (*it).CigarData;
   
     if((*it).Position == (*pos)){
-      string clip = (*it).QueryBases.substr(0, cd.front().Length - 1);
+      string clip = (*it).QueryBases.substr(0, cd.front().Length);
       reverse( clip.begin(), clip.end() );  
-      clippedSeqs.push_back(clip);
+      clippedSeqs["f"].push_back(clip);
       fcount += 1;
     }
     if((*it).GetEndPosition() == (*pos)){
-      string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length - 1);
-      clippedSeqs.push_back(clip);    
+      string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length );
+      clippedSeqs["b"].push_back(clip);    
       bcount += 1;
     }
   }
-  
-  sort(clippedSeqs.begin(), clippedSeqs.end(), sortStringSize);
 
-  for(unsigned int i = 0; i < clippedSeqs.size(); i++){
-    
-    int seqAsize = clippedSeqs[i].size();
-    
-    bool u = true;
 
-    for(unsigned int j = i + 1; j < clippedSeqs.size(); j++ ){
+  string key = "f";
+  if(bcount > fcount){
+    key = "b";
+  }
 
-      string seqB = clippedSeqs[j].substr(0, seqAsize );
-    
-      if(seqB.compare(clippedSeqs[i]) == 0){
-	u = false;
-	*collapse += 1;
-	break;
-      }
-    }
-    if(u == true){
-      alts.push_back(clippedSeqs[i]);
-      
-    }
+  for(vector<string>::iterator seqs = clippedSeqs[key].begin();
+      seqs != clippedSeqs[key].end(); seqs++
+      ){
+    //    cerr << "seq: " << *seqs << endl;
+    alts.push_back(*seqs);
   }
 
   return true;
@@ -1068,7 +1057,7 @@ string consensus(vector<string> & s, double * avg, double * nn){
 
     map<string, int> bases;
 
-    for(unsigned int i = 0; i < s.size(); i++){
+    for(unsigned int i = 0; i < s.size(); i++){      
       if( l >= s[i].size()){
 	continue;
       }
@@ -1092,6 +1081,8 @@ string consensus(vector<string> & s, double * avg, double * nn){
   }
 
   *avg = sl / double(s.size());
+
+  //  cerr << "con: " << ss.str() << endl;
 
   return ss.str();
 }
