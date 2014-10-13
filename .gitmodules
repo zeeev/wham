@@ -1,3 +1,6 @@
 [submodule "src/bamtools"]
 	path = src/bamtools
 	url = https://github.com/pezmaster31/bamtools.git
+[submodule "src/seqan"]
+	path = src/seqan
+	url = https://github.com/seqan/seqan.git

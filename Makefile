@@ -5,7 +5,7 @@
 
 CC=g++
 CFLAGS=-std=c++0x -Wall
-INCLUDE=-Isrc/lib -Isrc/bamtools/include
+INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm
 RUNTIME=-Wl,-rpath=src/bamtools/lib/

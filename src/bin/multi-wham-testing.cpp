@@ -10,8 +10,13 @@
 #include <omp.h>
 
 #include "api/BamMultiReader.h"
-#include "api/internal/bam/BamWriter_p.h"
 #include "readPileUp.h"
+
+// msa headers
+
+#include <seqan/align.h>
+#include <seqan/graph_msa.h>
+
 
 using namespace std;
 using namespace BamTools;
@@ -992,7 +997,7 @@ int otherBreak(long int * pos,
 
 bool uniqClips(long int * pos, 
 	       map<long int, vector < BamAlignment > > & clusters, 
-	       vector<string> & alts, int * collapse){
+	       vector<string> & alts){
 
   map<string, vector<string> >  clippedSeqs;
 
@@ -1030,7 +1035,7 @@ bool uniqClips(long int * pos,
   for(vector<string>::iterator seqs = clippedSeqs[key].begin();
       seqs != clippedSeqs[key].end(); seqs++
       ){
-    //    cerr << "seq: " << *seqs << endl;
+    cerr << "seq: " << *seqs << endl;
     alts.push_back(*seqs);
   }
 
@@ -1049,6 +1054,24 @@ string consensus(vector<string> & s, double * avg, double * nn){
     return s[0];
   }
 
+  
+  {
+    using namespace seqan;
+    
+    typedef String< Dna > TSequence;
+    StringSet<TSequence> seq;
+    
+    for(vector<string>::iterator seqs = s.begin();
+	seqs != s.end(); seqs++
+	){
+      appendValue(seq, *seqs);    
+    }
+    Graph<Alignment<StringSet<TSequence, Dependent<> > > > aliG(seq);
+    globalMsaAlignment(aliG, Blosum62(-1, -11));
+    cerr << aliG << endl;
+
+  }
+  
   stringstream ss;
 
   for(unsigned int l = 0; l < s.back().length(); l++){
@@ -1082,7 +1105,7 @@ string consensus(vector<string> & s, double * avg, double * nn){
 
   *avg = sl / double(s.size());
 
-  //  cerr << "con: " << ss.str() << endl;
+  cerr << "con: " << ss.str() << endl;
 
   return ss.str();
 }
@@ -1149,9 +1172,7 @@ bool score(string seqid,
 
   //  cerr << joinComma(alts);
   
-  int ncollapsed = 0;
-
-  uniqClips(pos, clusters, alts, &ncollapsed);
+  uniqClips(pos, clusters, alts);
 
   sort(alts.begin(), alts.end(), sortStringSize);
   
@@ -1179,7 +1200,7 @@ bool score(string seqid,
   tmpOutput  << "."             << "\t"  ;       // FILTER
   tmpOutput  << infoToPrint << ""  ;
   tmpOutput  << "CU=" << clusters.size() << ";"  ;
-  tmpOutput  << "NC=" << ncollapsed      << ";"  ;
+  tmpOutput  << "NC=" << alts.size()     << ";"  ;
   tmpOutput  << "ED=" << ends   << ";";
   tmpOutput  << "BE=" << bestEnd << "\t";
   tmpOutput  << "GT:GL:NR:NA:DP:CL:FR" << "\t" ;
