@@ -7,13 +7,14 @@
 #include <algorithm>
 #include "split.h"
 
+// openMP - swing that hammer
 #include <omp.h>
 
+// bamtools and my headers
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
 // msa headers
-
 #include <seqan/align.h>
 #include <seqan/graph_msa.h>
 
@@ -147,9 +148,13 @@ void printHeader(void){
   cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
   cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
-  cout << "##INFO=<ID=NALT,Number=2,Type=Integer,Description=\"Number of alternative pseudo alleles for target and background\">" << endl;
+  //  cout << "##INFO=<ID=NALT,Number=2,Type=Integer,Description=\"Number of alternative pseudo alleles for target and background\">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=ED,Numper=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos\">" << endl;
+  cout << "##INFO=<ID=BE,Number=2,Type=String,Description=\"Best end position: chr, position\">"                                       
+       << endl;
+  //  cout << "##INFO=<ID=LE,Number=1,Type=Integer,Description=\"Length of SV\">"
+       << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
   cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
@@ -1035,7 +1040,7 @@ bool uniqClips(long int * pos,
   for(vector<string>::iterator seqs = clippedSeqs[key].begin();
       seqs != clippedSeqs[key].end(); seqs++
       ){
-    cerr << "seq: " << *seqs << endl;
+    //    cerr << "seq: " << *seqs << endl;
     alts.push_back(*seqs);
   }
 
@@ -1044,7 +1049,7 @@ bool uniqClips(long int * pos,
 
 
 
-string consensus(vector<string> & s, double * avg, double * nn){
+string consensus(vector<string> & s, double * alnL, double * nn){
 
   if(s.empty()){
     return ".";
@@ -1053,12 +1058,14 @@ string consensus(vector<string> & s, double * avg, double * nn){
   if(s.size() == 1){
     return s[0];
   }
-
   
+  stringstream con;
   {
     using namespace seqan;
-    
+   
     typedef String< Dna > TSequence;
+    typedef Graph<Alignment<StringSet<TSequence, Dependent<> > > > TGraph;
+
     StringSet<TSequence> seq;
     
     for(vector<string>::iterator seqs = s.begin();
@@ -1066,48 +1073,46 @@ string consensus(vector<string> & s, double * avg, double * nn){
 	){
       appendValue(seq, *seqs);    
     }
-    Graph<Alignment<StringSet<TSequence, Dependent<> > > > aliG(seq);
+    TGraph aliG(seq);
     globalMsaAlignment(aliG, Blosum62(-1, -11));
-    cerr << aliG << endl;
 
-  }
-  
-  stringstream ss;
-
-  for(unsigned int l = 0; l < s.back().length(); l++){
+    String<char> align;
+    convertAlignment(aliG, align);
     
-    string base;
+    unsigned int nseq   = length(seq);
+    unsigned int colLen = length(align) / nseq;
+    
+    //    cerr << nseq << "\t" << colLen << endl;
+     
 
-    map<string, int> bases;
+    *alnL  = colLen;
 
-    for(unsigned int i = 0; i < s.size(); i++){      
-      if( l >= s[i].size()){
-	continue;
+    for(unsigned int z = 0 ; z < colLen; z++){
+      map<char, int> columnBases;
+      for(unsigned int s = 0; s < nseq; s++){
+	//	cerr << align[z + (s*colLen)] ;
+	if(align[z + (s*colLen)] != gapValue<char>()){
+	  columnBases[align[z + (s*colLen)]]++;
+	}
       }
-      base = s[i].substr(l, 1);
-      bases[base] = 1;
+      if(columnBases.size() == 1){
+	con << columnBases.begin()->first;
+      }
+      else{
+	*nn += 1;
+	con << "N";
+      }
+      // cerr << endl;
     }
-
-    if(bases.size() > 1){
-      ss << "N";
-      *nn += 1;
-    }
-    else{
-      ss << base;
-    }
+    
+//    cerr << endl;
+//    cerr << "con:" << con.str();
+//    cerr << endl;
+//
+//    cerr << aliG << endl;
+    
   }
-
-  double sl = 0;
-
-  for(unsigned int i = 0; i < s.size(); i++){
-    sl += s[i].length();
-  }
-
-  *avg = sl / double(s.size());
-
-  cerr << "con: " << ss.str() << endl;
-
-  return ss.str();
+  return con.str();
 }
 
 bool score(string seqid, 
@@ -1156,6 +1161,22 @@ bool score(string seqid,
     return true;
   }
 
+  vector<string> alts ; // pairBreaks;
+
+  uniqClips(pos, clusters, alts);
+
+  sort(alts.begin(), alts.end(), sortStringSize);
+
+  double avgL = 0;
+  double nn   = 0;
+
+  string altSeq = consensus(alts, &avgL, &nn);
+
+  if(nn/avgL > 0.1){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
   double nAlt = 0;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
@@ -1168,19 +1189,6 @@ bool score(string seqid,
     return true;
   }
   
-  vector<string> alts ; // pairBreaks;
-
-  //  cerr << joinComma(alts);
-  
-  uniqClips(pos, clusters, alts);
-
-  sort(alts.begin(), alts.end(), sortStringSize);
-  
-  double avgL = 0;
-  double nn   = 0;
-
-  string altSeq = consensus(alts, &avgL, &nn);
-
   info_field * info = new info_field; 
 
   initInfo(info);
