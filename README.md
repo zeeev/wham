@@ -81,6 +81,14 @@ The info field is comprised of 4 key value pairs.
   
   The number of soft-clipped segments there were collapsed into the consensus sequence.
   
+### ED:
+  
+  All the soft clipping clusters that could be the end position of the SV
+  
+### BE:
+
+  The best canidate endpoint clipping cluster based on parsimony
+  
 ====  
 
 The format field is comprised of 7 colon delimited fields.
