@@ -1072,7 +1072,7 @@ string consensus(vector<string> & s, double * alnL, double * nn){
 	}
       }
       if(columnBases.size() == 1){
-	// con << columnBases.begin()->first;
+	con << columnBases.begin()->first;
       }
       else{
 	*nn += 1;
