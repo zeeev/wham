@@ -72,7 +72,7 @@ The info field is comprised of seven key value pairs.
 
   WHAM does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.
   
-### CU:
+#### CU:
 
   WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. 
 
@@ -93,17 +93,17 @@ The info field is comprised of seven key value pairs.
 
 The format field is comprised of 7 colon delimited fields.
 
-##GT:
+####GT:
   A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.
-##GL:
+####GL:
   log10 genotype likelihood under a bi-allelic model.
-##FR:
+####FR:
   Fraction of the primary alignments that have soft-clipping.
-##NR:
+####NR:
   The number of reads that do not support any type of structural variant.
-##NA:
+####NA:
   The number of reads that do support any type of structural variant.
-###CL:
+#####CL:
   The number of soft clipped bases across all reads 
-###DP:
+####DP:
   The number of high-quality primary reads covering the position.
