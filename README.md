@@ -36,7 +36,10 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ##INFO=<ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic">
 ##INFO=<ID=AF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined">
 ##INFO=<ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target">
-##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup position ">
+##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup posi
+##INFO=<ID=ED,Numper=.,Type=String,Description="Colon separated list of potenial paired breakpoints, in the format: seqid,pos">
+##INFO=<ID=BE,Number=2,Type=String,Description="Best end position: seqid,position">
+##INFO=<ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus>
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Pseudo genotype">
 ##FORMAT=<ID=GL,Number=A,Type=Float,Description="Genotype likelihood ">
 ##FORMAT=<ID=FR,Number=1,Type=Float,Description="Fraction of reads with soft or hard clipping">
@@ -44,7 +47,8 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads supporting no SV">
 ##FORMAT=<ID=CL,Number=1,Type=Integer,Description="Number of bases that have been soft clipped">
 ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Number of reads with mapping quality greater than 0">
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878D_HiSeqX_R1.bam
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  /archive03/zkronenb/human_hc_wham/NA12878D_HiSeqX_R1.rm
+~
 ```
 
 ====
