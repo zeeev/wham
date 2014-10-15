@@ -57,7 +57,7 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 
 ====
 
-The info field is comprised of 4 key value pairs.
+The info field is comprised of seven key value pairs.
 
 #### LRT:
 
@@ -68,7 +68,7 @@ The info field is comprised of 4 key value pairs.
 
   A comma separated list of allele frequencies of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoint as a bi-allelic variant and estimates the frequency based on the genotype counts.
   
-### GC:
+#### GC:
 
   WHAM does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.
   
@@ -77,15 +77,15 @@ The info field is comprised of 4 key value pairs.
   WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. 
 
   
-### NC:
+#### NC:
   
   The number of soft-clipped segments there were collapsed into the consensus sequence.
   
-### ED:
+#### ED:
   
   All the soft clipping clusters that could be the end position of the SV
   
-### BE:
+#### BE:
 
   The best canidate endpoint clipping cluster based on parsimony
   
