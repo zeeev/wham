@@ -18,11 +18,15 @@ make
 usage statement:
 
 ```
-usage: WHAM -t <STRING> -b <STRING> -r <STRING>
+usage  : WHAM-BAM -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>
 
-option: t <STRING> -- comma separated list of target bam files
-option: b <STRING> -- comma separated list of background bam files
-option: r <STRING> -- a genomic region in the format "seqid:start-end"
+example: WHAM-BAM -x 20    -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
+
+required: t <STRING> -- comma separated list of target bam files
+option  : b <STRING> -- comma separated list of background bam files
+option  : r <STRING> -- a genomic region in the format "seqid:start-end"
+option  : x <INT>    -- set the number of threads, otherwise max
+option  : e <STRING> -- a bedfile that defines regions to score
 
 Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
 ```
