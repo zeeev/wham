@@ -18,7 +18,6 @@
 #include <seqan/align.h>
 #include <seqan/graph_msa.h>
 
-
 using namespace std;
 using namespace BamTools;
 
@@ -402,7 +401,7 @@ bool grabInsertLengths(string file){
   insertDists.mus[file] = mu;
   insertDists.sds[file] = sd;
 
-  cerr << "INFO: mean insert length, number of reads, file : "
+  cerr << "INFO: mean insert length, fragment standard deviation number of reads, file : "
        << insertDists.mus[file] << ", "
        << insertDists.sds[file] << ", "
        << i  << ", "
@@ -939,30 +938,14 @@ int otherBreak(long int * pos,
 
       burnCigar(chimera[3], c);
 
-      if(c.front().type == 'S' && c.back().type == 'S'){
-      
-	if(c.front().length > c.back().length){
-	  otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
-	}
-	else{
-	  long int endP = atoi(chimera[1].c_str());
-	  endPos(c, &endP);
-	  otherPositions[chimera[0]][endP]++;
-	  
-	}
-	continue;
-      }
-
       if(c.front().type == 'S'){
 	otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
       }
       if(c.back().type  == 'S'){
 	long int endP = atoi(chimera[1].c_str());
 	endPos(c, &endP);
-	otherPositions[chimera[0]][endP]++;
-	
-      }
- 
+	otherPositions[chimera[0]][endP]++;	
+      } 
     }
     
   }
@@ -1016,7 +999,6 @@ bool uniqClips(long int * pos,
   
     if((*it).Position == (*pos)){
       string clip = (*it).QueryBases.substr(0, cd.front().Length);
-      reverse( clip.begin(), clip.end() );  
       clippedSeqs["f"].push_back(clip);
       fcount += 1;
     }
@@ -1027,7 +1009,6 @@ bool uniqClips(long int * pos,
     }
   }
 
-
   string key = "f";
   if(bcount > fcount){
     key = "b";
@@ -1036,7 +1017,6 @@ bool uniqClips(long int * pos,
   for(vector<string>::iterator seqs = clippedSeqs[key].begin();
       seqs != clippedSeqs[key].end(); seqs++
       ){
-    //    cerr << "seq: " << *seqs << endl;
     alts.push_back(*seqs);
   }
 
@@ -1078,7 +1058,7 @@ string consensus(vector<string> & s, double * alnL, double * nn){
     unsigned int nseq   = length(seq);
     unsigned int colLen = length(align) / nseq;
     
-    //    cerr << nseq << "\t" << colLen << endl;
+    //      cerr << nseq << "\t" << colLen << endl;
      
 
     *alnL  = colLen;
@@ -1086,26 +1066,26 @@ string consensus(vector<string> & s, double * alnL, double * nn){
     for(unsigned int z = 0 ; z < colLen; z++){
       map<char, int> columnBases;
       for(unsigned int s = 0; s < nseq; s++){
-	//	cerr << align[z + (s*colLen)] ;
+	// cerr << align[z + (s*colLen)] ;
 	if(align[z + (s*colLen)] != gapValue<char>()){
 	  columnBases[align[z + (s*colLen)]]++;
 	}
       }
       if(columnBases.size() == 1){
-	con << columnBases.begin()->first;
+	// con << columnBases.begin()->first;
       }
       else{
 	*nn += 1;
 	con << "N";
       }
-      // cerr << endl;
+      //       cerr << endl;
     }
     
-//    cerr << endl;
-//    cerr << "con:" << con.str();
-//    cerr << endl;
-//
-//    cerr << aliG << endl;
+    // cerr << endl;
+    // cerr << "con:" << con.str();
+    // cerr << endl;
+    // 
+    // cerr << aliG << endl;
     
   }
   return con.str();
@@ -1161,7 +1141,7 @@ bool score(string seqid,
 
   uniqClips(pos, clusters, alts);
 
-  sort(alts.begin(), alts.end(), sortStringSize);
+  //  sort(alts.begin(), alts.end(), sortStringSize);
 
   double avgL = 0;
   double nn   = 0;
@@ -1299,22 +1279,16 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 	if(cd.front().Type == 'S' ){
 	  currentPos = al.Position;
 	  clipped = true;
-	  //	  cerr << al.Name << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
 	}
 
 	if(cd.back().Type == 'S' && ! clipped){
           currentPos = al.GetEndPosition();
           clipped = true;
-	  //          cerr << al.Name << "\t" << al.Position << "\t" << al.GetEndPosition() << endl;
 	}
-
-	// gather all the reads covering the current softClipped location.
 
        	while(al.Position <= currentPos && getNextAl && clipped){
 	  getNextAl = All.GetNextAlignment(al);
 	  
-	  //	  cerr << "Inner: " << al.Name << endl;
-
 	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate() && getNextAl){
 	    
 	    allPileUp.processAlignment(al, currentPos);
@@ -1488,11 +1462,11 @@ int main(int argc, char** argv) {
 	continue;
       }
       
-      for(;start < ( (*sit).RefLength - 500) ; start += 10000000){
+      for(;start < ( (*sit).RefLength - 500) ; start += 1000000){
 	regionDat * chunk = new regionDat;
 	chunk->seqidIndex = seqidIndex;
 	chunk->start      = start;
-	chunk->end        = start + 10000000 ;
+	chunk->end        = start + 1000000 ;
 	regions.push_back(chunk);
       }
       regionDat * lastChunk = new regionDat;
