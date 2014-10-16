@@ -403,7 +403,7 @@ bool grabInsertLengths(string file){
   insertDists.mus[file] = mu;
   insertDists.sds[file] = sd;
 
-  cerr << "INFO: mean insert length, fragment standard deviation number of reads, file : "
+  cerr << "INFO: mean insert length, fragment standard deviation, number of reads, file : "
        << insertDists.mus[file] << ", "
        << insertDists.sds[file] << ", "
        << i  << ", "
