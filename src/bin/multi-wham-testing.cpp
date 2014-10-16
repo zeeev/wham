@@ -233,6 +233,7 @@ string join(vector<string> strings){
 
 void printVersion(void){
   cerr << "Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
+  cerr << "Github version: " << VERSION << endl;
   cerr << endl;
 }
 
@@ -1082,12 +1083,10 @@ string consensus(vector<string> & s, double * alnL, double * nn){
       //       cerr << endl;
     }
     
-    // cerr << endl;
-    // cerr << "con:" << con.str();
-    // cerr << endl;
-    // 
-    // cerr << aliG << endl;
-    
+    //if(con.str().size() < 3 || con.str().empty()){
+    //  cerr << aliG << endl;
+    //  cerr << "con: " << con.str() << endl;
+    //}
   }
   return con.str();
 }
@@ -1126,6 +1125,12 @@ bool score(string seqid,
   string ends, bestEnd;
   int otherSeqids = otherBreak(pos, cluster_pair, ends, bestEnd);  
   
+
+  if(otherSeqids > 3){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
   if(ends.empty()){
     ends = "nan";
   }
@@ -1133,16 +1138,9 @@ bool score(string seqid,
     bestEnd = "nan";
   }
 
-  if(otherSeqids > 3){
-    cleanUp(ti, localOpts);
-    return true;
-  }
-
   vector<string> alts ; // pairBreaks;
 
   uniqClips(pos, clusters, alts);
-
-  //  sort(alts.begin(), alts.end(), sortStringSize);
 
   double avgL = 0;
   double nn   = 0;
