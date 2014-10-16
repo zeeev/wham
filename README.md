@@ -13,6 +13,13 @@ cd wham
 make
 ```
 
+### WHAM INPUT
+
+WHAM uses soft clipping information and supplementary alignments provided by mapping software. 
+We recommend that you use BWA-mem for accurate structural variant calls.  BAM files must be
+sorted, duplicates marked or removed and the BAM files need to be indexed.  The sorted
+BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later.  
+
 ### RUNNING WHAM
 
 usage statement:
