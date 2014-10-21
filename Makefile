@@ -5,7 +5,7 @@
 
 CC=g++
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS=-std=c++0x -Wall
+CFLAGS=-std=c++0x -Wall -DVERSION=\"$(GIT_VERSION)\"
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm
@@ -26,14 +26,5 @@ buildWHAMDUMPER:
 buildWHAMBAMGENE:
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing-gene.cpp  $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-GENE $(RUNTIME)
 
-
-runTest:
-	bin/WHAM-BAM  -r scaffold974:0-1000000000 -t /home/mshapiro/data/pigeon/bams/large_bams/COLcalRAZDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRARDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAGDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAWDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAQDIAAPE.sort.rmdup.realn.bam  -b /home/mshapiro/data/pigeon/bams/large_bams/COLcalRASDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/PIGtkyRDIDIAAPEI-7.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRADDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAMDIAAPE.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRAODIAAPE_REP.sort.rmdup.realn.bam,/home/mshapiro/data/pigeon/bams/large_bams/COLcalRALDIAAPE.sort.rmdup.realn.bam  > t.txt 2> t.err
-#cat scaff79.wham.vcf |  perl -lane '$_ =~/LRT=(.*?);/; print "$F[1]\t$1"' > t2.txt
-
 clean:
-
-	-@rm t2.txt
-	-@rm t.txt
-	-@rm t.err
 	-@rm *.a
