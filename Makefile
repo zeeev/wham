@@ -4,6 +4,7 @@
 ######################################
 
 CC=g++
+GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 CFLAGS=-std=c++0x -Wall
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
