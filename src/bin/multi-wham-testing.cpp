@@ -232,7 +232,7 @@ string join(vector<string> strings){
 }
 
 void printVersion(void){
-  cerr << "Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
+  cerr << "Version 1.0.0 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
   cerr << "Github version: " << VERSION << endl;
   cerr << endl;
 }
@@ -1177,7 +1177,7 @@ bool score(string seqid,
   tmpOutput  << seqid           << "\t"  ;       // CHROM
   tmpOutput  << (*pos)          << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
-  tmpOutput  << "NA"             << "\t" ;       // REF
+  tmpOutput  << "N"             << "\t" ;       // REF
   tmpOutput  << altSeq          << "\t"  ;       // ALT
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER

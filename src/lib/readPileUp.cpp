@@ -61,7 +61,6 @@ void readPileUp::purgePast(void){
 
 std::list<BamAlignment> readPileUp::pileup(void){
   readPileUp::purgePast();
-  //  BamTools::BamAlignment last_read_in_pile =  currentData.back();
   return currentData;
 }
 
