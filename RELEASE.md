@@ -10,7 +10,7 @@ Released October 20th 2014
 1. Identification of SV breakpoints.
 2. Identification of soft-clipped consensus.
 3. Provides the end of breakpoints using supplement alignments.
-4. Provides genotypes and genotype likelihoods for mulitple individuals.
+4. Provides genotypes and genotype likelihoods for multiple individuals.
 5. Multi-threading enabled, supported by OpenMP.
 
 #####Known Issues:
