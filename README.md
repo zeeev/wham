@@ -13,6 +13,15 @@ git checkout v1.0.0
 cd wham
 make
 ```
+If you get an error while downloading wham try https:
+
+```
+git clone --recursive https://github.com/jewmanchue/wham.git
+git checkout v1.0.0
+cd wham
+make
+```
+
 To make sure you checked out the correct branch you should see v1.0.0 by typing:
 
 ```
