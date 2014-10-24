@@ -12,6 +12,7 @@ LIBS=-L./ -lbamtools -fopenmp -lz -lm
 RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
 all: createBin bamtools libbamtools.a buildWHAMBAM clean
+debug: createBin bamtools libbamtools.a buildWHAMBAMD clean
 
 createBin:
 	-mkdir bin
@@ -20,7 +21,9 @@ bamtools:
 libbamtools.a: bamtools
 	cp src/bamtools/lib/libbamtools.a .
 buildWHAMBAM: libbamtools.a
-	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing.cpp $(INCLUDE) $(LIBS)  -o $(OUTFOLD)WHAM-BAM $(RUNTIME)
+	$(CC) $(CFLAGS) src/lib/*cpp  src/bin/multi-wham-testing.cpp $(INCLUDE) $(LIBS)  -o $(OUTFOLD)WHAM-BAM $(RUNTIME)
+buildWHAMBAMD: libbamtools.a
+	$(CC) $(CFLAGS) -g -DDEBUG src/lib/*cpp  src/bin/multi-wham-testing.cpp $(INCLUDE) $(LIBS)  -o $(OUTFOLD)WHAM-BAM $(RUNTIME)
 buildWHAMDUMPER:
 	$(CC) $(CFLAGS) -g src/lib/*cpp   src/bin/multi-wham.cpp $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-DUMPER $(RUNTIME)
 buildWHAMBAMGENE:

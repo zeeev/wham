@@ -142,6 +142,20 @@ void initIndv(indvDat * s){
   s->MapQ.clear();
 }
 
+string collapseCigar(vector<CigarOp> & v){
+  
+  stringstream ss;
+
+  for(vector<CigarOp>::iterator it = v.begin(); it != v.end(); it++){
+    ss << (*it).Length;
+    ss << (*it).Type;
+    
+  }
+  
+  return ss.str();
+
+}
+
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
   cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
@@ -207,8 +221,15 @@ string printIndvDat(  indvDat * d ){
   for(vector< BamAlignment >::iterator it = d->alignments.begin(); it != d->alignments.end(); it++){
    
     ss   << " " << (*it).Name << " " 
+         << (*it).RefID    << " " 
 	 << (*it).Position << " " 
 	 << (*it).GetEndPosition() << " "
+	 << (*it).Position + (*it).Length << " "
+         << (*it).MapQuality << " " 
+         << (*it).MateRefID    << " " 
+         << (*it).MatePosition << " " 
+	 << collapseCigar((*it).CigarData) << " " 
+         << (*it).AlignmentFlag << " " 
 	 << (*it).QueryBases 
 	 << endl;
   }
@@ -627,16 +648,17 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     vector< CigarOp > cd = (*r).CigarData;
 
+    // supplement and secondary alignment
     if( ((*r).AlignmentFlag & 0x0800) != 0 || ! (*r).IsPrimaryAlignment()){
 
       if(cd.back().Type == 'H'){
-	int location = (*r).GetEndPosition();
+	long int location = (*r).GetEndPosition();
 	clusters[location].push_back((*r));
 	cluster_pair[location].push_back((*r));
       }
 
       if(cd.front().Type == 'H'){
-	int location = (*r).Position;
+	long int location = (*r).Position;
 	clusters[location].push_back((*r));
 	cluster_pair[location].push_back((*r));
       }
@@ -646,7 +668,7 @@ bool loadIndv(map<string, indvDat*> & ti,
     string fname = (*r).Filename;
     
     int bad = 0;
-    
+
     if(cd.back().Type == 'S' ){
 
       string seq = (*r).QueryBases.substr((*r).Length - cd.back().Length);
@@ -654,10 +676,8 @@ bool loadIndv(map<string, indvDat*> & ti,
 	continue;
       }
 
-      //      cerr << seq << endl;
-
       ti[fname]->clipped += cd.back().Length;
-      int location = (*r).GetEndPosition();
+      long int location = (*r).GetEndPosition();
       ti[fname]->cluster[location].push_back((*r).Name);
       clusters[location].push_back((*r));
       ti[fname]->nClipping +=1;
@@ -675,7 +695,7 @@ bool loadIndv(map<string, indvDat*> & ti,
       }
 
       ti[fname]->clipped += cd.front().Length;
-      int location = (*r).Position;
+      long int location = (*r).Position;
       ti[fname]->cluster[location].push_back((*r).Name);
       clusters[location].push_back((*r));
       ti[fname]->nClipping +=1;
@@ -694,6 +714,20 @@ bool loadIndv(map<string, indvDat*> & ti,
       ti[fname]->mateMissing  += (!(*r).IsMateMapped());
       bad = 1;
     }
+
+    string saTag;
+
+    if((*r).GetTag("SA", saTag)){
+      if(cd.back().Type == 'S'){
+        long int location = (*r).GetEndPosition();
+        cluster_pair[location].push_back((*r));
+      }
+      if(cd.front().Type == 'S'){
+        long int location = (*r).Position;
+        cluster_pair[location].push_back((*r));
+      }
+    }
+
     
     if((*r).IsMapped() && (*r).IsMateMapped()){
 
@@ -907,6 +941,9 @@ int otherBreak(long int * pos,
 	       string & otherside,
 	       string & bestEnd){
   
+#ifdef DEBUG
+  cerr << "N secondary:" << supliment.size() << endl;
+#endif
 
   if(supliment[*pos].empty()){
     return 0;
@@ -914,16 +951,22 @@ int otherBreak(long int * pos,
 
   map<string, map< long int, int > > otherPositions;
 
+#ifdef DEBUG
+  cerr << "Chimeric mapping:" << endl;
+#endif
+
   for(vector<BamAlignment>::iterator it = supliment[*pos].begin(); 
       it != supliment[*pos].end(); it++){
 
     string saTag;
-
     if(! (*it).GetTag("SA", saTag)){
       cerr << "no sa\n";
-      return 0;
-
+      return false;
     }
+    
+#ifdef DEBUG
+    cerr << saTag << endl;
+#endif
 
     vector<string> saInfo = split(saTag, ";");
 
@@ -934,6 +977,7 @@ int otherBreak(long int * pos,
 	break;
       }
       
+
       vector<string> chimera  = split((*ch), ",");
 
       vector<cigar> c;
@@ -1027,7 +1071,7 @@ bool uniqClips(long int * pos,
 
 
 
-string consensus(vector<string> & s, double * alnL, double * nn){
+string consensus(vector<string> & s, double * nn){
 
   if(s.empty()){
     return ".";
@@ -1038,6 +1082,7 @@ string consensus(vector<string> & s, double * alnL, double * nn){
   }
   
   stringstream con;
+  
   {
     using namespace seqan;
    
@@ -1060,15 +1105,9 @@ string consensus(vector<string> & s, double * alnL, double * nn){
     unsigned int nseq   = length(seq);
     unsigned int colLen = length(align) / nseq;
     
-    //      cerr << nseq << "\t" << colLen << endl;
-     
-
-    *alnL  = colLen;
-
     for(unsigned int z = 0 ; z < colLen; z++){
       map<char, int> columnBases;
       for(unsigned int s = 0; s < nseq; s++){
-	// cerr << align[z + (s*colLen)] ;
 	if(align[z + (s*colLen)] != gapValue<char>()){
 	  columnBases[align[z + (s*colLen)]]++;
 	}
@@ -1080,15 +1119,16 @@ string consensus(vector<string> & s, double * alnL, double * nn){
 	*nn += 1;
 	con << "N";
       }
-      //       cerr << endl;
     }
-    
-    //if(con.str().size() < 3 || con.str().empty()){
-    //  cerr << aliG << endl;
-    //  cerr << "con: " << con.str() << endl;
-    //}
+  
+  
+#ifdef DEBUG
+  cerr << "seqAn alignment" << endl;
+  cerr << aliG << endl;
+#endif 
   }
-  return con.str();
+  
+  return con.str(); 
 }
 
 bool score(string seqid, 
@@ -1117,7 +1157,7 @@ bool score(string seqid,
   
   loadIndv(ti, totalDat, localOpts, localDists, pos, clusters, cluster_pair, &primary, &frontS, &backS);
   
-  if(clusters[(*pos)].size() < 3 && cluster_pair[(*pos)].size() < 1){
+  if(clusters[(*pos)].size() < 3 && cluster_pair[(*pos)].size() < 2){
     cleanUp(ti, localOpts);
     return true;
   }
@@ -1142,12 +1182,11 @@ bool score(string seqid,
 
   uniqClips(pos, clusters, alts);
 
-  double avgL = 0;
   double nn   = 0;
 
-  string altSeq = consensus(alts, &avgL, &nn);
+  string altSeq = consensus(alts, &nn);
 
-  if(nn/avgL > 0.1){
+  if(altSeq.size() < 11){
     cleanUp(ti, localOpts);
     return true;
   }
@@ -1156,7 +1195,10 @@ bool score(string seqid,
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
     processGenotype(ti[localOpts.all[t]], &nAlt);
-    // cerr << *pos << endl << printIndvDat(ti[localOpts.all[t]]) << endl;
+    #ifdef DEBUG
+    cerr << "position: " << *pos << endl; 
+    cerr << printIndvDat(ti[localOpts.all[t]]) << endl;
+    #endif 
   }
   
   if(nAlt == 0 ){
@@ -1210,7 +1252,12 @@ bool score(string seqid,
   }
   
   tmpOutput << endl;
+
+  #ifdef DEBUG
+  cerr << "line: " << tmpOutput.str();
+  #endif 
   
+
   results.append(tmpOutput.str());
   
   //  cerr << tmpOutput.str() << endl;
@@ -1336,6 +1383,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 
   omp_set_lock(&lock);
 
+
   cout << regionResults;
 
   omp_unset_lock(&lock);
@@ -1387,6 +1435,10 @@ bool loadBed(vector<regionDat*> & features, RefVector seqs){
 }
 
 int main(int argc, char** argv) {
+
+#ifdef DEBUG
+  cerr << "INFO: WHAM is in debug mode" << endl;
+#endif
 
   omp_init_lock(&lock);
 
