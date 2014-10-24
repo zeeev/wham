@@ -9,7 +9,7 @@ WHAM builds in two simple steps... assuming that you have the dependancies.  Mos
 
 ```
 git clone --recursive git@github.com:jewmanchue/wham.git
-git checkout v1.0.0
+git checkout v1.1.0
 cd wham
 make
 ```
@@ -17,7 +17,7 @@ If you get an error while downloading wham try https:
 
 ```
 git clone --recursive https://github.com/jewmanchue/wham.git
-git checkout v1.0.0
+git checkout v1.1.0
 cd wham
 make
 ```
