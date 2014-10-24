@@ -18,6 +18,7 @@ Released October 20th 2014
 1. Improvements to speed and memory usage.
 2. Improve WHAM's breakpoint joining.
 3. Improve the LRT for association testing.
+<<<<<<< HEAD
 
 #### Version 1.1.0
 

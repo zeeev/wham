@@ -1,6 +1,6 @@
 ### WHAT IS WHAM?
 
-Structural variants (SVs) have largely been ignored in Genome Wide Association Studies.  SVs are difficult to call from NGS data.  Often the same SV allele is assigned different breakpoints across individuals.  WHAM takes a different approach by directly applying association tests to BAM files.  WHAM does not call SVs, but rather examines the patterns of mate pair mapping across cases and controls.  If there is an enrichment of reads supporting a SV in the cases or controls WHAM performs an association test.
+Structural variants (SVs) have largely been ignored in Genome Wide Association Studies.  SVs are difficult to call from NGS data.  Often the same SV allele is assigned different breakpoints across individuals.  WHAM takes a different approach by directly applying association tests to BAM files.  WHAM calls the breakpoints of SVs by examining patters of mate pair mapping across cases and controls.  If there is an enrichment of reads supporting a SV in the cases or controls WHAM performs an association test.
 
 
 ### INSTALLING WHAM
@@ -8,10 +8,26 @@ Structural variants (SVs) have largely been ignored in Genome Wide Association S
 WHAM builds in two simple steps... assuming that you have the dependancies.  Most linux environments have cmake, and OpenMP the two requirements for WHAM.  If an install fails you might have to install a few libraries. 
 
 ```
-git clone --recursive https://github.com/jewmanchue/wham.git wham
+git clone --recursive git@github.com:jewmanchue/wham.git
+git checkout v1.0.0
 cd wham
 make
 ```
+If you get an error while downloading wham try https:
+
+```
+git clone --recursive https://github.com/jewmanchue/wham.git
+git checkout v1.0.0
+cd wham
+make
+```
+
+To make sure you checked out the correct branch you should see v1.0.0 by typing:
+
+```
+git name-rev --tags --name-only $(git rev-parse HEAD)
+```
+
 
 ### WHAM INPUT
 
