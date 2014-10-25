@@ -1091,11 +1091,16 @@ string consensus(vector<string> & s, double * nn){
 
     StringSet<TSequence> seq;
     
-    for(vector<string>::iterator seqs = s.begin();
-	seqs != s.end(); seqs++
-	){
-      appendValue(seq, *seqs);    
+    int index = 0;
+
+    for(int clips = s.size() -1; clips > -1; clips--){
+      appendValue(seq, s[clips]);          
+      index+=1;
+      if(index > 19){
+	break;
+      }
     }
+    
     TGraph aliG(seq);
     globalMsaAlignment(aliG, Blosum62(-1, -11));
 
@@ -1120,8 +1125,7 @@ string consensus(vector<string> & s, double * nn){
 	con << "N";
       }
     }
-  
-  
+    
 #ifdef DEBUG
   cerr << "seqAn alignment" << endl;
   cerr << aliG << endl;
@@ -1187,6 +1191,11 @@ bool score(string seqid,
   string altSeq = consensus(alts, &nn);
 
   if(altSeq.size() < 11){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
+  if(nn / double(altSeq.size()) > 0.30){
     cleanUp(ti, localOpts);
     return true;
   }
@@ -1310,10 +1319,6 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
     
     while(clipped == false && getNextAl){
       
-      if(allPileUp.currentData.size() > 10000){
-	allPileUp.purgePast();
-      }
-
       getNextAl = All.GetNextAlignment(al);
       
       if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate()){
