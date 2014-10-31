@@ -18,7 +18,7 @@ Released October 20th 2014
 1. Improvements to speed and memory usage.
 2. Improve WHAM's breakpoint joining.
 3. Improve the LRT for association testing.
-<<<<<<< HEAD
+
 
 #### Version 1.1.0
 
@@ -41,3 +41,23 @@ Same as Version 1.0.0
 1. Now using discordant mate-pairs correctly.  
 2. Major improvements to accuracy on simulated data
 3. More SVs have paired breakpoints
+
+
+#### Version 1.2.0
+
+Released October 31th 2014
+
+#####Features:
+1. Increased overall accurancy of SV calls
+2. Added attributes to VCF file for SV type classification
+3. Added utils/classifier_parse.py for SV classification 
+4. Added functionality to readPileUp Class
+
+#####Known Issues:
+Same as Version 1.1.0
+
+#####Future efforts:
+Same as Version 1.1.0
+
+#####Bug fixes:
+

@@ -1,0 +1,73 @@
+The following README contains information on the classifier_parse.py
+
+Developed by EJ Osborne and Z. Kronenberg
+
+	  ej.osborne1@gmail.com; zev.kronenberg@gmail.com
+
+##############
+USAGE: 
+##############
+
+For help:
+
+    python classifier_parse.py -h
+
+
+Runs RandomForest classifier on WHAM output VCF files to classify structural
+variant type. Appends WC and WP flags for user to explore structural variant
+calls. The output is a VCF file written to standard out.
+
+positional arguments:
+  VCF              User supplied VCF with WHAM variants; VCF needs AT field
+                   data
+  training_matrix  training dataset for classifier derived from simulated read
+                   dataset
+
+optional arguments:
+  -h, --help       show this help message and exit
+
+
+Typical usage:
+
+  python classifier_parse.py [VCF file] [training dataset] 
+  	 #In this default mode, the new VCF file with SV calls will be written
+	 #standard out
+  python classifier_parse.py [VCF file] [training dataset] > [output VCF]
+  	 # the standard out can be re-directed to an output VCF file with the
+	 # '>' sign as above
+  python classifier parse.py X.vcf WHAM_training_data.txt > out.vcf
+
+#######
+OUTPUT:
+#######
+
+The new output VCF file has two new FIELDS appended to the VCF file, WC and WP
+which stand for:
+
+WC - "WHAM CALL" : SV TYPE
+WP - "WHAM PROBABILITY" : PROBABILITIES FROM RANDOM FOREST MODEL FOR EACH
+   - IMPLEMENTED SV TYPE. CHECK DOCS FOR DETAILS ON WHICH TYPES ARE CURRENTLY
+   - IMPLEMENTED. 
+
+
+##############
+DEPENDENCIES:
+##############
+
+Your python distirbution will need to run scikit-learn for the RandomForest 
+modeling. Information can be obtained here: 
+
+http://scikit-learn.org/stable/
+
+All code was developed on Python2.7 Anaconda distribution:
+
+http://continuum.io/downloads
+
+
+##############
+TRAINING DATA:
+##############
+We supply a training dataset deirved form simulated read data. The file,
+with its supplied md5sum is:
+
+     33911b022dcfca389ade36973ecbaa8e  WHAM_training_data.txt
