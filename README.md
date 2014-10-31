@@ -70,7 +70,7 @@ Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
 
 #### Running on test data
 
-We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory.
+We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory. Note that the commands scroll horizontally. 
 
 ```
 ./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam > test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf 
