@@ -165,13 +165,12 @@ void printHeader(void){
   cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos\">" << endl;
   cout << "##INFO=<ID=BE,Number=2,Type=String,Description=\"Best end position: chr, position\">"                  << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
-  cout << "##INFO=<ID=AT,Number=13,Type=Float,Description=\"Attributes for classification\">"
+  cout << "##INFO=<ID=AT,Number=13,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
   cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
-  //  cout << "##FORMAT=<ID=CL,Number=1,Type=Integer,Description=\"Number of bases that have been soft clipped\">"                                            << endl;
   cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
