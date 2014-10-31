@@ -76,7 +76,7 @@ We have supplied a test dataset for you to test your installation and get famili
 ./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam > test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf 
 python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf utils/WHAM_training_data.txt > test/simulations/inv-5xsimA.sort.rmdup.chr22.CALLS.vcf
 ```
-The first command runs WHAM on your input bam file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call as a specific SV type (insertions, deletions, etc.) that can be retrieved from the VCF file with a new field key 'WC'.
+The first command runs WHAM on your input bam file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call as a specific SV type (insertions, deletions, etc.) that can be retrieved from the VCF file with a new key 'WC' in the info field.
 
 ### UNDERSTANDING WHAM OUTPUT
 
