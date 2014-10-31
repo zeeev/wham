@@ -7,9 +7,24 @@ Structural variants (SVs) have largely been ignored in Genome Wide Association S
 
 WHAM builds in two simple steps... assuming that you have the dependancies.  Most linux environments have cmake, and OpenMP the two requirements for WHAM.  If an install fails you might have to install a few libraries. 
 
+#### Dependencies
+
+For classification of SV variant types, a python distribution with the scikit-learn and argparse packages are rquired. These come standard with the Anaconda release of python, which can be obtained here:
+
+http://continuum.io/downloads
+
+If you want to continue with your current python ditribution use the following commands (NOTE: requires Python (>= 2.6 or >= 3.3), NumPy (>= 1.6.1), SciPy (>= 0.9) :
+
+```
+easy_install argparse
+pip install -U numpy scipy scikit-learn
+```
+
+After dependency installation, clone the git repository with the following commands:
+
 ```
 git clone --recursive git@github.com:jewmanchue/wham.git
-git checkout v1.1.0
+git checkout v1.2.0
 cd wham
 make
 ```
@@ -17,7 +32,7 @@ If you get an error while downloading wham try https:
 
 ```
 git clone --recursive https://github.com/jewmanchue/wham.git
-git checkout v1.1.0
+git checkout v1.2.0
 cd wham
 make
 ```
