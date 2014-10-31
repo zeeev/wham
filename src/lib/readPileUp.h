@@ -11,10 +11,11 @@
 
 #include  "api/api_global.h"
 #include  "api/BamReader.h"
+#include  "split.h"
 
 #include <list>
-
-
+#include <map>
+#include <vector>
 
 class readPileUp {
     
@@ -25,17 +26,58 @@ class readPileUp {
   long int  CurrentStart;
   std::list <BamTools::BamAlignment> currentData;
 
-  readPileUp() : CurrentId(0) , CurrentPos(0) {};
-  void processAlignment( BamTools::BamAlignment Current_alignment, long int pos);
+  std::map <std::string, int> odd;
+  std::map <long int, int > primaryCount, supplementCount, allCount;
+  std::map <long int, std::vector<BamTools::BamAlignment> > primary, supplement;
+
+  int numberOfReads;
+
+  // split read info
+  int nsplitRead;
+  int nsplitReadCrossChr;
+  int nf1SameStrand;
+  int nf2SameStrand;
+  int nf1f2SameStrand;
+  int nsplitMissingMates;
+
+  // discordant reads
+  int nDiscordant;
+  int nsameStrandDiscordant;
+  int ndiscordantCrossChr;
+
+  // paired info
+  int nPaired      ;
+  int nMatesMissing;
+  int nSameStrand  ;
+  int nCrossChr    ;
+
+  //clustered info
+  int nSoftClipped ;
+  int nClippedFront;
+  int nClippedBack ;
+  
+  readPileUp() ;
+  ~readPileUp();
+
+  bool clusterFrontOrBackPrimary(BamTools::BamAlignment &, bool, std::string&);
+  bool processSplitRead(BamTools::BamAlignment&, std::string&);
+  bool processDiscordant(BamTools::BamAlignment &, std::string&);
+  bool processSupplement(BamTools::BamAlignment &, std::string&);
+  bool processMissingMate(BamTools::BamAlignment &, std::string&);
+  bool processProperPair(BamTools::BamAlignment &, std::string&);
+
+  void processAlignment( BamTools::BamAlignment, long int);
+  void processPileup(long int *);
+  void printPileUp(void);
   void purgeAll(void);
   void purgePast(void);
-  bool softClipAtEnds(void);
+  void clearStats(void);
+  void clearClusters(void);
   std::list<BamTools::BamAlignment> pileup(void);
   int  currentPos(void);
   int  currentStart(void);
-  ~readPileUp();
+  int  nReads(void);
 };
-
 
 #endif
 
