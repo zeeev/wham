@@ -23,16 +23,16 @@ After dependency installation, clone the git repository with the following comma
 
 ```
 git clone --recursive git@github.com:jewmanchue/wham.git
-git checkout v1.2.0
 cd wham
+git checkout v1.2.0
 make
 ```
 If you get an error while downloading wham try https:
 
 ```
 git clone --recursive https://github.com/jewmanchue/wham.git
-git checkout v1.2.0
 cd wham
+git checkout v1.2.0
 make
 ```
 
