@@ -1132,25 +1132,25 @@ bool score(string seqid,
 
   string ends, bestEnd, bestSeqid;
 
-  int otherBreakPointCount = 0;
-  long int otherBreakPointPos   = 0;
+  int otherBreakPointCount    = 0;
+  long int otherBreakPointPos = 0;
 
   int otherSeqids = otherBreak(pos, totalDat.supplement, ends, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
-  if(otherSeqids > 2){
+  if(otherSeqids > 3){
     return true;
   }
-  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
-    if(otherBreakPointCount < 2){
-      return true;
-    }
-  }
-
-  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
-    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
-      return true;
-    }
-  }
+//  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
+//    if(otherBreakPointCount < 2){
+//      return true;
+//    }
+//  }
+//
+//  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
+//    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
+//      return true;
+//    }
+//  }
   
   
 
