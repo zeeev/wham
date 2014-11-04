@@ -16,24 +16,23 @@ http://continuum.io/downloads
 If you want to continue with your current python ditribution use the following commands (NOTE: requires Python (>= 2.6 or >= 3.3), NumPy (>= 1.6.1), SciPy (>= 0.9) :
 
 ```
-easy_install argparse
-pip install -U numpy scipy scikit-learn
+pip install -U numpy scipy scikit-learn argparse
 ```
 
 After dependency installation, clone the git repository with the following commands:
 
 ```
 git clone --recursive git@github.com:jewmanchue/wham.git
-git checkout v1.2.0
 cd wham
+git checkout v1.2.0
 make
 ```
 If you get an error while downloading wham try https:
 
 ```
 git clone --recursive https://github.com/jewmanchue/wham.git
-git checkout v1.2.0
 cd wham
+git checkout v1.2.0
 make
 ```
 
@@ -68,6 +67,16 @@ option  : e <STRING> -- a bedfile that defines regions to score
 
 Version 0.0.1 ; Zev Kronenberg; zev.kronenberg@gmail.com
 ```
+
+#### Running on test data
+
+We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory. Note that the commands scroll horizontally. 
+
+```
+./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam > test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf 
+python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf utils/WHAM_training_data.txt > test/simulations/inv-5xsimA.sort.rmdup.chr22.CALLS.vcf
+```
+The first command runs WHAM on your input bam file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call as a specific SV type (insertions, deletions, etc.) that can be retrieved from the VCF file with a new key 'WC' in the info field.
 
 ### UNDERSTANDING WHAM OUTPUT
 
