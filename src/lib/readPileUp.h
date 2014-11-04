@@ -32,6 +32,9 @@ class readPileUp {
 
   int numberOfReads;
 
+  // internal shit
+  int internalInsertion;
+  int internalDeletion ;
   // split read info
   int nsplitRead;
   int nsplitReadCrossChr;

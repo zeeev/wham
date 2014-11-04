@@ -133,6 +133,33 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
 
   clusterFrontOrBackPrimary(al, true, saTag);
 
+  vector< CigarOp > cd = al.CigarData;
+  for(vector< CigarOp >::iterator cig = cd.begin(); 
+      cig != cd.end(); cig++){
+
+    switch((*cig).Type){
+    case 'I':
+      {
+	if((*cig).Length > 25){
+	  internalInsertion += 1;
+	  odd[al.Name]++;
+	}
+	break;
+      }
+    case 'D':
+      {
+	if((*cig).Length > 25){
+	  internalDeletion += 1;
+	  odd[al.Name]++;
+	}
+	break;
+      }
+    default:
+      {
+      }
+    }
+  }
+  
   return true;
 }
 
@@ -266,6 +293,8 @@ void readPileUp::clearClusters(void){
 }
 
 void readPileUp::clearStats(void){
+  internalInsertion = 0;
+  internalDeletion  = 0;
   numberOfReads = 0;
   nMatesMissing = 0;
   nPaired = 0;

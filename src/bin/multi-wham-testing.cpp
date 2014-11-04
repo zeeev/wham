@@ -897,7 +897,12 @@ void endPos(vector<cigar> & cigs, long int * pos){
 int otherBreak(long int * pos,
 	       map<long int, vector < BamAlignment > > & supliment, 
 	       string & otherside,
-	       string & bestEnd){
+	       string & bestEnd,
+	       string & bestSeqid,
+	       int * support,
+	       long int * otherPos
+	      
+	       ){
   
 #ifdef DEBUG
   cerr << "N secondary:" << supliment.size() << endl;
@@ -935,7 +940,6 @@ int otherBreak(long int * pos,
 	break;
       }
       
-
       vector<string> chimera  = split((*ch), ",");
 
       vector<cigar> c;
@@ -945,13 +949,13 @@ int otherBreak(long int * pos,
       if(c.front().type == 'S'){
 	otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
       }
+
       if(c.back().type  == 'S'){
 	long int endP = atoi(chimera[1].c_str());
 	endPos(c, &endP);
 	otherPositions[chimera[0]][endP]++;	
       } 
     }
-    
   }
     
   stringstream ends;
@@ -964,12 +968,15 @@ int otherBreak(long int * pos,
     for(map<long int, int>::iterator pos = ab->second.begin();
 	pos != ab->second.end(); pos++){
 
-      ends << ab->first << "," << pos->first << ":";
+      ends << ab->first << "," << pos->first << "," << pos->second << ":";
 
       if(pos->second > nbe){
 	nbe =  pos->second;
 	stringstream best;
-	best << ab->first << "," << pos->first;
+	best << ab->first << "," << pos->first << "," << pos->second;
+	*otherPos = pos->first;
+	bestSeqid = ab->first;
+	*support = pos->second;
 	bestOpt = best.str();
       }
     }
@@ -978,6 +985,8 @@ int otherBreak(long int * pos,
   bestEnd.append(bestOpt);
   
   otherside.append(ends.str());
+
+
 
   return otherPositions.size();
 
@@ -1121,13 +1130,30 @@ bool score(string seqid,
   cerr << "Passed Cluster filters: " << totalDat.primaryCount[*pos] << " " << totalDat.supplementCount[*pos] << endl;
   #endif
 
-  string ends, bestEnd;
+  string ends, bestEnd, bestSeqid;
 
-  int otherSeqids = otherBreak(pos, totalDat.supplement, ends, bestEnd);
+  int otherBreakPointCount = 0;
+  long int otherBreakPointPos   = 0;
 
-  if(otherSeqids > 3){
+  int otherSeqids = otherBreak(pos, totalDat.supplement, ends, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
+
+  if(otherSeqids > 2){
     return true;
   }
+  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
+    if(otherBreakPointCount < 2){
+      return true;
+    }
+  }
+
+  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
+    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
+      return true;
+    }
+  }
+  
+  
+
   if(ends.empty()){
     ends = "nan";
   }
@@ -1217,6 +1243,10 @@ bool score(string seqid,
 	     << double(totalDat.nsameStrandDiscordant) / double(totalDat.numberOfReads)
 	     << ","
 	     << double(totalDat.ndiscordantCrossChr) / double(totalDat.numberOfReads)
+	     << ","
+	     << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
+	     << ","
+	     << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
 	     << ";";
 
   infoToPrint.append(attributes.str());
