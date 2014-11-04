@@ -162,8 +162,8 @@ void printHeader(void){
   cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos\">" << endl;
-  cout << "##INFO=<ID=BE,Number=2,Type=String,Description=\"Best end position: chr, position\">"                  << endl;
+  cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count\">" << endl;
+  cout << "##INFO=<ID=BE,Number=2,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
   cout << "##INFO=<ID=AT,Number=13,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
