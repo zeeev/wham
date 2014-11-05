@@ -15,7 +15,9 @@ For help:
 
 Runs RandomForest classifier on WHAM output VCF files to classify structural
 variant type. Appends WC and WP flags for user to explore structural variant
-calls. The output is a VCF file written to standard out.
+calls. The output is a VCF file written to standard out. The optional --filter
+flag will aid in providing results of higher sensitivity of specificity. 
+Leaving the option out returns SV calls for all of the data. 
 
 positional arguments:
   VCF              User supplied VCF with WHAM variants; VCF needs AT field
@@ -25,17 +27,19 @@ positional arguments:
 
 optional arguments:
   -h, --help       show this help message and exit
-
+  --filter FILTER  optional arg for filtering type one of : ['sensitive',
+                   'specific']; defaults to output all data if filtering if
+                   argument is not supplied.
 
 Typical usage:
 
-  python classifier_parse.py [VCF file] [training dataset] 
+  python classifier_parse.py [VCF file] [training dataset] --filter [sensitive/specific]
   	 #In this default mode, the new VCF file with SV calls will be written
 	 #standard out
   python classifier_parse.py [VCF file] [training dataset] > [output VCF]
   	 # the standard out can be re-directed to an output VCF file with the
 	 # '>' sign as above
-  python classifier parse.py X.vcf WHAM_training_data.txt > out.vcf
+  python classifier parse.py X.vcf WHAM_training_data.txt --filter sensitive > out.sensitive.vcf
 
 #######
 OUTPUT:
@@ -70,4 +74,4 @@ TRAINING DATA:
 We supply a training dataset deirved form simulated read data. The file,
 with its supplied md5sum is:
 
-     33911b022dcfca389ade36973ecbaa8e  WHAM_training_data.txt
+     cb30db2b8dc0c6b2693a6a1595855272  WHAM_training_data.txt

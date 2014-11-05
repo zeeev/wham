@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 parser=argparse.ArgumentParser(description="Runs RandomForest classifier on WHAM output VCF files to classify structural variant type. Appends WC and WP flags for user to explore structural variant calls. The output is a VCF file written to standard out.")
 parser.add_argument("VCF", type=str, help="User supplied VCF with WHAM variants; VCF needs AT field data")
 parser.add_argument("training_matrix", type=str, help="training dataset for classifier derived from simulated read dataset")
+parser.add_argument("--filter", type=str, help="optional arg for filtering type one of : ['sensitive', 'specific']; defaults to output all data if filtering if argument is not supplied.")
 arg=parser.parse_args()
 
 
@@ -17,11 +18,14 @@ arg=parser.parse_args()
 #Functions
 #########################
 
+
 #parse the targets for ML. converts text list of classified data
 #into a numerical dataset with links to the classified names
 def parse_targets( target ):
 	"""
 	target = list of factors to be turned into numerical classifiers. 
+	for machine learning classifiction. ie. converts INR, DEL, INV, 
+	DUP into integer factors
 	"""
 	target = np.array(target) #convert to np array for ease in processing
 	names = np.unique( target ) #unique names. 
@@ -83,6 +87,50 @@ def parse_vcf_data( vdat ):
 	return( dict )
 
 
+#takes vcf field data and runs various filtering specs.
+def run_filters( vdat, filtering = None ):
+	""" 
+	vdat - dictionary of INFO field from VCF line
+	filtering - dictionary of fields to be filtered; defaults to None
+	Currently implemented for sensitive and specific. Can modify the
+	filters to return False anytime you want to not report results based
+	on filteirng criterion from the INFO field. 
+	"""
+	pass_filt = True #will remain true until we do not satisfy some criterion
+	
+	if filtering == None:
+		return( pass_filt ) #break out early 
+
+	#sensitive is very perimssive
+	elif filtering == "sensitive":
+		if int( vdat['NC'] ) < 2:
+			pass_filt = False
+			return( pass_filt )
+		if pass_filt:
+			return( pass_filt )
+
+	#specific mapping is more restrictive on the filtering.
+	elif filtering == "specific":
+		if vdat['ED'] == 'nan':
+			pass_filt = False
+			return( pass_filt )
+		BE = vdat['BE'].split(',') 
+		if int(BE[-1]) < 2:
+			pass_filt = False
+			return( pass_filt )
+		if int( vdat['NC'] ) < 3:
+			pass_filt = False
+			return( pass_filt )
+		if pass_filt:
+			return( pass_filt )
+
+	#elif filtering == "user_defined":
+	#	....
+
+	else:
+		raise ValueError('Not a valid --filter argumuent\n please try running with --help arg for instructions')
+
+
 
 
 
@@ -97,26 +145,25 @@ def parse_vcf_data( vdat ):
 ###########
 #all sklearn data will be in 2D array [ nsamples X nfeatures]
 
-#iterate over training file. select outthe numerical and classifier data
+#iterate over training file. select out the numerical and classifier data
 data  = []
 target = []
 with open(arg.training_matrix) as t:
 #with open("/Users/ej/Desktop/WHAM_classifier/ml_edit.txt") as t:
         for line in csv.reader(t,delimiter='\t'):
-        	target.append( line[-1] )
+        	target.append( line[-1] ) #always have targets as last column
         	d = [ float(i) for i in line[0:-1] ]
         	data.append( d )
 
 
 #populate the training dataset in sciKitLearn friendly structure. 
 dataset = {} #empty data
-dataset[ 'data' ] = np.array( data )
+dataset[ 'data' ] = np.array( data ) #all training data into 2-D array
 
 #turn our target list into integers and return target names
 target_parse = parse_targets( target )
 dataset[ 'target' ] = np.array( target_parse['target'] )
 dataset[ 'target_names' ] = np.array( target_parse['names'] )
-
 
 
 
@@ -129,15 +176,15 @@ dataset[ 'target_names' ] = np.array( target_parse['names'] )
 clf = RandomForestClassifier(n_estimators=250)
 #run RFC on dataset with target classifiers; runs the model fit
 clf = clf.fit( dataset['data'], dataset['target'] )
-
+#
 
 
 ######
 #prediction and output
 ######
 
-#loop over VCF and stream the modified results to STDOUT with print
 
+#loop over VCF and stream the modified results to STDOUT with print
 with open(arg.VCF) as t:
 	info_boolean = False #need a boolean to trigger to append new INFO
 	#data for new information appended. 
@@ -151,11 +198,14 @@ with open(arg.VCF) as t:
 		else: #skip over VCF header lines. 
                       	#print line ##remove
 			vdat = parse_vcf_data( line[7] ) #parse all of vcf appended data
-			_x = vdat[ 'AT' ].split(",") #create list from data in 'AT' field 
-			results = classify_data( _x, clf, dataset['target_names'] )
+			filter_bool = run_filters( vdat, filtering=arg.filter ) #boolean of whether line info passes filters
+			
+			if filter_bool:
+				_x = vdat[ 'AT' ].split(",") #create list from data in 'AT' field 
+				results = classify_data( _x, clf, dataset['target_names'] )
 				
-			line[7] = line[7] + ";" + results #append data to correct vcf column
-			print "\t".join( line ) #print results to stdout
+				line[7] = line[7] + ";" + results #append data to correct vcf column
+				print "\t".join( line ) #print results to stdout
 
 
 
