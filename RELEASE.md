@@ -16,7 +16,7 @@ Released October 20th 2014
 
 #####Future efforts:
 1. Improvements to speed and memory usage.
-2. Improve WHAM's breakpoint joining.
+2. Improve WHAM's break-point joining.
 3. Improve the LRT for association testing.
 
 
@@ -45,10 +45,10 @@ Same as Version 1.0.0
 
 #### Version 1.2.0
 
-Released October 31th 2014
+Released October 31th 2014 - happy Halloween!
 
 #####Features:
-1. Increased overall accurancy of SV calls
+1. Increased overall accuracy of SV calls
 2. Added attributes to VCF file for SV type classification
 3. Added utils/classifier_parse.py for SV classification 
 4. Added functionality to readPileUp Class
@@ -61,3 +61,16 @@ Same as Version 1.1.0
 
 #####Bug fixes:
 
+#### Version 1.3.0 
+
+Released Nov 4th - happy voting!
+
+#####Features:
+1. Increased overall accuracy of SV calls.
+   Large calls and translocations require more support.
+2. Added another attribute for the classifier  
+
+#####Future efforts:
+1. Validation on published data sets.
+
+#####Bug fixes:
