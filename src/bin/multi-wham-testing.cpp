@@ -1140,17 +1140,17 @@ bool score(string seqid,
   if(otherSeqids > 3){
     return true;
   }
-//  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
-//    if(otherBreakPointCount < 2){
-//      return true;
-//    }
-//  }
-//
-//  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
-//    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
-//      return true;
-//    }
-//  }
+  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
+    if(otherBreakPointCount < 2){
+      return true;
+    }
+  }
+
+  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
+    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
+      return true;
+    }
+  }
   
   
 
