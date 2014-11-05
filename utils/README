@@ -10,7 +10,7 @@ USAGE:
 
 For help:
 
-    python classifier_parse.py -h
+    python classify_WHAM_vcf.py -h
 
 
 Runs RandomForest classifier on WHAM output VCF files to classify structural
@@ -33,13 +33,13 @@ optional arguments:
 
 Typical usage:
 
-  python classifier_parse.py [VCF file] [training dataset] --filter [sensitive/specific]
+  python classify_WHAM_vcf.py [VCF file] [training dataset] --filter [sensitive/specific]
   	 #In this default mode, the new VCF file with SV calls will be written
 	 #standard out
-  python classifier_parse.py [VCF file] [training dataset] > [output VCF]
+  python classify_WHAM_vcf.py [VCF file] [training dataset] > [output VCF]
   	 # the standard out can be re-directed to an output VCF file with the
 	 # '>' sign as above
-  python classifier parse.py X.vcf WHAM_training_data.txt --filter sensitive > out.sensitive.vcf
+  python classify_WHAM_vcf.py X.vcf WHAM_training_data.txt --filter sensitive > out.sensitive.vcf
 
 #######
 OUTPUT:
