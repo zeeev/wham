@@ -573,9 +573,9 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   idat->nBad  = nalt;
   idat->nGood = nref;
 
-  aal = aal - log(pow(2,idat->nReads));
-  abl = abl - log(pow(2,idat->nReads));
-  bbl = bbl - log(pow(2,idat->nReads));
+//  aal = aal - log(pow(2,idat->nReads));
+//  abl = abl - log(pow(2,idat->nReads));
+//  bbl = bbl - log(pow(2,idat->nReads));
 
   if(nref == 0){
     aal = -255.0;
