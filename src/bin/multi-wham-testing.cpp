@@ -1255,7 +1255,7 @@ bool score(string seqid,
   stringstream tmpOutput;
 
   tmpOutput  << seqid           << "\t"  ;       // CHROM
-  tmpOutput  << (*pos)          << "\t"  ;       // POS
+  tmpOutput  << (*pos) +1       << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
   tmpOutput  << "N"             << "\t" ;       // REF
   tmpOutput  << altSeq          << "\t"  ;       // ALT
