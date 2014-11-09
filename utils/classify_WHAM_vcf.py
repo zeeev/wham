@@ -149,9 +149,10 @@ def run_filters( vdat, filtering = None ):
 data  = []
 target = []
 with open(arg.training_matrix) as t:
-#with open("/Users/ej/Desktop/WHAM_classifier/ml_edit.txt") as t:
         for line in csv.reader(t,delimiter='\t'):
-        	target.append( line[-1] ) #always have targets as last column
+		if line[0][0] == "#": #add in this statemnt to print error if user supplies files in wrong order.
+			raise ValueError('not a valid WHAM training file. perhaps you supplied arguments in the wrong order? \n please try running with --help arg for instructions') 
+        	target.append( line[-1] ) #always have targets [classified SV] as last column
         	d = [ float(i) for i in line[0:-1] ]
         	data.append( d )
 
@@ -189,13 +190,13 @@ with open(arg.VCF) as t:
 	info_boolean = False #need a boolean to trigger to append new INFO
 	#data for new information appended. 
 	for line in csv.reader(t,delimiter='\t'):
-		if line[0][0] == '#': #skip over VCF header lines.
+		if line[0][0] == '#': #process header lines
 			if re.search("##FORMAT", line[0]) and info_boolean == False: #first instance of ##FORMAT..
 				print '##INFO=<ID=WC,Number=1,Type=String,Description="WHAM classifier vairant type">'
 				print '##INFO=<ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model">'
 				info_boolean = True #reset boolean to 
 			print "\t".join( line ) #print results to stdout 
-		else: #skip over VCF header lines. 
+		else: #process variant lines
                       	#print line ##remove
 			vdat = parse_vcf_data( line[7] ) #parse all of vcf appended data
 			filter_bool = run_filters( vdat, filtering=arg.filter ) #boolean of whether line info passes filters
