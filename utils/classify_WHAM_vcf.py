@@ -1,7 +1,9 @@
 #!/usr/bin/python
 import argparse, csv, os, sys, re #std python imports
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier #RF classifier from SKlearn
+from sklearn.cross_validation import cross_val_score #validation stats from SKlearn
+
 
 #########################
 #Args
@@ -145,6 +147,7 @@ def run_filters( vdat, filtering = None ):
 ###########
 #all sklearn data will be in 2D array [ nsamples X nfeatures]
 
+sys.stderr.write("processing training file... \n" )
 #iterate over training file. select out the numerical and classifier data
 data  = []
 target = []
@@ -174,16 +177,32 @@ dataset[ 'target_names' ] = np.array( target_parse['names'] )
 ###########
 
 #setup inital params
-clf = RandomForestClassifier(n_estimators=250)
+clf = RandomForestClassifier( n_estimators=250 )
 #run RFC on dataset with target classifiers; runs the model fit
 clf = clf.fit( dataset['data'], dataset['target'] )
-#
+
+######
+#run some sanity checks here. 
+######
+training_stats = clf.feature_importances_ #array of variable importances for model.
+
+#print training stats to user
+train_list = [ str(i) for i in training_stats ] #convert to str for printing to user.
+sys.stderr.write("\t Training weights for RandomForest classifier \n\t N = %d training variables\n" %( len(train_list) ) ) 
+sys.stderr.write("\t %s\n" %( "\t".join( train_list ) ) ) 
+
+#need cross validation here. uses sklearn.cross_validation
+scores = cross_val_score( clf, dataset['data'], dataset['target'] )
+avg_val = scores.mean() * 100  #average cross validation levels
+sys.stderr.write("\t results from cross validation:\n\t %f%s \n" %( avg_val, '%' ) )
+
 
 
 ######
 #prediction and output
 ######
 
+sys.stderr.write("processing VCF file through classifier... \n" ) 
 
 #loop over VCF and stream the modified results to STDOUT with print
 with open(arg.VCF) as t:
@@ -192,6 +211,7 @@ with open(arg.VCF) as t:
 	for line in csv.reader(t,delimiter='\t'):
 		if line[0][0] == '#': #process header lines
 			if re.search("##FORMAT", line[0]) and info_boolean == False: #first instance of ##FORMAT..
+				#need to append new INFO fields for the corresponding data
 				print '##INFO=<ID=WC,Number=1,Type=String,Description="WHAM classifier vairant type">'
 				print '##INFO=<ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model">'
 				info_boolean = True #reset boolean to 
@@ -209,6 +229,7 @@ with open(arg.VCF) as t:
 				print "\t".join( line ) #print results to stdout
 
 
+sys.stderr.write("...classifier finished \n" )
 
 
 
