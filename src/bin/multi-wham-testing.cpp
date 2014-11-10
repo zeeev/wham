@@ -555,7 +555,7 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
     double mappingP = unphred(idat->MapQ[ri]);
 
-    if( idat->badFlag[rit->first] == 1 ){
+    if( idat->badFlag[rit->first] == 1 && idat->nClipping > 1){
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
