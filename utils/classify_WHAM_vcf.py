@@ -30,18 +30,20 @@ def parse_targets( target ):
 	DUP into integer factors
 	"""
 	target = np.array(target) #convert to np array for ease in processing
-	names = np.unique( target ) #unique names. 
+	names = np.unique( target ) #unique names of SV types (factors)
 
-	#now iterate through and classify to an integer.
+	#now iterate through and classify to an integer for SKlearn
 	cnt = 0
 	target_numerical = np.zeros( target.shape[0] ) #generate empty dataset
 	for name in names:
 		idx = np.where( name == target )
 		target_numerical[ idx ] = cnt
 		cnt += 1
-
+	
 	#setup return data structure
 	RV = {'names': names, 'target': target_numerical}
+	#can use index of SV type in 'names' to get text based variant
+	#call from 'target', where they've been converted to integers.
 	return( RV )
 
 
