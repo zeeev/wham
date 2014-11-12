@@ -10,7 +10,7 @@ my $usage = "
 
 Synopsis:
 
-deltaAfWham --wham WHAM.vcf
+deltaAfWham --wham WHAM.vcf > output.txt
 
 This is a rudimentary script that parses a WHAM VCF file under the assumption 
 of pooled sequencing and outputs the estimated allele frequencies for the last
