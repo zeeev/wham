@@ -53,7 +53,7 @@ struct indvDat{
   double clipped ;
   vector<double> inserts;
   vector<double> hInserts;
-  vector<double> gls;
+  vector<long double> gls;
   vector< BamAlignment > alignments;
   map<string, int> badFlag;
   vector<int> MapQ;
@@ -163,14 +163,14 @@ void printHeader(void){
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count\">" << endl;
-  cout << "##INFO=<ID=BE,Number=2,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
+  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
-  cout << "##INFO=<ID=AT,Number=13,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
+  cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
   cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
-  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
+  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                                                      << endl;
   cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
@@ -535,9 +535,9 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
   string genotype = "./.";
 
-  double aal = 0;
-  double abl = 0;
-  double bbl = 0;
+  long double aal = 0;
+  long double abl = 0;
+  long double bbl = 0;
 
   if(idat->badFlag.size() < 3){
     idat->gls.push_back(-255.0);
@@ -552,6 +552,10 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   int ri = 0;
 
   for(map< string, int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
+
+    if(ri > 1000){
+      break;
+    }
 
     double mappingP = unphred(idat->MapQ[ri]);
 
@@ -573,9 +577,15 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   idat->nBad  = nalt;
   idat->nGood = nref;
 
-//  aal = aal - log(pow(2,idat->nReads));
-//  abl = abl - log(pow(2,idat->nReads));
-//  bbl = bbl - log(pow(2,idat->nReads));
+  double nreads = idat->nReads;
+
+  if(nreads > 1000){
+    nreads = 1000;
+  }
+
+  aal = aal - log(pow(2,nreads)); // the normalization of the genotype likelihood
+  abl = abl - log(pow(2,nreads)); // this is causing underflow for really high depth.
+  bbl = bbl - log(pow(2,nreads));
 
   if(nref == 0){
     aal = -255.0;
