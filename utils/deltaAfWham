@@ -1,0 +1,64 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Getopt::Long;
+
+#-----------------------------------------------------------------------------
+#----------------------------------- MAIN ------------------------------------
+#-----------------------------------------------------------------------------
+my $usage = "
+
+Synopsis:
+
+deltaAfWham --wham WHAM.vcf
+
+This is a rudimentary script that parses a WHAM VCF file under the assumption 
+of pooled sequencing and outputs the estimated allele frequencies for the last
+two columns of the VCF.  It assumes the second to the last genotype column is 
+the target pool and the last column is the background pool.
+
+
+";
+
+
+my ($help);
+my $wham;
+my $opt_success = GetOptions('help'    => \$help,
+			     'wham=s'  => \$wham,
+		      );
+
+die $usage if $help || ! $opt_success;
+
+die $usage unless $wham;
+open (my $IN, '<', $wham) or die "Can't open $wham for reading\n$!\n";
+
+print "#seqid\tposition\ttarget_af\tbackground_af\n";
+
+while (<$IN>) {
+    chomp;
+
+    next if $_ =~ /\#/;
+    
+    my @l = split /\t/, $_;
+    
+    my @target     = split /:/, $l[-2];
+    my @background = split /:/, $l[-1];
+    
+    next if $target[0] eq './.';
+    next if $background[0] eq './.';
+
+    my $taf = $target[3] / ($target[2] + $target[3]);
+    my $baf = $background[3] / ($background[3] + $background[2]);
+
+    print "$l[0]\t$l[1]\t$taf\t$baf\n";
+
+}
+
+#-----------------------------------------------------------------------------
+#-------------------------------- SUBROUTINES --------------------------------
+#-----------------------------------------------------------------------------
+
+sub {
+
+}
+
