@@ -68,9 +68,28 @@ Released Nov 4th - happy voting!
 #####Features:
 1. Increased overall accuracy of SV calls.
    Large calls and translocations require more support.
-2. Added another attribute for the classifier  
+2. Added another attribute for the classifier.  
 
 #####Future efforts:
 1. Validation on published data sets.
 
 #####Bug fixes:
+
+#### Version 1.4.0
+
+Released Nov 12th - happy Veterans Day -1
+
+### Features:
+1. Added deltaAfWham for pooled sequencing experiments.
+2. Classifier now prints cross-validation information.
+
+#####Future efforts:
+
+1. Adding subsampling to the genotype model.
+
+#####Bug fixes:
+
+1. High depths were causing the genotype likelihood model
+to underflow.  This is fixed.  Only the first 1k reads 
+are considered for a genotype call.  
+2. Fixes to the VCF header again
