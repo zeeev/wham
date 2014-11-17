@@ -134,6 +134,8 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
   clusterFrontOrBackPrimary(al, true, saTag);
 
   vector< CigarOp > cd = al.CigarData;
+
+
   for(vector< CigarOp >::iterator cig = cd.begin(); 
       cig != cd.end(); cig++){
 
@@ -187,6 +189,9 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
       allCount[al.Position]++;
       primaryCount[al.Position]++;
       primary[al.Position].push_back(al);
+
+      odd[al.Name]++;
+
       if(! saTag.empty()){
 	supplement[al.Position].push_back(al);
       }
@@ -196,6 +201,9 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
       allCount[al.GetEndPosition()]++;
       primaryCount[al.GetEndPosition()]++;
       primary[al.GetEndPosition()].push_back(al);
+
+      odd[al.Name]++;
+
       if(! saTag.empty()){
 	supplement[al.GetEndPosition()].push_back(al);
       }
@@ -341,9 +349,10 @@ void readPileUp::purgePast(void){
   while (!currentData.empty()) {
     
     BamAlignment read = currentData.front();
-    
-    if( (read.Position + read.Length) < CurrentStart){ 
-      currentData.pop_front();
+    currentData.pop_front();    
+
+    if( read.GetEndPosition() >= CurrentPos){ 
+      currentData.push_back(read);
     } 
    
     counter += 1;
