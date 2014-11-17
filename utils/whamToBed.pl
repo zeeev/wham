@@ -24,7 +24,12 @@ Options:
 file   - <STRING> - required - filename
 help   - <FLAG>   - optional - print help statement and die
 append - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
-paired - <FLAG>   - optional - output paired breakpoint only
+paired - <FLAG>   - optional - output paired breakpoints only
+
+Info:
+
+paired - This option filters out sites were there was no split read support for 
+         the other side of the breakpoint. 
 
 ";
 
