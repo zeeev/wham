@@ -148,7 +148,5 @@ The format field is comprised of 7 colon delimited fields.
   The number of reads that do not support any type of structural variant.
 ####NA:
   The number of reads that do support any type of structural variant.
-####CL:
-  The number of soft clipped bases across all reads 
 ####DP:
   The number of high-quality primary reads covering the position.
