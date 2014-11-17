@@ -87,19 +87,17 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ##INFO=<ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic">
 ##INFO=<ID=AF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined">
 ##INFO=<ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target">
-##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup posi
-##INFO=<ID=ED,Numper=.,Type=String,Description="Colon separated list of potenial paired breakpoints, in the format: seqid,pos">
-##INFO=<ID=BE,Number=2,Type=String,Description="Best end position: seqid,position">
-##INFO=<ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus>
+##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individ
+##INFO=<ID=ED,Number=.,Type=String,Description="Colon separated list of potenial paired breakpoints, in the
+##INFO=<ID=BE,Number=2,Type=String,Description="Best end position: chr,position,count">
+##INFO=<ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus">
+##INFO=<ID=AT,Number=15,Type=Float,Description="Attributes for classification">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Pseudo genotype">
 ##FORMAT=<ID=GL,Number=A,Type=Float,Description="Genotype likelihood ">
 ##FORMAT=<ID=FR,Number=1,Type=Float,Description="Fraction of reads with soft or hard clipping">
-##FORMAT=<ID=NR,Number=1,Type=Integer,Description="Number of reads supporting no SV">
-##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads supporting no SV">
-##FORMAT=<ID=CL,Number=1,Type=Integer,Description="Number of bases that have been soft clipped">
+##FORMAT=<ID=NR,Number=1,Type=Integer,Description="Number of reads supporting a SV">
+##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads that do not support a SV">
 ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Number of reads with mapping quality greater than 0">
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  /archive03/zkronenb/human_hc_wham/NA12878D_HiSeqX_R1.rm
-~
 ```
 
 ====
@@ -130,11 +128,11 @@ The info field is comprised of seven key value pairs.
   
 #### ED:
   
-  All the soft clipping clusters that could be the end position of the SV
+  All the split read clusters that could be the end position of the SV.  
   
 #### BE:
 
-  The best canidate endpoint clipping cluster based on parsimony
+  The best canidate endpoint clipping cluster based on parsimony. 
   
 ====  
 
