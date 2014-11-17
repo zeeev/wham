@@ -93,3 +93,17 @@ Released Nov 12th - happy Veterans Day -1
 to underflow.  This is fixed.  Only the first 1k reads 
 are considered for a genotype call.  
 2. Fixes to the VCF header again
+
+
+#### Version 1.4.0
+
+Released Nov 17th 
+
+### Features:
+
+### Bug Fixes:
+1. A pileup bug was resulting in bad genotype calls.
+
+#####Future efforts:
+
+Futher efforts to improve genotyping.
