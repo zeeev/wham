@@ -37,7 +37,7 @@ paired - This option filters out sites were there was no split read support for
 my ($help);
 my $FILE;
 my $APPEND = 0;
-my $PAIRED = 1;
+my $PAIRED = 0;
 
 my $opt_success = GetOptions('help'      => \$help,
 			     'file=s'    => \$FILE,
@@ -101,9 +101,9 @@ sub processLines{
 	
 	my %info = map{ split /=|;/} $vcfLine[7];
 
-	my $bedLine = "$vcfLine[0]\t$vcfLine[1]";
-	
+	my $startPos = $vcfLine[1] - 1;
 	my $endPos = $vcfLine[1];
+	my $bedLine = "$vcfLine[0]\t$startPos";
 
 	if($info{BE} eq 'nan'){
 	    next VCF if $PAIRED;
@@ -140,7 +140,7 @@ sub processLines{
 
 	}
 	else{
-	    $bedLine .= "\t$vcfLine[0]:$vcfLine[1]:$endPos\t\.";
+	    $bedLine .= "\t$vcfLine[0]:$startPos:$endPos\t\.";
 	}
 
 	print "$bedLine\n";
