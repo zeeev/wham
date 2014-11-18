@@ -55,7 +55,7 @@ struct indvDat{
   vector<double> hInserts;
   vector<long double> gls;
   vector< BamAlignment > alignments;
-  map<string, int> badFlag;
+  vector<int> badFlag;
   vector<int> MapQ;
   map<int, vector<string> > cluster;
 };
@@ -165,8 +165,9 @@ void printHeader(void){
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
+  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"      << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
-  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Pseudo genotype\">"                                                                 << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                                 << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
   cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
@@ -218,9 +219,13 @@ string printIndvDat(  indvDat * d ){
      << endl;
   ss << endl;
   ss << "Reads: " << endl;
+
+  int z = 0;
+
   for(vector< BamAlignment >::iterator it = d->alignments.begin(); it != d->alignments.end(); it++){
    
     ss   << " " << (*it).Name << " " 
+         << d->badFlag[z] << " "
          << (*it).RefID    << " " 
 	 << (*it).Position << " " 
 	 << (*it).GetEndPosition() << " "
@@ -232,6 +237,7 @@ string printIndvDat(  indvDat * d ){
          << (*it).AlignmentFlag << " " 
 	 << (*it).QueryBases 
 	 << endl;
+    z++;
   }
 
   return ss.str();
@@ -530,7 +536,6 @@ double unphred(double p){
   return pow(10, (-p/10));
 }
 
-
 bool processGenotype(indvDat * idat, double * totalAlt){
 
   string genotype = "./.";
@@ -551,19 +556,19 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
   int ri = 0;
 
-  for(map< string, int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
-
+  for(vector< int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
     if(ri > 1000){
       break;
     }
 
     double mappingP = unphred(idat->MapQ[ri]);
 
-    if( idat->badFlag[rit->first] == 1 && idat->nClipping > 1){
+    if( *rit == 1 && idat->nClipping > 1){
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
       bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
+
     }
     else{
       nref += 1;
@@ -645,7 +650,7 @@ bool checkN(string & s){
     }
   }
 
-  if(n > 4){
+  if(n > 5){
     return true;
   }
 
@@ -675,8 +680,10 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     int bad = 0;
 
+    vector< CigarOp > cd = (*r).CigarData;
 
-    if( (pileup.allCount[(*r).Position] > 1) || (pileup.allCount[(*r).GetEndPosition()] > 1)){
+    if( ((pileup.primaryCount[(*r).Position] > 1) || (pileup.primaryCount[(*r).GetEndPosition()] > 1))
+	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
       bad = 1;
       ti[fname]->nClipping++;
     }
@@ -718,7 +725,7 @@ bool loadIndv(map<string, indvDat*> & ti,
     else{
       ti[fname]->nGood += 1;
     }
-    ti[fname]->badFlag[(*r).Name] = bad;
+    ti[fname]->badFlag.push_back( bad );
 #ifdef DEBUG
     ti[fname]->alignments.push_back(*r);
 #endif
@@ -1004,7 +1011,7 @@ int otherBreak(long int * pos,
 
 bool uniqClips(long int * pos, 
 	       map<long int, vector < BamAlignment > > & clusters, 
-	       vector<string> & alts){
+	       vector<string> & alts, string & direction){
 
   map<string, vector<string> >  clippedSeqs;
 
@@ -1042,6 +1049,8 @@ bool uniqClips(long int * pos,
   if(bcount > fcount){
     key = "b";
   }
+
+  direction = key;
 
   for(vector<string>::iterator seqs = clippedSeqs[key].begin();
       seqs != clippedSeqs[key].end(); seqs++
@@ -1173,7 +1182,9 @@ bool score(string seqid,
    
   vector<string> alts ; // pairBreaks;
 
-  uniqClips(pos, totalDat.primary, alts);
+  string direction = "nan";
+
+  uniqClips(pos, totalDat.primary, alts, direction);
 
   if(alts.size() < 1){
     return true;
@@ -1275,7 +1286,8 @@ bool score(string seqid,
   tmpOutput  << "CU=" << totalDat.allCount.size() << ";"  ;
   tmpOutput  << "NC=" << alts.size()     << ";"  ;
   tmpOutput  << "ED=" << ends   << ";";
-  tmpOutput  << "BE=" << bestEnd << "\t";
+  tmpOutput  << "BE=" << bestEnd << ";";
+  tmpOutput  << "DI=" << direction << "\t";
   tmpOutput  << "GT:GL:NR:NA:DP:FR" << "\t" ;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
@@ -1343,7 +1355,6 @@ bool filt(BamAlignment & al){
     return false;
   }
 
-
   return true;
 }
  
@@ -1390,9 +1401,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       getNextAl = All.GetNextAlignment(al);
       
       if(filt(al)){
-	
-	allPileUp.processAlignment(al, currentPos);
-	
+	    	
 	vector< CigarOp > cd = al.CigarData;
 	
 	if(cd.front().Type == 'S' ){
@@ -1405,17 +1414,23 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
           clipped = true;
 	}
 
+	allPileUp.processAlignment(al, currentPos);
+
        	while(al.Position <= currentPos && getNextAl && clipped){
 	  getNextAl = All.GetNextAlignment(al);
 	  
-	  if(al.IsMapped() &&  al.MapQuality > 0 && ! al.IsDuplicate() && getNextAl){
+	  if( filt(al) && getNextAl){
 	    
 	    allPileUp.processAlignment(al, currentPos);
 	  }
 	}
       }	
     }
-    
+
+    #ifdef DEBUG
+    cerr << "About to score : " << currentPos << " " << allPileUp.CurrentPos << endl;
+    #endif
+
     allPileUp.purgePast();    
 
     if(! score(seqNames[seqidIndex].RefName, 
