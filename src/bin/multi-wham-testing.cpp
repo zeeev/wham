@@ -1033,7 +1033,7 @@ bool uniqClips(long int * pos,
   
     if((*it).Position == (*pos)){
       string clip = (*it).QueryBases.substr(0, cd.front().Length);
-      if(clip.size() < 4){
+      if(clip.size() < 10){
 	continue;
       }
       clippedSeqs["f"].push_back(clip);
@@ -1041,7 +1041,7 @@ bool uniqClips(long int * pos,
     }
     if((*it).GetEndPosition() == (*pos)){
       string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length );
-      if(clip.size() < 4){
+      if(clip.size() < 10){
 	continue;
       }
       clippedSeqs["b"].push_back(clip);    
