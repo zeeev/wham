@@ -236,9 +236,7 @@ void readPileUp::processPileup(long int * pos){
     // trailing pileup data
     if((*r).Position > *pos){
       continue;
-#ifdef DEBUG
-      cerr << "Too far ahead: " << (*r).Name << endl;
-#endif
+
     }
 
     numberOfReads += 1;
@@ -248,39 +246,26 @@ void readPileUp::processPileup(long int * pos){
     // split reads
     if( (*r).GetTag("SA", saTag) ){
       processSplitRead(*r, saTag);
-#ifdef DEBUG
-      cerr << "Split Read: " << (*r).Name << endl;
-#endif
+
       continue;
     }
     // discordant reads
     if(!(*r).IsProperPair()){
       processDiscordant(*r, saTag);
-#ifdef DEBUG
-      cerr << "Discordant Read: " << (*r).Name << endl;
-#endif
+
       continue;
     }
     // mates missing
     if(!(*r).IsMateMapped()){
       processMissingMate(*r, saTag);
-#ifdef DEBUG
-      cerr << "Mate Missing: " << (*r).Name << endl;
-#endif
+
       continue;
     }
     // good data
     if((*r).IsMateMapped() && (*r).IsProperPair() ){
       
-#ifdef DEBUG
-      cerr << "before count: " << nPaired << endl;
-#endif
-
       processProperPair(*r, saTag);
-#ifdef DEBUG
-      cerr << "Mate paired: " << (*r).Name << endl;
-      cerr << "after count: " << nPaired << endl;
-#endif
+
       continue;
     }    
   
@@ -330,10 +315,9 @@ readPileUp::readPileUp(){
 
 readPileUp::~readPileUp(){}
 
-void readPileUp::processAlignment(BamTools::BamAlignment Current_alignment, long int pos){
+void readPileUp::processAlignment(BamTools::BamAlignment Current_alignment){
   currentData.push_back(Current_alignment);
   CurrentStart    = Current_alignment.Position;
-  CurrentPos      = pos;
 }
 
 void readPileUp::purgeAll(void){
@@ -341,7 +325,7 @@ void readPileUp::purgeAll(void){
 }
 
 
-void readPileUp::purgePast(void){
+void readPileUp::purgePast(long int * delPos){
   
   int nreads  = currentData.size();
   int counter = 0;
@@ -351,7 +335,7 @@ void readPileUp::purgePast(void){
     BamAlignment read = currentData.front();
     currentData.pop_front();    
 
-    if( read.GetEndPosition() >= CurrentPos){ 
+    if( read.GetEndPosition() >= *delPos){ 
       currentData.push_back(read);
     } 
    
@@ -361,11 +345,6 @@ void readPileUp::purgePast(void){
       break;
     }
   }
-}
-
-std::list<BamAlignment> readPileUp::pileup(void){
-  readPileUp::purgePast();
-  return currentData;
 }
 
 int readPileUp::currentPos(void){

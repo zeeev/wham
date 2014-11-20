@@ -554,8 +554,12 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   double nref = 0.0;
   double nalt = 0.0;
 
-  int ri = 0;
+  if(idat->badFlag.size() > 1000){
+    std::random_shuffle ( idat->badFlag.begin(), idat->badFlag.end() );
+  }
 
+  int ri = 0;
+ 
   for(vector< int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
     if(ri > 1000){
       break;
@@ -1063,7 +1067,7 @@ bool uniqClips(long int * pos,
 
 
 
-string consensus(vector<string> & s, double * nn){
+string consensus(vector<string> & s, double * nn, string & direction){
 
   if(s.empty()){
     return ".";
@@ -1085,14 +1089,23 @@ string consensus(vector<string> & s, double * nn){
     
     int index = 0;
 
-    for(int clips = s.size() -1; clips > -1; clips--){
-      appendValue(seq, s[clips]);          
-      index+=1;
-      if(index > 19){
-	break;
+    if(direction.compare("f") == 0){
+      for(uint clips = 0; clips < s.size(); clips++){
+	appendValue(seq, s[clips]);
+	if(clips > 19){
+	  break;
+	}
       }
     }
-    
+    else{
+      for(int clips = s.size() -1; clips > -1; clips--){
+	appendValue(seq, s[clips]);          
+	index+=1;
+	if(index > 19){
+	  break;
+	}
+      }
+    }
     TGraph aliG(seq);
     globalMsaAlignment(aliG, Blosum62(-1, -11));
 
@@ -1182,17 +1195,17 @@ bool score(string seqid,
    
   vector<string> alts ; // pairBreaks;
 
-  string direction = "nan";
+  string direction ;
 
   uniqClips(pos, totalDat.primary, alts, direction);
 
-  if(alts.size() < 1){
+  if(alts.size() < 2){
     return true;
   }
 
   double nn   = 0;
 
-  string altSeq = consensus(alts, &nn);
+  string altSeq = consensus(alts, &nn, direction);
 
   if(altSeq.size() < 11){
     return true;
@@ -1326,7 +1339,7 @@ bool score(string seqid,
 }
 
 
-bool filt(BamAlignment & al){
+bool filter(BamAlignment & al){
 
   if(!al.IsMapped()){
     return false;
@@ -1377,61 +1390,72 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
     return false;
   }
 
+
   BamAlignment al     ;
   readPileUp allPileUp;
+  bool hasNextAlignment = true;
 
-  if(! All.GetNextAlignment(al)){
+  hasNextAlignment = All.GetNextAlignment(al);
+  if(!hasNextAlignment){
     All.Close();
     return false;
   }
 
-  long int currentPos = 0;
-  bool getNextAl      = true;
-
-  while(1){  
+  list <long int> clippedBuffer;
+  long int currentPos  = -1;
   
-    bool clipped = false;
-    
-    if(getNextAl == false){
-      break;
+  while(hasNextAlignment){    
+    while(currentPos >= clippedBuffer.front()){
+      if(clippedBuffer.empty()){
+	break;
+      }
+      clippedBuffer.pop_front();
+    }
+    while(clippedBuffer.empty()){
+      hasNextAlignment = All.GetNextAlignment(al);
+      if(!hasNextAlignment){
+	break;
+      }
+      if(!filter(al)){
+	continue;
+      }
+      vector< CigarOp > cd = al.CigarData;
+      if(cd.front().Type == 'S'){
+	clippedBuffer.push_back(al.Position);
+      }
+      if(cd.back().Type  == 'S'){
+	clippedBuffer.push_back(al.GetEndPosition());
+      }
+      allPileUp.processAlignment(al);
     }
     
-    while(clipped == false && getNextAl){
-      
-      getNextAl = All.GetNextAlignment(al);
-      
-      if(filt(al)){
-	    	
-	vector< CigarOp > cd = al.CigarData;
-	
-	if(cd.front().Type == 'S' ){
-	  currentPos = al.Position;
-	  clipped = true;
-	}
-
-	if(cd.back().Type == 'S' && ! clipped){
-          currentPos = al.GetEndPosition();
-          clipped = true;
-	}
-
-	allPileUp.processAlignment(al, currentPos);
-
-       	while(al.Position <= currentPos && getNextAl && clipped){
-	  getNextAl = All.GetNextAlignment(al);
-	  
-	  if( filt(al) && getNextAl){
-	    
-	    allPileUp.processAlignment(al, currentPos);
-	  }
-	}
-      }	
+    clippedBuffer.sort();
+    
+    while(al.Position <= clippedBuffer.front()){
+      hasNextAlignment = All.GetNextAlignment(al);
+      if(!hasNextAlignment){
+        break;
+      }
+      if(!filter(al)){
+        continue;
+      }
+      vector< CigarOp > cd = al.CigarData;
+      if(cd.front().Type == 'S'){
+        clippedBuffer.push_back(al.Position);
+      }
+      if(cd.back().Type  == 'S'){
+        clippedBuffer.push_back(al.GetEndPosition());
+      }
+      allPileUp.processAlignment(al);
     }
+    
+    clippedBuffer.sort();
 
     #ifdef DEBUG
-    cerr << "About to score : " << currentPos << " " << allPileUp.CurrentPos << endl;
+    cerr << "About to score : " << advancedPos << " " << currentPos << endl;
     #endif
 
-    allPileUp.purgePast();    
+    allPileUp.purgePast( &currentPos );    
 
     if(! score(seqNames[seqidIndex].RefName, 
 	       &currentPos, 
@@ -1443,7 +1467,9 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
     }
-    
+
+    currentPos = clippedBuffer.front();
+
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
       cout << regionResults;

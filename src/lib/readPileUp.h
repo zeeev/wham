@@ -69,14 +69,14 @@ class readPileUp {
   bool processMissingMate(BamTools::BamAlignment &, std::string&);
   bool processProperPair(BamTools::BamAlignment &, std::string&);
 
-  void processAlignment( BamTools::BamAlignment, long int);
+  void processAlignment( BamTools::BamAlignment);
   void processPileup(long int *);
   void printPileUp(void);
   void purgeAll(void);
-  void purgePast(void);
+  void purgePast(long int *);
   void clearStats(void);
   void clearClusters(void);
-  std::list<BamTools::BamAlignment> pileup(void);
+
   int  currentPos(void);
   int  currentStart(void);
   int  nReads(void);
