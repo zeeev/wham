@@ -162,8 +162,10 @@ void printHeader(void){
   cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
-  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count\">" << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of neighboring primary soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of neighboring supplement soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"      << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
@@ -686,7 +688,7 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     vector< CigarOp > cd = (*r).CigarData;
 
-    if( ((pileup.primaryCount[(*r).Position] > 1) || (pileup.primaryCount[(*r).GetEndPosition()] > 1))
+    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition()].size() > 1))
 	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
       bad = 1;
       ti[fname]->nClipping++;
@@ -776,6 +778,13 @@ bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & o
 
   info->lrt = 2 * (alt - null);
   
+  if(info->lrt < 0 ){
+    info->lrt = 0;
+  }
+  if(isnan(info->lrt)){
+    info->lrt = 0;
+  }
+
   return true;
 
 }
@@ -917,7 +926,6 @@ void endPos(vector<cigar> & cigs, long int * pos){
 
 int otherBreak(long int * pos,
 	       map<long int, vector < BamAlignment > > & supliment, 
-	       string & otherside,
 	       string & bestEnd,
 	       string & bestSeqid,
 	       int * support,
@@ -968,18 +976,29 @@ int otherBreak(long int * pos,
       burnCigar(chimera[3], c);
 
       if(c.front().type == 'S'){
-	otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
-      }
-
+	if(otherPositions[chimera[0]].find(atoi(chimera[1].c_str())) 
+	   == otherPositions[chimera[0]].end()){
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())] = 1;
+	}
+	else{
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
+	}
+      } 
       if(c.back().type  == 'S'){
 	long int endP = atoi(chimera[1].c_str());
 	endPos(c, &endP);
-	otherPositions[chimera[0]][endP]++;	
+	if(otherPositions[chimera[0]].find(endP) ==
+	   otherPositions[chimera[0]].end()
+	   ){
+	  otherPositions[chimera[0]][endP] = 1;	
+	}
+	else{
+	  otherPositions[chimera[0]][endP]++;	
+	}
       } 
     }
   }
-    
-  stringstream ends;
+  
   string bestOpt; 
   int    nbe = 0;
 
@@ -988,8 +1007,6 @@ int otherBreak(long int * pos,
 
     for(map<long int, int>::iterator pos = ab->second.begin();
 	pos != ab->second.end(); pos++){
-
-      ends << ab->first << "," << pos->first << "," << pos->second << ":";
 
       if(pos->second > nbe){
 	nbe =  pos->second;
@@ -1004,10 +1021,6 @@ int otherBreak(long int * pos,
   }
 
   bestEnd.append(bestOpt);
-  
-  otherside.append(ends.str());
-
-
 
   return otherPositions.size();
 
@@ -1140,6 +1153,62 @@ string consensus(vector<string> & s, double * nn, string & direction){
   return con.str(); 
 }
 
+bool clusterMatePos(string & seqid, 
+		    long int * pos, 
+		    map<long int, vector < BamAlignment > > & primary,
+		    string & bestEnd
+		    ){
+  
+  int otherSeqids = 0;  
+  
+  map<long int, int> otherPos;
+ 
+  map<long int, int>::iterator fm;
+
+  for(vector<BamAlignment>::iterator it = primary[*pos].begin();
+      it != primary[*pos].end(); it++){
+
+    if(!(*it).IsMateMapped()){
+      continue;
+    }
+
+    if((*it).MateRefID != (*it).MateRefID){
+      otherSeqids++;
+      continue;
+    }
+    
+    if(otherPos.find((*it).MatePosition) == otherPos.end()){
+      otherPos[(*it).MatePosition] = 1;
+    }
+    else{
+      otherPos[(*it).MatePosition]++;
+    }
+  }
+ 
+  int maxCount = 0;
+  long int bestPos = 0;
+
+  for(map<long int, int>::iterator pp = otherPos.begin(); 
+      pp != otherPos.end(); pp++){    
+    if(pp->second > maxCount){
+      maxCount = pp->second;
+      bestPos = pp->first;
+    }
+  }
+  if(maxCount < 2){
+    return false;
+  }
+  else{
+    stringstream ss ;
+    ss << seqid << "," << bestPos << "," << maxCount;
+    bestEnd.append(ss.str());
+   
+    return true;
+  }   
+ 
+
+}
+
 bool score(string seqid, 
 	   long int * pos, 
 	   readPileUp & totalDat, 
@@ -1150,24 +1219,22 @@ bool score(string seqid,
 
   totalDat.processPileup(pos);
 
-  if(double(totalDat.nPaired) / double(totalDat.numberOfReads) > 0.9999){
-    return true;
-  }
-
-  if(totalDat.primaryCount[*pos] < 2 && totalDat.supplementCount[*pos] < 2){
+  if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 4){
     return true;
   }
 
   #ifdef DEBUG
-  cerr << "Passed Cluster filters: " << totalDat.primaryCount[*pos] << " " << totalDat.supplementCount[*pos] << endl;
+  cerr << "Passed Cluster filters: " << totalDat.primary[*pos].size() << " " << totalDat.supplement[*pos].size() << endl;
   #endif
 
-  string ends, bestEnd, bestSeqid;
+  string bestEnd, bestSeqid;
 
   int otherBreakPointCount    = 0;
   long int otherBreakPointPos = 0;
 
-  int otherSeqids = otherBreak(pos, totalDat.supplement, ends, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
+  string support = ".";
+
+  int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
   if(otherSeqids > 3){
     return true;
@@ -1184,13 +1251,18 @@ bool score(string seqid,
     }
   }
   
-  
-
-  if(ends.empty()){
-    ends = "nan";
+  if(bestEnd.empty()){
+    if(!clusterMatePos(seqid, pos, totalDat.primary, bestEnd)){ 
+    }
+    else{
+      support = "mp";      
+    }
+  }
+  else{
+    support = "sr";
   }
   if(bestEnd.empty()){
-    bestEnd = "nan";
+    bestEnd = ".";
   }
    
   vector<string> alts ; // pairBreaks;
@@ -1296,11 +1368,14 @@ bool score(string seqid,
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
   tmpOutput  << infoToPrint << ""  ;
-  tmpOutput  << "CU=" << totalDat.allCount.size() << ";"  ;
+  tmpOutput  << "PU=" << totalDat.primary.size()    << ";" ;
+  tmpOutput  << "SU=" << totalDat.supplement.size() << ";" ;
+  tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
   tmpOutput  << "NC=" << alts.size()     << ";"  ;
-  tmpOutput  << "ED=" << ends   << ";";
+  tmpOutput  << "SP=" << support << ";";
   tmpOutput  << "BE=" << bestEnd << ";";
   tmpOutput  << "DI=" << direction << "\t";
+
   tmpOutput  << "GT:GL:NR:NA:DP:FR" << "\t" ;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){

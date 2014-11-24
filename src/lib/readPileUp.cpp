@@ -32,7 +32,7 @@ bool readPileUp::processDiscordant(BamAlignment & al, string & saTag){
     ndiscordantCrossChr++;
   }
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
   
   clusterFrontOrBackPrimary(al, true, saTag);
 
@@ -48,7 +48,7 @@ bool readPileUp::processSplitRead(BamAlignment & al, string & saTag){
     return true;
   }
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
 
   nsplitRead += 1;
 
@@ -112,7 +112,7 @@ bool readPileUp::processMissingMate(BamAlignment & al, string & saTag){
 
   clusterFrontOrBackPrimary(al, true, saTag);
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
 
   return true;
 
@@ -124,17 +124,16 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
 
   if(sameStrand(al)){
     nSameStrand += 1;
-    odd[al.Name]++;
+    odd[al.Name] = 1;
   }
   if(al.RefID != al.MateRefID){
     nCrossChr++;
-    odd[al.Name]++;
+    odd[al.Name] = 1;
   }
 
   clusterFrontOrBackPrimary(al, true, saTag);
 
   vector< CigarOp > cd = al.CigarData;
-
 
   for(vector< CigarOp >::iterator cig = cd.begin(); 
       cig != cd.end(); cig++){
@@ -144,7 +143,7 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
       {
 	if((*cig).Length > 25){
 	  internalInsertion += 1;
-	  odd[al.Name]++;
+	  odd[al.Name] = 1;
 	}
 	break;
       }
@@ -152,7 +151,7 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
       {
 	if((*cig).Length > 25){
 	  internalDeletion += 1;
-	  odd[al.Name]++;
+	  odd[al.Name] = 1;
 	}
 	break;
       }
@@ -172,38 +171,25 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
 
   if((al.AlignmentFlag & 0x0800) != 0){
     if(cd.front().Type == 'H'){
-      allCount[al.Position]++;
-      supplementCount[al.Position]++;
       supplement[al.Position].push_back(al);
     }
     if(cd.back().Type == 'H'){
-      allCount[al.Position]++;
-      supplementCount[al.Position]++;
       supplement[al.GetEndPosition()].push_back(al);
     }
   }
-
   else{
     if(cd.front().Type == 'S'){
       nClippedFront++;
-      allCount[al.Position]++;
-      primaryCount[al.Position]++;
       primary[al.Position].push_back(al);
-
-      odd[al.Name]++;
-
+      odd[al.Name] = 1;
       if(! saTag.empty()){
 	supplement[al.Position].push_back(al);
       }
     }
     if(cd.back().Type == 'S'){
       nClippedBack++;
-      allCount[al.GetEndPosition()]++;
-      primaryCount[al.GetEndPosition()]++;
       primary[al.GetEndPosition()].push_back(al);
-
-      odd[al.Name]++;
-
+      odd[al.Name] = 1;
       if(! saTag.empty()){
 	supplement[al.GetEndPosition()].push_back(al);
       }
@@ -246,7 +232,6 @@ void readPileUp::processPileup(long int * pos){
     // split reads
     if( (*r).GetTag("SA", saTag) ){
       processSplitRead(*r, saTag);
-
       continue;
     }
     // discordant reads
@@ -278,11 +263,8 @@ void readPileUp::processPileup(long int * pos){
 
 void readPileUp::clearClusters(void){
   odd.clear();
-  primaryCount.clear();
-  supplementCount.clear();
   primary.clear();
   supplement.clear();
-  allCount.clear();
 }
 
 void readPileUp::clearStats(void){
@@ -323,7 +305,6 @@ void readPileUp::processAlignment(BamTools::BamAlignment Current_alignment){
 void readPileUp::purgeAll(void){
   currentData.clear();
 }
-
 
 void readPileUp::purgePast(long int * delPos){
   
