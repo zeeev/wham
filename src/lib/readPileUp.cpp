@@ -174,7 +174,7 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
       supplement[al.Position].push_back(al);
     }
     if(cd.back().Type == 'H'){
-      supplement[al.GetEndPosition()].push_back(al);
+      supplement[al.GetEndPosition(false,true)].push_back(al);
     }
   }
   else{
@@ -188,10 +188,10 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
     }
     if(cd.back().Type == 'S'){
       nClippedBack++;
-      primary[al.GetEndPosition()].push_back(al);
+      primary[al.GetEndPosition(false,true)].push_back(al);
       odd[al.Name] = 1;
       if(! saTag.empty()){
-	supplement[al.GetEndPosition()].push_back(al);
+	supplement[al.GetEndPosition(false,true)].push_back(al);
       }
     }
   }
@@ -316,7 +316,7 @@ void readPileUp::purgePast(long int * delPos){
     BamAlignment read = currentData.front();
     currentData.pop_front();    
 
-    if( read.GetEndPosition() >= *delPos){ 
+    if( read.GetEndPosition(false,true) >= *delPos){ 
       currentData.push_back(read);
     } 
    

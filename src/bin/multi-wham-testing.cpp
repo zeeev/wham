@@ -230,7 +230,7 @@ string printIndvDat(  indvDat * d ){
          << d->badFlag[z] << " "
          << (*it).RefID    << " " 
 	 << (*it).Position << " " 
-	 << (*it).GetEndPosition() << " "
+	 << (*it).GetEndPosition(false,true) << " "
 	 << (*it).Position + (*it).Length << " "
          << (*it).MapQuality << " " 
          << (*it).MateRefID    << " " 
@@ -688,7 +688,7 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     vector< CigarOp > cd = (*r).CigarData;
 
-    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition()].size() > 1))
+    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition(false,true)].size() > 1))
 	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
       bad = 1;
       ti[fname]->nClipping++;
@@ -1052,7 +1052,7 @@ bool uniqClips(long int * pos,
       clippedSeqs["f"].push_back(clip);
       fcount += 1;
     }
-    if((*it).GetEndPosition() == (*pos)){
+    if((*it).GetEndPosition(false,true) == (*pos)){
       string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length );
       if(clip.size() < 10){
 	continue;
@@ -1232,7 +1232,7 @@ bool score(string seqid,
   int otherBreakPointCount    = 0;
   long int otherBreakPointPos = 0;
 
-  string support = ".";
+  string esupport = ".";
 
   int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
@@ -1255,14 +1255,15 @@ bool score(string seqid,
     if(!clusterMatePos(seqid, pos, totalDat.primary, bestEnd)){ 
     }
     else{
-      support = "mp";      
+      esupport = "mp";      
     }
   }
   else{
-    support = "sr";
+    esupport = "sr";
   }
-  if(bestEnd.empty()){
+  if(bestEnd.empty() || esupport.empty()){
     bestEnd = ".";
+    esupport = ".";
   }
    
   vector<string> alts ; // pairBreaks;
@@ -1372,8 +1373,8 @@ bool score(string seqid,
   tmpOutput  << "SU=" << totalDat.supplement.size() << ";" ;
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
   tmpOutput  << "NC=" << alts.size()     << ";"  ;
-  tmpOutput  << "SP=" << support << ";";
-  tmpOutput  << "BE=" << bestEnd << ";";
+  tmpOutput  << "SP=" << esupport << ";";
+  tmpOutput  << "BE=" << bestEnd  << ";";
   tmpOutput  << "DI=" << direction << "\t";
 
   tmpOutput  << "GT:GL:NR:NA:DP:FR" << "\t" ;
@@ -1499,7 +1500,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 	clippedBuffer.push_back(al.Position);
       }
       if(cd.back().Type  == 'S'){
-	clippedBuffer.push_back(al.GetEndPosition());
+	clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
       allPileUp.processAlignment(al);
     }
@@ -1519,7 +1520,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
         clippedBuffer.push_back(al.Position);
       }
       if(cd.back().Type  == 'S'){
-        clippedBuffer.push_back(al.GetEndPosition());
+        clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
       allPileUp.processAlignment(al);
     }
