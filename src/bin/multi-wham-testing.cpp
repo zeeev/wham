@@ -166,15 +166,15 @@ void printHeader(void){
   cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of neighboring supplement soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
-  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
-  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"      << endl;
-  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
-  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                                 << endl;
-  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
-  cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
-  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
+  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                      << endl;
+  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"         << endl;
+  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"  << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                 << endl;
+  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                      << endl;
+  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                << endl;
+  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                         << endl;
+  cout << "##FORMAT=<ID=NS,Number=1,Type=Integer,Description=\"Number of reads with a softclip at POS\">"                  << endl;
+  cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"     << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(unsigned int b = 0; b < globalOpts.all.size(); b++){
@@ -1227,12 +1227,13 @@ bool score(string seqid,
   cerr << "Passed Cluster filters: " << totalDat.primary[*pos].size() << " " << totalDat.supplement[*pos].size() << endl;
   #endif
 
-  string bestEnd, bestSeqid;
+  string bestEnd;
+  string bestSeqid;
 
   int otherBreakPointCount    = 0;
   long int otherBreakPointPos = 0;
 
-  string esupport = ".";
+  string esupport ;
 
   int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
@@ -1377,14 +1378,14 @@ bool score(string seqid,
   tmpOutput  << "BE=" << bestEnd  << ";";
   tmpOutput  << "DI=" << direction << "\t";
 
-  tmpOutput  << "GT:GL:NR:NA:DP:FR" << "\t" ;
+  tmpOutput  << "GT:GL:NR:NA:DP:NS:FR" << "\t" ;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
 
-    double fr = 0;
-    if(ti[localOpts.all[t]]->nClipping > 0 && ti[localOpts.all[t]]->nReads > 0){
-      fr = double(ti[localOpts.all[t]]->nClipping) / double(ti[localOpts.all[t]]->nReads);
-    }
+//    double fr = 0.0;
+//    if(ti[localOpts.all[t]]->nClipping > 0 && ti[localOpts.all[t]]->nReads > 0){
+//      fr = double( ti[localOpts.all[t]]->nClipping ) / double( ti[localOpts.all[t]]->nReads );
+//    }
 
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
@@ -1392,8 +1393,8 @@ bool score(string seqid,
 	      << "," << ti[localOpts.all[t]]->gls[2]
 	      << ":" << ti[localOpts.all[t]]->nGood
 	      << ":" << ti[localOpts.all[t]]->nBad
-	      << ":" << ti[localOpts.all[t]]->nReads
-              << ":" << fr ;
+              << ":" << ti[localOpts.all[t]]->nClipping
+	      << ":" << ti[localOpts.all[t]]->nReads    ;
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
     }
@@ -1420,7 +1421,7 @@ bool filter(BamAlignment & al){
   if(!al.IsMapped()){
     return false;
   }
-  if(al.MapQuality == 0){
+  if(al.MapQuality < 11){
     return false;
   }
   if(al.IsDuplicate()){
