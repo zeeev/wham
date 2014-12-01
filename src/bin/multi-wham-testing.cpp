@@ -165,6 +165,7 @@ void printHeader(void){
   cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of neighboring primary soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of neighboring supplement soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=RD,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals \">" << endl;
   cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                      << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"         << endl;
@@ -1195,7 +1196,7 @@ bool clusterMatePos(string & seqid,
       bestPos = pp->first;
     }
   }
-  if(maxCount < 2){
+  if(maxCount < 4){
     return false;
   }
   else{
@@ -1220,6 +1221,10 @@ bool score(string seqid,
   totalDat.processPileup(pos);
 
   if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 4){
+    return true;
+  }
+
+  if((totalDat.primary.size() + totalDat.supplement.size()) > (3 * totalDat.numberOfReads)){
     return true;
   }
 
@@ -1373,6 +1378,7 @@ bool score(string seqid,
   tmpOutput  << "PU=" << totalDat.primary.size()    << ";" ;
   tmpOutput  << "SU=" << totalDat.supplement.size() << ";" ;
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
+  tmpOutput  << "RD=" << totalDat.numberOfReads << ";" ;
   tmpOutput  << "NC=" << alts.size()     << ";"  ;
   tmpOutput  << "SP=" << esupport << ";";
   tmpOutput  << "BE=" << bestEnd  << ";";
@@ -1421,7 +1427,7 @@ bool filter(BamAlignment & al){
   if(!al.IsMapped()){
     return false;
   }
-  if(al.MapQuality < 11){
+  if(al.MapQuality < 15){
     return false;
   }
   if(al.IsDuplicate()){
