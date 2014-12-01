@@ -95,7 +95,7 @@ are considered for a genotype call.
 2. Fixes to the VCF header again
 
 
-#### Version 1.4.0
+#### Version 1.5.0
 
 Released Nov 17th 
 
@@ -107,3 +107,19 @@ Released Nov 17th
 #####Future efforts:
 
 Futher efforts to improve genotyping.
+
+#### Version 1.6.0
+
+Released Nov 30th
+
+### Features:
+1. Added mate-pair end-point clustering.
+2. Several INFO and GENOTYPE fields were changed.
+
+### Bug Fixes:
+
+None
+
+#####Future efforts:
+
+More benchmarking.
