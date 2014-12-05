@@ -96,6 +96,13 @@ struct info_field{
 
 };
 
+template<typename T>
+inline bool isnan(T value)
+{
+  return value != value;
+
+}
+
 static const char *optString ="ht:b:r:x:e:";
 
 // this lock prevents threads from printing on top of each other
@@ -103,6 +110,30 @@ static const char *optString ="ht:b:r:x:e:";
 omp_lock_t lock;
 
 bool sortStringSize(string i, string j) {return (i.size() < j.size());}
+
+//ripped from EKG @ github Shannon Entropy
+
+double entropy(string& st) {
+  vector<char> stvec(st.begin(), st.end());
+  set<char> alphabet(stvec.begin(), stvec.end());
+  vector<double> freqs;
+  for (set<char>::iterator c = alphabet.begin(); c != alphabet.end(); ++c) {
+    int ctr = 0;
+    for (vector<char>::iterator s = stvec.begin(); s != stvec.end(); ++s) {
+      if (*s == *c) {
+	++ctr;
+      }
+    }
+    freqs.push_back((double)ctr / (double)stvec.size());
+  }
+  double ent = 0;
+  double ln2 = log(2);
+  for (vector<double>::iterator f = freqs.begin(); f != freqs.end(); ++f) {
+    ent += *f * log(*f)/ln2;
+  }
+  ent = -ent;
+  return ent;
+}
 
 void initInfo(info_field * s){
   s->lrt = 0;
@@ -159,23 +190,26 @@ string collapseCigar(vector<CigarOp> & v){
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
   cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
-  cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
+  cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
-  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of neighboring primary soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of neighboring supplement soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads read supporting position \">" << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplement read supporting position \">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=RD,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals \">" << endl;
+  cout << "##INFO=<ID=SI,Number=1,Type=Float,Description=\"Shannon entropy \">" << endl;
+  cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters \">" << endl;
   cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
-  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                      << endl;
-  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"         << endl;
-  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"  << endl;
-  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                 << endl;
-  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                      << endl;
-  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                << endl;
-  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                         << endl;
-  cout << "##FORMAT=<ID=NS,Number=1,Type=Integer,Description=\"Number of reads with a softclip at POS\">"                  << endl;
-  cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"     << endl;
+  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
+  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
+  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
+  cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
+  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
+  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood\">"                                        << endl;
+  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                 << endl;
+  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                          << endl;
+  cout << "##FORMAT=<ID=NS,Number=1,Type=Integer,Description=\"Number of reads with a softclip at POS for individual\">"    << endl;
+  cout << "##FORMAT=<ID=RD,Number=1,Type=Integer,Description=\"Number of reads passing filters\">"                          << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(unsigned int b = 0; b < globalOpts.all.size(); b++){
@@ -247,8 +281,6 @@ string printIndvDat(  indvDat * d ){
 
 }
 
-
-
 string join(vector<string> strings){
 
   string joined = "";
@@ -256,14 +288,13 @@ string join(vector<string> strings){
   for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
     joined = joined + " " + (*sit) + "\n";
   }
-
   return joined;
-
 }
 
 void printVersion(void){
-  cerr << "Version 1.2.0 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
-  cerr << "Github version: " << VERSION << endl;
+  cerr << "Version: " << VERSION << endl;
+  cerr << "Contact: zev.kronenberg [at] gmail.com " << endl;
+  cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
   cerr << endl;
 }
 
@@ -455,7 +486,7 @@ bool getInsertDists(void){
     flag = grabInsertLengths(globalOpts.all[i]);
   }
   
-  return true;
+  return flag;
   
 }
 
@@ -785,9 +816,7 @@ bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & o
   if(isnan(info->lrt)){
     info->lrt = 0;
   }
-
   return true;
-
 }
 
 
@@ -796,7 +825,12 @@ string infoText(info_field * info){
   stringstream ss;
 
   ss << "LRT=" << info->lrt << ";";
-  ss << "AF="  << info->taf << "," << info->baf << "," << info->aaf << ";";
+  if(isnan(info->baf)){
+    ss << "WAF=" << info->taf << ",.," << info->aaf << ";";
+  }
+  else{
+    ss << "WAF=" << info->taf << "," << info->baf << "," << info->aaf << ";";
+  }
   ss << "GC="  << info->tgc << "," << info->bgc << ";";
 
   return ss.str();
@@ -953,8 +987,8 @@ int otherBreak(long int * pos,
 
     string saTag;
     if(! (*it).GetTag("SA", saTag)){
-      cerr << "no sa\n";
-      return false;
+      cerr << "FATAL::INTERNAL: no sa\n";
+      exit(1);
     }
     
 #ifdef DEBUG
@@ -1020,8 +1054,10 @@ int otherBreak(long int * pos,
       }
     }
   }
-
-  bestEnd.append(bestOpt);
+  
+  if(!bestOpt.empty()){
+    bestEnd = bestOpt;
+  }
 
   return otherPositions.size();
 
@@ -1157,7 +1193,9 @@ string consensus(vector<string> & s, double * nn, string & direction){
 bool clusterMatePos(string & seqid, 
 		    long int * pos, 
 		    map<long int, vector < BamAlignment > > & primary,
-		    string & bestEnd
+		    string & bestEnd, 
+		    int * count,
+		    long int * breakpoint
 		    ){
   
   int otherSeqids = 0;  
@@ -1202,8 +1240,10 @@ bool clusterMatePos(string & seqid,
   else{
     stringstream ss ;
     ss << seqid << "," << bestPos << "," << maxCount;
-    bestEnd.append(ss.str());
-   
+    *breakpoint = bestPos;
+    *count = maxCount;
+    bestEnd = ss.str();
+
     return true;
   }   
  
@@ -1217,14 +1257,14 @@ bool score(string seqid,
 	   string & results, 
 	   global_opts localOpts){
 
-
+  
   totalDat.processPileup(pos);
-
-  if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 4){
+  
+  if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 3){
     return true;
   }
 
-  if((totalDat.primary.size() + totalDat.supplement.size()) > (3 * totalDat.numberOfReads)){
+  if(double(totalDat.primary.size() + totalDat.supplement.size()) > (1.4 * double(totalDat.numberOfReads))){
     return true;
   }
 
@@ -1232,53 +1272,58 @@ bool score(string seqid,
   cerr << "Passed Cluster filters: " << totalDat.primary[*pos].size() << " " << totalDat.supplement[*pos].size() << endl;
   #endif
 
-  string bestEnd;
-  string bestSeqid;
+  string bestSeqid ="" ;
+  string bestEnd   ="" ;
+  string esupport  ="" ;
 
   int otherBreakPointCount    = 0;
   long int otherBreakPointPos = 0;
+  long int SVLEN              = -1;
 
-  string esupport ;
-
+  // trying to find mate breakpoint using splitread support
   int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
   if(otherSeqids > 3){
     return true;
   }
+
+  if(!bestEnd.empty()){
+    esupport = "sr";
+  }
+
+  // trying to find mate breakpoint using mate mapping postion.
+  if(bestEnd.empty()){
+    if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
+      bestSeqid = seqid;
+      esupport = "mp";
+    }
+  }
+  // bestSeqid is the other breakpoint
+  // you need at least two reads for a translocation for a split read supported SV
   if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
     if(otherBreakPointCount < 2){
       return true;
     }
   }
 
+  // SVs over a megabase require additional support 
   if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
     if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
       return true;
     }
-  }
-  
-  if(bestEnd.empty()){
-    if(!clusterMatePos(seqid, pos, totalDat.primary, bestEnd)){ 
-    }
     else{
-      esupport = "mp";      
+      SVLEN = abs((*pos+1) - otherBreakPointPos);
     }
   }
-  else{
-    esupport = "sr";
-  }
-  if(bestEnd.empty() || esupport.empty()){
-    bestEnd = ".";
-    esupport = ".";
-  }
-   
+
+ 
   vector<string> alts ; // pairBreaks;
 
   string direction ;
 
   uniqClips(pos, totalDat.primary, alts, direction);
 
-  if(alts.size() < 2){
+  if(alts.size() < 3){
     return true;
   }
 
@@ -1286,12 +1331,23 @@ bool score(string seqid,
 
   string altSeq = consensus(alts, &nn, direction);
 
-  if(altSeq.size() < 11){
+  if(altSeq.size() < 10){
     return true;
   }
 
-  if(nn / double(altSeq.size()) > 0.30){
+  if(nn / double(altSeq.size()) > 0.30 || nn > 18){
     return true;
+  }
+
+  double SI = entropy(altSeq);
+  // arbirary cutoff for sequence entropy
+  if(esupport.empty()){
+    if(SI < 0.5){
+      return true;
+    }
+    if(totalDat.primary[*pos].size() < 6){
+      return true;
+    }
   }
 
   map < string, indvDat*> ti;
@@ -1364,34 +1420,39 @@ bool score(string seqid,
 
   infoToPrint.append(attributes.str());
 
-
   stringstream tmpOutput;
 
   tmpOutput  << seqid           << "\t"  ;       // CHROM
   tmpOutput  << (*pos) +1       << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
-  tmpOutput  << "N"             << "\t" ;       // REF
+  tmpOutput  << "N"             << "\t"  ;       // REF
   tmpOutput  << altSeq          << "\t"  ;       // ALT
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
-  tmpOutput  << infoToPrint << ""  ;
-  tmpOutput  << "PU=" << totalDat.primary.size()    << ";" ;
-  tmpOutput  << "SU=" << totalDat.supplement.size() << ";" ;
+  tmpOutput  << infoToPrint                                                          ;
+  tmpOutput  << "SI=" << SI                               << ";"                     ;
+  tmpOutput  << "PU=" << totalDat.primary[*pos].size()    << ";"                     ;
+  tmpOutput  << "SU=" << totalDat.supplement[*pos].size() << ";"                     ;
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
-  tmpOutput  << "RD=" << totalDat.numberOfReads << ";" ;
-  tmpOutput  << "NC=" << alts.size()     << ";"  ;
-  tmpOutput  << "SP=" << esupport << ";";
-  tmpOutput  << "BE=" << bestEnd  << ";";
-  tmpOutput  << "DI=" << direction << "\t";
+  tmpOutput  << "RD=" << totalDat.numberOfReads << ";"                               ;
+  tmpOutput  << "NC=" << alts.size()     << ";"                                      ;
 
-  tmpOutput  << "GT:GL:NR:NA:DP:NS:FR" << "\t" ;
+  if(esupport.empty() || bestEnd.empty() || (unsigned int)bestEnd.c_str()[0]  == 0){
+    bestEnd  =  "." ;
+    esupport =  "." ;
+  }
+  tmpOutput  << "SP=" << esupport  << ";";
+  tmpOutput  << "BE=" << bestEnd   << ";";
+  tmpOutput  << "DI="   << direction << ";";
+  if(otherBreakPointPos == 0 || SVLEN == -1 ){
+    tmpOutput << "END=.;SVLEN=.\t";
+  }
+  else{
+    tmpOutput << "END=" << otherBreakPointPos << ";" << "SVLEN=" << SVLEN << "\t";
+  }
+  tmpOutput  << "GT:GL:NR:NA:NS:RD" << "\t" ;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
-
-//    double fr = 0.0;
-//    if(ti[localOpts.all[t]]->nClipping > 0 && ti[localOpts.all[t]]->nReads > 0){
-//      fr = double( ti[localOpts.all[t]]->nClipping ) / double( ti[localOpts.all[t]]->nReads );
-//    }
 
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
@@ -1399,7 +1460,7 @@ bool score(string seqid,
 	      << "," << ti[localOpts.all[t]]->gls[2]
 	      << ":" << ti[localOpts.all[t]]->nGood
 	      << ":" << ti[localOpts.all[t]]->nBad
-              << ":" << ti[localOpts.all[t]]->nClipping
+	      << ":" << ti[localOpts.all[t]]->nClipping
 	      << ":" << ti[localOpts.all[t]]->nReads    ;
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
