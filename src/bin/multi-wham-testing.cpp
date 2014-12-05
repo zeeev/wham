@@ -97,7 +97,7 @@ struct info_field{
 };
 
 template<typename T>
-inline bool isnan(T value)
+inline bool aminan(T value)
 {
   return value != value;
 
@@ -813,7 +813,7 @@ bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & o
   if(info->lrt < 0 ){
     info->lrt = 0;
   }
-  if(isnan(info->lrt)){
+  if(aminan(info->lrt)){
     info->lrt = 0;
   }
   return true;
@@ -825,7 +825,7 @@ string infoText(info_field * info){
   stringstream ss;
 
   ss << "LRT=" << info->lrt << ";";
-  if(isnan(info->baf)){
+  if(aminan(info->baf)){
     ss << "WAF=" << info->taf << ",.," << info->aaf << ";";
   }
   else{
