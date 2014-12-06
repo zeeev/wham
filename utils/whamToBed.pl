@@ -21,10 +21,12 @@ provide the type of structural variant.
 
 Options:
 
-file   - <STRING> - required - filename
-help   - <FLAG>   - optional - print help statement and die
-append - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
-paired - <FLAG>   - optional - output paired breakpoints only
+file       - <STRING> - required - filename
+help       - <FLAG>   - optional - print help statement and die
+append     - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
+paired     - <FLAG>   - optional - output paired breakpoints only (increase specificity)
+buffer     - <INT>    - optional - add basepair to both sides of the SV call [0]
+singletons - <INT>    - optional - add basepair to only unpaired breakpoints [0]
 
 Info:
 
@@ -70,6 +72,9 @@ processLines();
 #-------------------------------- SUBROUTINES --------------------------------
 #-----------------------------------------------------------------------------
 
+#Checking if the WHAM vcf has been annotated by looking for the WC field in 
+#the VCF file.
+
 sub checkForAnnotations {
     
     open(my $FH, "<", $FILE) || die "FATAL: could not open $FILE for reading\n";
@@ -101,12 +106,14 @@ sub processLines{
 	
 	my %info = map{ split /=|;/} $vcfLine[7];
 
-	my $startPos = $vcfLine[1] - 1;
-	my $endPos = $vcfLine[1];
+	my $startPos = $vcfLine[1] - 1 - $BUFFER;
+	my $endPos = $vcfLine[1] - 1 + $BUFFER ;
 	my $bedLine = "$vcfLine[0]\t$startPos";
 
-	if($info{BE} eq 'nan'){
+	if($info{BE} eq '.'){
 	    next VCF if $PAIRED;
+	    $startPos - $SINGLE_BUFFER;
+	    $endPos   + $SINGLE_BUFFER;
 	}
 	else{
 	    my @end = split /,/, $info{BE};
