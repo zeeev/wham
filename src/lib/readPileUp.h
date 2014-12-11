@@ -34,7 +34,12 @@ class readPileUp {
 
   int numberOfReads;
 
-  // internal shit
+  //
+  int mateTooClose;
+  int mateTooFar  ; 
+
+
+  // internal indels
   int internalInsertion;
   int internalDeletion ;
   // split read info

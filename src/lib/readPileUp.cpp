@@ -268,6 +268,9 @@ void readPileUp::clearClusters(void){
 }
 
 void readPileUp::clearStats(void){
+
+  mateTooClose      = 0;
+  mateTooFar        = 0;
   internalInsertion = 0;
   internalDeletion  = 0;
   numberOfReads = 0;

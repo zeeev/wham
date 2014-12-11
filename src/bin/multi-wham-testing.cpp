@@ -740,12 +740,20 @@ bool loadIndv(map<string, indvDat*> & ti,
       
       double iDiff = abs ( ilength - localDists.mus[(*r).Filename] );
       
+
       ti[fname]->inserts.push_back(ilength);
       
       if(iDiff > (3.0 * insertDists.sds[(*r).Filename]) ){
 	bad = 1;
 	ti[fname]->nAboveAvg += 1;
 	ti[fname]->hInserts.push_back(ilength);
+      
+	if( ilength - localDists.mus[(*r).Filename] < 0){
+	  pileup.mateTooClose++;
+	}
+	if( ilength - localDists.mus[(*r).Filename] > 0){
+	  pileup.mateTooFar++;
+	}
       }
     }
 
@@ -1416,7 +1424,11 @@ bool score(string seqid,
 	     << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
 	     << ","
 	     << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
-	     << ";";
+	     << ","
+	     << double(totalDat.mateTooClose) / double(totalDat.numberOfReads)
+	     << ","
+             << double(totalDat.mateTooFar) / double(totalDat.numberOfReads)
+	     << ";"; 
 
   infoToPrint.append(attributes.str());
 
@@ -1451,8 +1463,14 @@ bool score(string seqid,
     tmpOutput << "END=" << otherBreakPointPos << ";" << "SVLEN=" << SVLEN << "\t";
   }
   tmpOutput  << "GT:GL:NR:NA:NS:RD" << "\t" ;
+
+  int enrichment = 0;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
+
+    if(ti[localOpts.all[t]]->nBad > 2){
+      enrichment = 1;
+    }
 
     tmpOutput << ti[localOpts.all[t]]->genotype 
 	      << ":" << ti[localOpts.all[t]]->gls[0]
@@ -1468,6 +1486,12 @@ bool score(string seqid,
   }
   
   tmpOutput << endl;
+
+  if(enrichment == 0 ){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
 
   #ifdef DEBUG
   cerr << "line: " << tmpOutput.str();
