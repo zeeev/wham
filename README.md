@@ -88,40 +88,43 @@ WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.
 ```
 ##fileformat=VCFv4.1
 ##INFO=<ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic">
-##INFO=<ID=AF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined">
+##INFO=<ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined">
 ##INFO=<ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target">
-##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring soft clip clusters across all individuals at pileup position ">
-##INFO=<ID=ED,Number=.,Type=String,Description="Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count">
-##INFO=<ID=BE,Number=2,Type=String,Description="Best end position: chr,position,count">
+##INFO=<ID=AT,Number=15,Type=Float,Description="Attributes for classification">
+##INFO=<ID=PU,Number=1,Type=Integer,Description="Number of reads read supporting position">
+##INFO=<ID=SU,Number=1,Type=Integer,Description="Number of supplement read supporting position">
+##INFO=<ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position">
+##INFO=<ID=SI,Number=1,Type=Float,Description="Shannon entropy">
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Number of reads at pileup position across individuals passing filters">
+##INFO=<ID=SP,Number=1,Type=String,Description="Support for endpoint;  none:., mp:mate pair, sr:split read">
+##INFO=<ID=BE,Number=3,Type=String,Description="Best end position: chr,position,count or none:.">
+##INFO=<ID=DI,Number=1,Type=Character,Description="Consensus is from front or back of pileup : f,b">
 ##INFO=<ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus">
-##INFO=<ID=AT,Number=13,Type=Float,Description="Attributes for classification">
-##INFO=<ID=WC,Number=1,Type=String,Description="WHAM classifier vairant type">
-##INFO=<ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model">
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Pseudo genotype">
-##FORMAT=<ID=GL,Number=A,Type=Float,Description="Genotype likelihood ">
-##FORMAT=<ID=FR,Number=1,Type=Float,Description="Fraction of reads with soft or hard clipping">
-##FORMAT=<ID=NR,Number=1,Type=Integer,Description="Number of reads supporting a SV">
-##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads that do not support a SV">
-##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Number of reads with mapping quality greater than 0">
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      NA12877.sorted.bam NA12882.sorted.bam
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GL,Number=A,Type=Float,Description="Genotype likelihood">
+##FORMAT=<ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV">
+##FORMAT=<ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV">
+##FORMAT=<ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual">
+##FORMAT=<ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters">
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      NA12877.sorted.bam      NA12882.sorted.bam
 ```
 
-Here is an example SV identified by WHAM:
+Here is an unclassified wham example:
 ```
-13
-51069351
+6	
+131440530
+.	
+N	
+AGAGTAGAAAGTATCCTTATTTGGTTGGAAAGATCAGATGAAGGGGA	
 .
-N
-CTTAGAAATTTCTTCCACCAGATTCCCTNGAACTTGNCATCNCTCTTAAGT
 .
-.
-LRT=nan;AF=0.250001,1,0.500001;GC=2,1;AT=0.671756,0,0,0,0.274809,0.0152672,0.183206,0.274809,0,0.0916031,0.0534351,0,0,0,0;CU=125;NC=35;ED=13,51075079,36:13,51075111,1:;BE=13,51075079,36;WC=DUP;WP=0.0,0.976,0.02,0.004
-GT:GL:NR:NA:DP:FR
-1/1:-255,-255,-0.693163:0:16:17:1
-0/0:-27.6311,-32.5779,-621.698:45:2:47:0.0425532
-0/1:-303.941,-34.6574,-386.834:28:22:50:0.44
+LRT=0.3669;WAF=0.250001,0.500001,0.333334;GC=2,1;AT=0.853846,0,0,0,0.146154,0,0.0615385,0.146154,0,0.0846154,0,0,0,0,0,0,0.00769231;SI=1.81279;PU=22;SU=19;CU=140;RD=130;NC=18;SP=sr;BE=6,131440608,19;DI=b;END=131440608;SVLEN=78	
+GT:GL:NR:NA:NS:RD	
+0/1:-151.971,-24.2602,-331.572:24:11:11:35	0/0:-4.5e-05,-255,-255:45:0:0:45	0/1:-151.971,-29.1122,-428.281:31:11:11:42
 ```
-The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below. In this example WHAM has annotated a  a duplication (info: WC=DUP) with a probability of 0.976 (WP=0.0,0.976,0.02,0.004) starting at 51,069,351 and ending at 51,075,079 on chromosome 13.  The genotypes for the trio are 1/1, 0/0 and 0/1. 
+The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below.  The genotypes for the trio are 1/0, 0/0 and 0/1. 
 
 
 ====
@@ -133,29 +136,65 @@ The info field is comprised of ten key value pairs.
   This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
   If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  cases (target) and controls (background) bams must be specified using the -t & -b flags to get an LRT score.
   
-#### AF:
+#### WAF:
 
   A comma separated list of allele frequencies of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoint as a bi-allelic variant and estimates the frequency based on the genotype counts.
   
 #### GC:
 
-  WHAM does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.
+  Wham does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.
+  
+#### AT:
+
+ This field used by wham to determine a classification.  There are 17 read depth normalized counts.  The average user should not worry about this field.
+ 
+#### SI:
+
+  Consensus sequence complexity measured by Shannon's entropy.  Wham removes calls where the entropy is below 0.5.
+  
+  
+#### PU:
+  
+  The number of primary mappings that support the exact breakpoint reported in the POS field. 
+  
+#### SU:
+
+  The number of supplementary / split read support for the exact breakpoint reported in the POS field. 
   
 #### CU:
 
   WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. 
+  
+#### RD:
 
+  The number of reads covering all individuals joint called
+  
+  
 #### NC:
   
   The number of soft-clipped segments there were collapsed into the consensus sequence.
   
-#### ED:
   
-  All the split read clusters that could be the end position of the SV.  There are three pieces of information in this field: seqid, pos, and the number of split reads supporting this position.  
+#### SP:
+
+  Wham tries to identify the other breakpoint of an SV by first operating on split reads then mate pair mappings.
+  If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.  
   
 #### BE:
 
   The best candidate endpoint based on split read clustering.
+  
+#### DI:
+  
+  This field denotes is the breakpoint is supported on the 5' of the pielup or 3' end of pileup.  The value 'f' denotes the '5 and 'b' denotes the 3'. 
+  
+#### END:
+  
+  The end position of the structural variant.  If there is an interchromosomal SV this field will contain a '.'.
+  
+#### SVLEN:
+
+  The distance between the two breakpoints wham identified.   If there is an interchromosomal SV or the endpoint could not be identified this field will contain a '.'.
   
 #### WC:
 
@@ -173,12 +212,14 @@ The format field is comprised of 7 colon-delimited fields.
   A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.
 ####GL:
   log10 genotype likelihood under a bi-allelic model.
-####FR:
-  Fraction of the primary alignments that have soft-clipping.
 ####NR:
   The number of reads that do not support any type of structural variant.
 ####NA:
   The number of reads that do support any type of structural variant.
-####DP:
-  The number of high-quality primary reads covering the position.
+####NS:
+  The number of primary reads supporting with a soft clip at POS
+#####RD:
+  The number of reads covering the individual at POS after filtering
+  
+
 
