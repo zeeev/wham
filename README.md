@@ -206,7 +206,7 @@ The info field is comprised of ten key value pairs.
   
 ====  
 
-The format field is comprised of 7 colon-delimited fields.
+The format field is comprised of six colon-delimited fields.
 
 ####GT:
   A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.
@@ -218,7 +218,7 @@ The format field is comprised of 7 colon-delimited fields.
   The number of reads that do support any type of structural variant.
 ####NS:
   The number of primary reads supporting with a soft clip at POS
-#####RD:
+####RD:
   The number of reads covering the individual at POS after filtering
   
 
