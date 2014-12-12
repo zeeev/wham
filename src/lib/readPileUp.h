@@ -27,12 +27,19 @@ class readPileUp {
   std::list <BamTools::BamAlignment> currentData;
 
   std::map <std::string, int> odd;
-  std::map <long int, int > primaryCount, supplementCount, allCount;
-  std::map <long int, std::vector<BamTools::BamAlignment> > primary, supplement;
+
+  std::map <long int, std::vector<BamTools::BamAlignment> > primary    ;
+  std::map <long int, std::vector<BamTools::BamAlignment> > supplement ;
+
 
   int numberOfReads;
 
-  // internal shit
+  //
+  int mateTooClose;
+  int mateTooFar  ; 
+
+
+  // internal indels
   int internalInsertion;
   int internalDeletion ;
   // split read info
@@ -69,14 +76,14 @@ class readPileUp {
   bool processMissingMate(BamTools::BamAlignment &, std::string&);
   bool processProperPair(BamTools::BamAlignment &, std::string&);
 
-  void processAlignment( BamTools::BamAlignment, long int);
+  void processAlignment( BamTools::BamAlignment);
   void processPileup(long int *);
   void printPileUp(void);
   void purgeAll(void);
-  void purgePast(void);
+  void purgePast(long int *);
   void clearStats(void);
   void clearClusters(void);
-  std::list<BamTools::BamAlignment> pileup(void);
+
   int  currentPos(void);
   int  currentStart(void);
   int  nReads(void);

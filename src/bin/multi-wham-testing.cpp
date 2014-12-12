@@ -96,6 +96,13 @@ struct info_field{
 
 };
 
+template<typename T>
+inline bool aminan(T value)
+{
+  return value != value;
+
+}
+
 static const char *optString ="ht:b:r:x:e:";
 
 // this lock prevents threads from printing on top of each other
@@ -103,6 +110,30 @@ static const char *optString ="ht:b:r:x:e:";
 omp_lock_t lock;
 
 bool sortStringSize(string i, string j) {return (i.size() < j.size());}
+
+//ripped from EKG @ github Shannon Entropy
+
+double entropy(string& st) {
+  vector<char> stvec(st.begin(), st.end());
+  set<char> alphabet(stvec.begin(), stvec.end());
+  vector<double> freqs;
+  for (set<char>::iterator c = alphabet.begin(); c != alphabet.end(); ++c) {
+    int ctr = 0;
+    for (vector<char>::iterator s = stvec.begin(); s != stvec.end(); ++s) {
+      if (*s == *c) {
+	++ctr;
+      }
+    }
+    freqs.push_back((double)ctr / (double)stvec.size());
+  }
+  double ent = 0;
+  double ln2 = log(2);
+  for (vector<double>::iterator f = freqs.begin(); f != freqs.end(); ++f) {
+    ent += *f * log(*f)/ln2;
+  }
+  ent = -ent;
+  return ent;
+}
 
 void initInfo(info_field * s){
   s->lrt = 0;
@@ -159,20 +190,26 @@ string collapseCigar(vector<CigarOp> & v){
 void printHeader(void){
   cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
   cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
-  cout << "##INFO=<ID=AF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
+  cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
-  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=ED,Number=.,Type=String,Description=\"Colon separated list of potenial paired breakpoints, in the format: seqid,pos,count\">" << endl;
-  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count\">"                  << endl;
-  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"      << endl;
-  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"                  << endl;
-  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                                 << endl;
-  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood \">"                                                                 << endl;
-  cout << "##FORMAT=<ID=FR,Number=1,Type=Float,Description=\"Fraction of reads with soft or hard clipping\">"                                << endl;
-  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                                                      << endl;
-  cout << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads with mapping quality greater than 0\">"                                << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads read supporting position \">" << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplement read supporting position \">" << endl;
+  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=SI,Number=1,Type=Float,Description=\"Shannon entropy \">" << endl;
+  cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters \">" << endl;
+  cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
+  cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
+  cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
+  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
+  cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
+  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
+  cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
+  cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood\">"                                        << endl;
+  cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                 << endl;
+  cout << "##FORMAT=<ID=NA,Number=1,Type=Integer,Description=\"Number of reads supporting a SV\">"                          << endl;
+  cout << "##FORMAT=<ID=NS,Number=1,Type=Integer,Description=\"Number of reads with a softclip at POS for individual\">"    << endl;
+  cout << "##FORMAT=<ID=RD,Number=1,Type=Integer,Description=\"Number of reads passing filters\">"                          << endl;
   cout << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" << "\t";
 
   for(unsigned int b = 0; b < globalOpts.all.size(); b++){
@@ -228,7 +265,7 @@ string printIndvDat(  indvDat * d ){
          << d->badFlag[z] << " "
          << (*it).RefID    << " " 
 	 << (*it).Position << " " 
-	 << (*it).GetEndPosition() << " "
+	 << (*it).GetEndPosition(false,true) << " "
 	 << (*it).Position + (*it).Length << " "
          << (*it).MapQuality << " " 
          << (*it).MateRefID    << " " 
@@ -244,8 +281,6 @@ string printIndvDat(  indvDat * d ){
 
 }
 
-
-
 string join(vector<string> strings){
 
   string joined = "";
@@ -253,14 +288,13 @@ string join(vector<string> strings){
   for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
     joined = joined + " " + (*sit) + "\n";
   }
-
   return joined;
-
 }
 
 void printVersion(void){
-  cerr << "Version 1.2.0 ; Zev Kronenberg; zev.kronenberg@gmail.com " << endl;
-  cerr << "Github version: " << VERSION << endl;
+  cerr << "Version: " << VERSION << endl;
+  cerr << "Contact: zev.kronenberg [at] gmail.com " << endl;
+  cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
   cerr << endl;
 }
 
@@ -452,7 +486,7 @@ bool getInsertDists(void){
     flag = grabInsertLengths(globalOpts.all[i]);
   }
   
-  return true;
+  return flag;
   
 }
 
@@ -554,8 +588,12 @@ bool processGenotype(indvDat * idat, double * totalAlt){
   double nref = 0.0;
   double nalt = 0.0;
 
-  int ri = 0;
+  if(idat->badFlag.size() > 1000){
+    std::random_shuffle ( idat->badFlag.begin(), idat->badFlag.end() );
+  }
 
+  int ri = 0;
+ 
   for(vector< int >::iterator rit = idat->badFlag.begin(); rit != idat->badFlag.end(); rit++){
     if(ri > 1000){
       break;
@@ -682,7 +720,7 @@ bool loadIndv(map<string, indvDat*> & ti,
 
     vector< CigarOp > cd = (*r).CigarData;
 
-    if( ((pileup.primaryCount[(*r).Position] > 1) || (pileup.primaryCount[(*r).GetEndPosition()] > 1))
+    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition(false,true)].size() > 1))
 	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
       bad = 1;
       ti[fname]->nClipping++;
@@ -702,12 +740,20 @@ bool loadIndv(map<string, indvDat*> & ti,
       
       double iDiff = abs ( ilength - localDists.mus[(*r).Filename] );
       
+
       ti[fname]->inserts.push_back(ilength);
       
       if(iDiff > (3.0 * insertDists.sds[(*r).Filename]) ){
 	bad = 1;
 	ti[fname]->nAboveAvg += 1;
 	ti[fname]->hInserts.push_back(ilength);
+      
+	if( ilength - localDists.mus[(*r).Filename] < 0){
+	  pileup.mateTooClose++;
+	}
+	if( ilength - localDists.mus[(*r).Filename] > 0){
+	  pileup.mateTooFar++;
+	}
       }
     }
 
@@ -772,8 +818,13 @@ bool loadInfoField(map<string, indvDat*> dat, info_field * info, global_opts & o
 
   info->lrt = 2 * (alt - null);
   
+  if(info->lrt < 0 ){
+    info->lrt = 0;
+  }
+  if(aminan(info->lrt)){
+    info->lrt = 0;
+  }
   return true;
-
 }
 
 
@@ -782,7 +833,12 @@ string infoText(info_field * info){
   stringstream ss;
 
   ss << "LRT=" << info->lrt << ";";
-  ss << "AF="  << info->taf << "," << info->baf << "," << info->aaf << ";";
+  if(aminan(info->baf)){
+    ss << "WAF=" << info->taf << ",.," << info->aaf << ";";
+  }
+  else{
+    ss << "WAF=" << info->taf << "," << info->baf << "," << info->aaf << ";";
+  }
   ss << "GC="  << info->tgc << "," << info->bgc << ";";
 
   return ss.str();
@@ -913,7 +969,6 @@ void endPos(vector<cigar> & cigs, long int * pos){
 
 int otherBreak(long int * pos,
 	       map<long int, vector < BamAlignment > > & supliment, 
-	       string & otherside,
 	       string & bestEnd,
 	       string & bestSeqid,
 	       int * support,
@@ -940,8 +995,8 @@ int otherBreak(long int * pos,
 
     string saTag;
     if(! (*it).GetTag("SA", saTag)){
-      cerr << "no sa\n";
-      return false;
+      cerr << "FATAL::INTERNAL: no sa\n";
+      exit(1);
     }
     
 #ifdef DEBUG
@@ -964,18 +1019,29 @@ int otherBreak(long int * pos,
       burnCigar(chimera[3], c);
 
       if(c.front().type == 'S'){
-	otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
-      }
-
+	if(otherPositions[chimera[0]].find(atoi(chimera[1].c_str())) 
+	   == otherPositions[chimera[0]].end()){
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())] = 1;
+	}
+	else{
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
+	}
+      } 
       if(c.back().type  == 'S'){
 	long int endP = atoi(chimera[1].c_str());
 	endPos(c, &endP);
-	otherPositions[chimera[0]][endP]++;	
+	if(otherPositions[chimera[0]].find(endP) ==
+	   otherPositions[chimera[0]].end()
+	   ){
+	  otherPositions[chimera[0]][endP] = 1;	
+	}
+	else{
+	  otherPositions[chimera[0]][endP]++;	
+	}
       } 
     }
   }
-    
-  stringstream ends;
+  
   string bestOpt; 
   int    nbe = 0;
 
@@ -984,8 +1050,6 @@ int otherBreak(long int * pos,
 
     for(map<long int, int>::iterator pos = ab->second.begin();
 	pos != ab->second.end(); pos++){
-
-      ends << ab->first << "," << pos->first << "," << pos->second << ":";
 
       if(pos->second > nbe){
 	nbe =  pos->second;
@@ -998,12 +1062,10 @@ int otherBreak(long int * pos,
       }
     }
   }
-
-  bestEnd.append(bestOpt);
   
-  otherside.append(ends.str());
-
-
+  if(!bestOpt.empty()){
+    bestEnd = bestOpt;
+  }
 
   return otherPositions.size();
 
@@ -1029,15 +1091,15 @@ bool uniqClips(long int * pos,
   
     if((*it).Position == (*pos)){
       string clip = (*it).QueryBases.substr(0, cd.front().Length);
-      if(clip.size() < 4){
+      if(clip.size() < 10){
 	continue;
       }
       clippedSeqs["f"].push_back(clip);
       fcount += 1;
     }
-    if((*it).GetEndPosition() == (*pos)){
+    if((*it).GetEndPosition(false,true) == (*pos)){
       string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length );
-      if(clip.size() < 4){
+      if(clip.size() < 10){
 	continue;
       }
       clippedSeqs["b"].push_back(clip);    
@@ -1063,7 +1125,7 @@ bool uniqClips(long int * pos,
 
 
 
-string consensus(vector<string> & s, double * nn){
+string consensus(vector<string> & s, double * nn, string & direction){
 
   if(s.empty()){
     return ".";
@@ -1085,14 +1147,23 @@ string consensus(vector<string> & s, double * nn){
     
     int index = 0;
 
-    for(int clips = s.size() -1; clips > -1; clips--){
-      appendValue(seq, s[clips]);          
-      index+=1;
-      if(index > 19){
-	break;
+    if(direction.compare("f") == 0){
+      for(uint clips = 0; clips < s.size(); clips++){
+	appendValue(seq, s[clips]);
+	if(clips > 19){
+	  break;
+	}
       }
     }
-    
+    else{
+      for(int clips = s.size() -1; clips > -1; clips--){
+	appendValue(seq, s[clips]);          
+	index+=1;
+	if(index > 19){
+	  break;
+	}
+      }
+    }
     TGraph aliG(seq);
     globalMsaAlignment(aliG, Blosum62(-1, -11));
 
@@ -1127,6 +1198,66 @@ string consensus(vector<string> & s, double * nn){
   return con.str(); 
 }
 
+bool clusterMatePos(string & seqid, 
+		    long int * pos, 
+		    map<long int, vector < BamAlignment > > & primary,
+		    string & bestEnd, 
+		    int * count,
+		    long int * breakpoint
+		    ){
+  
+  int otherSeqids = 0;  
+  
+  map<long int, int> otherPos;
+ 
+  map<long int, int>::iterator fm;
+
+  for(vector<BamAlignment>::iterator it = primary[*pos].begin();
+      it != primary[*pos].end(); it++){
+
+    if(!(*it).IsMateMapped()){
+      continue;
+    }
+
+    if((*it).MateRefID != (*it).MateRefID){
+      otherSeqids++;
+      continue;
+    }
+    
+    if(otherPos.find((*it).MatePosition) == otherPos.end()){
+      otherPos[(*it).MatePosition] = 1;
+    }
+    else{
+      otherPos[(*it).MatePosition]++;
+    }
+  }
+ 
+  int maxCount = 0;
+  long int bestPos = 0;
+
+  for(map<long int, int>::iterator pp = otherPos.begin(); 
+      pp != otherPos.end(); pp++){    
+    if(pp->second > maxCount){
+      maxCount = pp->second;
+      bestPos = pp->first;
+    }
+  }
+  if(maxCount < 4){
+    return false;
+  }
+  else{
+    stringstream ss ;
+    ss << seqid << "," << bestPos << "," << maxCount;
+    *breakpoint = bestPos;
+    *count = maxCount;
+    bestEnd = ss.str();
+
+    return true;
+  }   
+ 
+
+}
+
 bool score(string seqid, 
 	   long int * pos, 
 	   readPileUp & totalDat, 
@@ -1134,72 +1265,97 @@ bool score(string seqid,
 	   string & results, 
 	   global_opts localOpts){
 
-
+  
   totalDat.processPileup(pos);
-
-  if(double(totalDat.nPaired) / double(totalDat.numberOfReads) > 0.9999){
+  
+  if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 3){
     return true;
   }
 
-  if(totalDat.primaryCount[*pos] < 2 && totalDat.supplementCount[*pos] < 2){
+  if(double(totalDat.primary.size() + totalDat.supplement.size()) > (1.4 * double(totalDat.numberOfReads))){
     return true;
   }
 
   #ifdef DEBUG
-  cerr << "Passed Cluster filters: " << totalDat.primaryCount[*pos] << " " << totalDat.supplementCount[*pos] << endl;
+  cerr << "Passed Cluster filters: " << totalDat.primary[*pos].size() << " " << totalDat.supplement[*pos].size() << endl;
   #endif
 
-  string ends, bestEnd, bestSeqid;
+  string bestSeqid ="" ;
+  string bestEnd   ="" ;
+  string esupport  ="" ;
 
   int otherBreakPointCount    = 0;
   long int otherBreakPointPos = 0;
+  long int SVLEN              = -1;
 
-  int otherSeqids = otherBreak(pos, totalDat.supplement, ends, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
+  // trying to find mate breakpoint using splitread support
+  int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
 
   if(otherSeqids > 3){
     return true;
   }
+
+  if(!bestEnd.empty()){
+    esupport = "sr";
+  }
+
+  // trying to find mate breakpoint using mate mapping postion.
+  if(bestEnd.empty()){
+    if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
+      bestSeqid = seqid;
+      esupport = "mp";
+    }
+  }
+  // bestSeqid is the other breakpoint
+  // you need at least two reads for a translocation for a split read supported SV
   if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
     if(otherBreakPointCount < 2){
       return true;
     }
   }
 
+  // SVs over a megabase require additional support 
   if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
     if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
       return true;
     }
+    else{
+      SVLEN = abs((*pos+1) - otherBreakPointPos);
+    }
   }
-  
-  
 
-  if(ends.empty()){
-    ends = "nan";
-  }
-  if(bestEnd.empty()){
-    bestEnd = "nan";
-  }
-   
+ 
   vector<string> alts ; // pairBreaks;
 
-  string direction = "nan";
+  string direction ;
 
   uniqClips(pos, totalDat.primary, alts, direction);
 
-  if(alts.size() < 1){
+  if(alts.size() < 3){
     return true;
   }
 
   double nn   = 0;
 
-  string altSeq = consensus(alts, &nn);
+  string altSeq = consensus(alts, &nn, direction);
 
-  if(altSeq.size() < 11){
+  if(altSeq.size() < 10){
     return true;
   }
 
-  if(nn / double(altSeq.size()) > 0.30){
+  if(nn / double(altSeq.size()) > 0.30 || nn > 18){
     return true;
+  }
+
+  double SI = entropy(altSeq);
+  // arbirary cutoff for sequence entropy
+  if(esupport.empty()){
+    if(SI < 0.5){
+      return true;
+    }
+    if(totalDat.primary[*pos].size() < 6){
+      return true;
+    }
   }
 
   map < string, indvDat*> ti;
@@ -1268,33 +1424,52 @@ bool score(string seqid,
 	     << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
 	     << ","
 	     << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
-	     << ";";
+	     << ","
+	     << double(totalDat.mateTooClose) / double(totalDat.numberOfReads)
+	     << ","
+             << double(totalDat.mateTooFar) / double(totalDat.numberOfReads)
+	     << ";"; 
 
   infoToPrint.append(attributes.str());
-
 
   stringstream tmpOutput;
 
   tmpOutput  << seqid           << "\t"  ;       // CHROM
   tmpOutput  << (*pos) +1       << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
-  tmpOutput  << "N"             << "\t" ;       // REF
+  tmpOutput  << "N"             << "\t"  ;       // REF
   tmpOutput  << altSeq          << "\t"  ;       // ALT
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
-  tmpOutput  << infoToPrint << ""  ;
-  tmpOutput  << "CU=" << totalDat.allCount.size() << ";"  ;
-  tmpOutput  << "NC=" << alts.size()     << ";"  ;
-  tmpOutput  << "ED=" << ends   << ";";
-  tmpOutput  << "BE=" << bestEnd << ";";
-  tmpOutput  << "DI=" << direction << "\t";
-  tmpOutput  << "GT:GL:NR:NA:DP:FR" << "\t" ;
+  tmpOutput  << infoToPrint                                                          ;
+  tmpOutput  << "SI=" << SI                               << ";"                     ;
+  tmpOutput  << "PU=" << totalDat.primary[*pos].size()    << ";"                     ;
+  tmpOutput  << "SU=" << totalDat.supplement[*pos].size() << ";"                     ;
+  tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
+  tmpOutput  << "RD=" << totalDat.numberOfReads << ";"                               ;
+  tmpOutput  << "NC=" << alts.size()     << ";"                                      ;
+
+  if(esupport.empty() || bestEnd.empty() || (unsigned int)bestEnd.c_str()[0]  == 0){
+    bestEnd  =  "." ;
+    esupport =  "." ;
+  }
+  tmpOutput  << "SP=" << esupport  << ";";
+  tmpOutput  << "BE=" << bestEnd   << ";";
+  tmpOutput  << "DI="   << direction << ";";
+  if(otherBreakPointPos == 0 || SVLEN == -1 ){
+    tmpOutput << "END=.;SVLEN=.\t";
+  }
+  else{
+    tmpOutput << "END=" << otherBreakPointPos << ";" << "SVLEN=" << SVLEN << "\t";
+  }
+  tmpOutput  << "GT:GL:NR:NA:NS:RD" << "\t" ;
+
+  int enrichment = 0;
         
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
 
-    double fr = 0;
-    if(ti[localOpts.all[t]]->nClipping > 0 && ti[localOpts.all[t]]->nReads > 0){
-      fr = double(ti[localOpts.all[t]]->nClipping) / double(ti[localOpts.all[t]]->nReads);
+    if(ti[localOpts.all[t]]->nBad > 2){
+      enrichment = 1;
     }
 
     tmpOutput << ti[localOpts.all[t]]->genotype 
@@ -1303,14 +1478,20 @@ bool score(string seqid,
 	      << "," << ti[localOpts.all[t]]->gls[2]
 	      << ":" << ti[localOpts.all[t]]->nGood
 	      << ":" << ti[localOpts.all[t]]->nBad
-	      << ":" << ti[localOpts.all[t]]->nReads
-              << ":" << fr ;
+	      << ":" << ti[localOpts.all[t]]->nClipping
+	      << ":" << ti[localOpts.all[t]]->nReads    ;
     if(t < localOpts.all.size() - 1){
       tmpOutput << "\t";
     }
   }
   
   tmpOutput << endl;
+
+  if(enrichment == 0 ){
+    cleanUp(ti, localOpts);
+    return true;
+  }
+
 
   #ifdef DEBUG
   cerr << "line: " << tmpOutput.str();
@@ -1326,12 +1507,12 @@ bool score(string seqid,
 }
 
 
-bool filt(BamAlignment & al){
+bool filter(BamAlignment & al){
 
   if(!al.IsMapped()){
     return false;
   }
-  if(al.MapQuality == 0){
+  if(al.MapQuality < 15){
     return false;
   }
   if(al.IsDuplicate()){
@@ -1377,61 +1558,72 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
     return false;
   }
 
+
   BamAlignment al     ;
   readPileUp allPileUp;
+  bool hasNextAlignment = true;
 
-  if(! All.GetNextAlignment(al)){
+  hasNextAlignment = All.GetNextAlignment(al);
+  if(!hasNextAlignment){
     All.Close();
     return false;
   }
 
-  long int currentPos = 0;
-  bool getNextAl      = true;
-
-  while(1){  
+  list <long int> clippedBuffer;
+  long int currentPos  = -1;
   
-    bool clipped = false;
-    
-    if(getNextAl == false){
-      break;
+  while(hasNextAlignment){    
+    while(currentPos >= clippedBuffer.front()){
+      if(clippedBuffer.empty()){
+	break;
+      }
+      clippedBuffer.pop_front();
+    }
+    while(clippedBuffer.empty()){
+      hasNextAlignment = All.GetNextAlignment(al);
+      if(!hasNextAlignment){
+	break;
+      }
+      if(!filter(al)){
+	continue;
+      }
+      vector< CigarOp > cd = al.CigarData;
+      if(cd.front().Type == 'S'){
+	clippedBuffer.push_back(al.Position);
+      }
+      if(cd.back().Type  == 'S'){
+	clippedBuffer.push_back(al.GetEndPosition(false,true));
+      }
+      allPileUp.processAlignment(al);
     }
     
-    while(clipped == false && getNextAl){
-      
-      getNextAl = All.GetNextAlignment(al);
-      
-      if(filt(al)){
-	    	
-	vector< CigarOp > cd = al.CigarData;
-	
-	if(cd.front().Type == 'S' ){
-	  currentPos = al.Position;
-	  clipped = true;
-	}
-
-	if(cd.back().Type == 'S' && ! clipped){
-          currentPos = al.GetEndPosition();
-          clipped = true;
-	}
-
-	allPileUp.processAlignment(al, currentPos);
-
-       	while(al.Position <= currentPos && getNextAl && clipped){
-	  getNextAl = All.GetNextAlignment(al);
-	  
-	  if( filt(al) && getNextAl){
-	    
-	    allPileUp.processAlignment(al, currentPos);
-	  }
-	}
-      }	
+    clippedBuffer.sort();
+    
+    while(al.Position <= clippedBuffer.front()){
+      hasNextAlignment = All.GetNextAlignment(al);
+      if(!hasNextAlignment){
+        break;
+      }
+      if(!filter(al)){
+        continue;
+      }
+      vector< CigarOp > cd = al.CigarData;
+      if(cd.front().Type == 'S'){
+        clippedBuffer.push_back(al.Position);
+      }
+      if(cd.back().Type  == 'S'){
+        clippedBuffer.push_back(al.GetEndPosition(false,true));
+      }
+      allPileUp.processAlignment(al);
     }
+    
+    clippedBuffer.sort();
 
     #ifdef DEBUG
-    cerr << "About to score : " << currentPos << " " << allPileUp.CurrentPos << endl;
+    cerr << "About to score : " << advancedPos << " " << currentPos << endl;
     #endif
 
-    allPileUp.purgePast();    
+    allPileUp.purgePast( &currentPos );    
 
     if(! score(seqNames[seqidIndex].RefName, 
 	       &currentPos, 
@@ -1443,7 +1635,9 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
     }
-    
+
+    currentPos = clippedBuffer.front();
+
     if(regionResults.size() > 100000){
       omp_set_lock(&lock);
       cout << regionResults;

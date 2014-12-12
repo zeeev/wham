@@ -32,7 +32,7 @@ bool readPileUp::processDiscordant(BamAlignment & al, string & saTag){
     ndiscordantCrossChr++;
   }
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
   
   clusterFrontOrBackPrimary(al, true, saTag);
 
@@ -48,7 +48,7 @@ bool readPileUp::processSplitRead(BamAlignment & al, string & saTag){
     return true;
   }
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
 
   nsplitRead += 1;
 
@@ -112,7 +112,7 @@ bool readPileUp::processMissingMate(BamAlignment & al, string & saTag){
 
   clusterFrontOrBackPrimary(al, true, saTag);
 
-  odd[al.Name]++;
+  odd[al.Name] = 1;
 
   return true;
 
@@ -124,17 +124,16 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
 
   if(sameStrand(al)){
     nSameStrand += 1;
-    odd[al.Name]++;
+    odd[al.Name] = 1;
   }
   if(al.RefID != al.MateRefID){
     nCrossChr++;
-    odd[al.Name]++;
+    odd[al.Name] = 1;
   }
 
   clusterFrontOrBackPrimary(al, true, saTag);
 
   vector< CigarOp > cd = al.CigarData;
-
 
   for(vector< CigarOp >::iterator cig = cd.begin(); 
       cig != cd.end(); cig++){
@@ -144,7 +143,7 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
       {
 	if((*cig).Length > 25){
 	  internalInsertion += 1;
-	  odd[al.Name]++;
+	  odd[al.Name] = 1;
 	}
 	break;
       }
@@ -152,7 +151,7 @@ bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
       {
 	if((*cig).Length > 25){
 	  internalDeletion += 1;
-	  odd[al.Name]++;
+	  odd[al.Name] = 1;
 	}
 	break;
       }
@@ -172,40 +171,27 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
 
   if((al.AlignmentFlag & 0x0800) != 0){
     if(cd.front().Type == 'H'){
-      allCount[al.Position]++;
-      supplementCount[al.Position]++;
       supplement[al.Position].push_back(al);
     }
     if(cd.back().Type == 'H'){
-      allCount[al.Position]++;
-      supplementCount[al.Position]++;
-      supplement[al.GetEndPosition()].push_back(al);
+      supplement[al.GetEndPosition(false,true)].push_back(al);
     }
   }
-
   else{
     if(cd.front().Type == 'S'){
       nClippedFront++;
-      allCount[al.Position]++;
-      primaryCount[al.Position]++;
       primary[al.Position].push_back(al);
-
-      odd[al.Name]++;
-
+      odd[al.Name] = 1;
       if(! saTag.empty()){
 	supplement[al.Position].push_back(al);
       }
     }
     if(cd.back().Type == 'S'){
       nClippedBack++;
-      allCount[al.GetEndPosition()]++;
-      primaryCount[al.GetEndPosition()]++;
-      primary[al.GetEndPosition()].push_back(al);
-
-      odd[al.Name]++;
-
+      primary[al.GetEndPosition(false,true)].push_back(al);
+      odd[al.Name] = 1;
       if(! saTag.empty()){
-	supplement[al.GetEndPosition()].push_back(al);
+	supplement[al.GetEndPosition(false,true)].push_back(al);
       }
     }
   }
@@ -236,9 +222,7 @@ void readPileUp::processPileup(long int * pos){
     // trailing pileup data
     if((*r).Position > *pos){
       continue;
-#ifdef DEBUG
-      cerr << "Too far ahead: " << (*r).Name << endl;
-#endif
+
     }
 
     numberOfReads += 1;
@@ -248,39 +232,25 @@ void readPileUp::processPileup(long int * pos){
     // split reads
     if( (*r).GetTag("SA", saTag) ){
       processSplitRead(*r, saTag);
-#ifdef DEBUG
-      cerr << "Split Read: " << (*r).Name << endl;
-#endif
       continue;
     }
     // discordant reads
     if(!(*r).IsProperPair()){
       processDiscordant(*r, saTag);
-#ifdef DEBUG
-      cerr << "Discordant Read: " << (*r).Name << endl;
-#endif
+
       continue;
     }
     // mates missing
     if(!(*r).IsMateMapped()){
       processMissingMate(*r, saTag);
-#ifdef DEBUG
-      cerr << "Mate Missing: " << (*r).Name << endl;
-#endif
+
       continue;
     }
     // good data
     if((*r).IsMateMapped() && (*r).IsProperPair() ){
       
-#ifdef DEBUG
-      cerr << "before count: " << nPaired << endl;
-#endif
-
       processProperPair(*r, saTag);
-#ifdef DEBUG
-      cerr << "Mate paired: " << (*r).Name << endl;
-      cerr << "after count: " << nPaired << endl;
-#endif
+
       continue;
     }    
   
@@ -293,14 +263,14 @@ void readPileUp::processPileup(long int * pos){
 
 void readPileUp::clearClusters(void){
   odd.clear();
-  primaryCount.clear();
-  supplementCount.clear();
   primary.clear();
   supplement.clear();
-  allCount.clear();
 }
 
 void readPileUp::clearStats(void){
+
+  mateTooClose      = 0;
+  mateTooFar        = 0;
   internalInsertion = 0;
   internalDeletion  = 0;
   numberOfReads = 0;
@@ -330,18 +300,16 @@ readPileUp::readPileUp(){
 
 readPileUp::~readPileUp(){}
 
-void readPileUp::processAlignment(BamTools::BamAlignment Current_alignment, long int pos){
+void readPileUp::processAlignment(BamTools::BamAlignment Current_alignment){
   currentData.push_back(Current_alignment);
   CurrentStart    = Current_alignment.Position;
-  CurrentPos      = pos;
 }
 
 void readPileUp::purgeAll(void){
   currentData.clear();
 }
 
-
-void readPileUp::purgePast(void){
+void readPileUp::purgePast(long int * delPos){
   
   int nreads  = currentData.size();
   int counter = 0;
@@ -351,7 +319,7 @@ void readPileUp::purgePast(void){
     BamAlignment read = currentData.front();
     currentData.pop_front();    
 
-    if( read.GetEndPosition() >= CurrentPos){ 
+    if( read.GetEndPosition(false,true) >= *delPos){ 
       currentData.push_back(read);
     } 
    
@@ -361,11 +329,6 @@ void readPileUp::purgePast(void){
       break;
     }
   }
-}
-
-std::list<BamAlignment> readPileUp::pileup(void){
-  readPileUp::purgePast();
-  return currentData;
 }
 
 int readPileUp::currentPos(void){
