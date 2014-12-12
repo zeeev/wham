@@ -22,11 +22,12 @@ provide the type of structural variant.
 Options:
 
 file       - <STRING> - required - filename
-help       - <FLAG>   - optional - print help statement and die
-append     - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
-paired     - <FLAG>   - optional - output paired breakpoints only (increase specificity)
-buffer     - <INT>    - optional - add basepair to both sides of the SV call [0]
-singletons - <INT>    - optional - add basepair to only unpaired breakpoints [0]
+
+-h,--help       - <FLAG>   - optional - print help statement and die
+-a,--append     - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
+-p,--paired     - <FLAG>   - optional - output paired breakpoints only (increase specificity)
+-b,--buffer     - <INT>    - optional - add basepair to both sides of the SV call [0]
+-s,--singletons - <INT>    - optional - add basepair to only unpaired breakpoints [0]
 
 Info:
 
@@ -38,13 +39,17 @@ paired - This option filters out sites were there was no split read support for
 
 my ($help);
 my $FILE;
-my $APPEND = 0;
-my $PAIRED = 0;
+my $APPEND        = 0;
+my $PAIRED        = 0;
+my $BUFFER        = 0;
+my $SINGLE_BUFFER = 0;
 
-my $opt_success = GetOptions('help'      => \$help,
-			     'file=s'    => \$FILE,
-			     'append'    => \$APPEND,
-			     'paired'    => \$PAIRED
+my $opt_success = GetOptions('help'         => \$help,
+			     'file=s'       => \$FILE,
+			     'buffer=s'     => \$BUFFER,
+			     'append'       => \$APPEND,
+			     'singletons=s' => \$SINGLE_BUFFER,
+			     'paired'       => \$PAIRED	     
 		      );
 
 die $usage if $help || ! $opt_success;
@@ -106,14 +111,18 @@ sub processLines{
 	
 	my %info = map{ split /=|;/} $vcfLine[7];
 
-	my $startPos = $vcfLine[1] - 1 - $BUFFER;
-	my $endPos = $vcfLine[1] - 1 + $BUFFER ;
-	my $bedLine = "$vcfLine[0]\t$startPos";
+	my $startPos = $vcfLine[1] - 1 ;
+	my $endPos = $vcfLine[1]   - 1 ;
 
-	if($info{BE} eq '.'){
+	if($info{'BE'} ne '.'){
+	    $startPos -= $BUFFER;
+	    $endPos   += $BUFFER;
+	}
+
+	if($info{"BE"} eq '.'){
 	    next VCF if $PAIRED;
-	    $startPos - $SINGLE_BUFFER;
-	    $endPos   + $SINGLE_BUFFER;
+	    $startPos -= $SINGLE_BUFFER;
+	    $endPos   += $SINGLE_BUFFER;
 	}
 	else{
 	    my @end = split /,/, $info{BE};
@@ -126,6 +135,7 @@ sub processLines{
 		$endPos = $end[1];
 	    }
 	}
+	my $bedLine = "$vcfLine[0]\t$startPos";
 	$bedLine .= "\t$endPos";
 
 	if($ANNOTATED_FLAG){
