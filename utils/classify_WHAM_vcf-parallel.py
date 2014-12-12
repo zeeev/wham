@@ -135,12 +135,12 @@ def parse_vcf_data( vdat ):
 	vdat = vdat.split(";")
 	for v in vdat:
 		try:
-			v = v.split("=")
+			v = v.split("=") #split key and data into list
 		except:
 			print "not valid VCF file"
 		dict[ v[0] ] = v[1] #setup dict struct
 
-	#return the dictionary structure data
+	#return the dictionary structure data with info fields as keys. 
 	return( dict )
 
 
@@ -220,7 +220,7 @@ def process_vcf( info ):
 			return_list.append( print_line )
 		else:
 			return_list.append( None )
-	#return the full list		
+	#return the full list of updated line data
 	return( return_list )
 
 
