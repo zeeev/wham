@@ -197,6 +197,7 @@ def process_vcf( info ):
 	info[2] = dataset dictionary
 	info[3] = filter arg supplied by user
 	"""
+	#sys.stderr.write("... running process VCF  with job id %d \n" %(os.getpid() ) ) 
 	#parse the args to function
 	line_list = info[0] #list of lines from VCF obj
 	clf = info[1] #randomForest object
@@ -291,7 +292,7 @@ sys.stderr.write("\t results from cross validation:\n\t %f%s \n" %( avg_val, '%'
 ######
 
 sys.stderr.write("processing VCF file through classifier... \n" ) 
-
+sys.stderr.write("...running parent process with job id %d \n can use this ID to exit \n" %(os.getpid() ) )
 #load VCF file into class obj
 vcf_file = vcf(arg.VCF)
 
