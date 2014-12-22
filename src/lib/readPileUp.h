@@ -31,13 +31,11 @@ class readPileUp {
   std::map <long int, std::vector<BamTools::BamAlignment> > primary    ;
   std::map <long int, std::vector<BamTools::BamAlignment> > supplement ;
 
-
+  int nLowMapQ     ;
   int numberOfReads;
-
-  //
-  int mateTooClose;
-  int mateTooFar  ; 
-
+  int mapQsum      ;
+  int mateTooClose ;
+  int mateTooFar   ; 
 
   // internal indels
   int internalInsertion;

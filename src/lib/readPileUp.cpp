@@ -225,7 +225,13 @@ void readPileUp::processPileup(long int * pos){
 
     }
 
+    mapQsum += (*r).MapQuality ;
+
     numberOfReads += 1;
+
+    if((*r).MapQuality < 50){
+      nLowMapQ += 1;
+    }
 
     string saTag;
 
@@ -268,29 +274,30 @@ void readPileUp::clearClusters(void){
 }
 
 void readPileUp::clearStats(void){
-
-  mateTooClose      = 0;
-  mateTooFar        = 0;
-  internalInsertion = 0;
-  internalDeletion  = 0;
-  numberOfReads = 0;
-  nMatesMissing = 0;
-  nPaired = 0;
-  nCrossChr = 0;
-  nsplitRead = 0;
-  nsplitReadCrossChr = 0;
-  nf1SameStrand = 0;
-  nf2SameStrand = 0;
-  nf1f2SameStrand = 0;
-  nsplitMissingMates = 0;
-  nDiscordant = 0;
-  ndiscordantCrossChr = 0;
+  nLowMapQ              = 0;
+  mapQsum               = 0;
+  mateTooClose          = 0;
+  mateTooFar            = 0;
+  internalInsertion     = 0;
+  internalDeletion      = 0;
+  numberOfReads         = 0;
+  nMatesMissing         = 0;
+  nPaired               = 0;
+  nCrossChr             = 0;
+  nsplitRead            = 0;
+  nsplitReadCrossChr    = 0;
+  nf1SameStrand         = 0;
+  nf2SameStrand         = 0;
+  nf1f2SameStrand       = 0;
+  nsplitMissingMates    = 0;
+  nDiscordant           = 0;
+  ndiscordantCrossChr   = 0;
   nsameStrandDiscordant = 0;
-  nSameStrand = 0;
-  nDiscordant = 0;
-  nSoftClipped = 0;
-  nClippedFront = 0; 
-  nClippedBack = 0;
+  nSameStrand           = 0;
+  nDiscordant           = 0;
+  nSoftClipped          = 0;
+  nClippedFront         = 0; 
+  nClippedBack          = 0;
 }
 
 readPileUp::readPileUp(){

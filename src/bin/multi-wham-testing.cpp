@@ -202,6 +202,8 @@ void printHeader(void){
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
+ cout << "##INFO=<ID=MQ,Number=1,Type=String,Description=\"Average mapping quality\">"   << endl;
+ cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 40\">"   << endl;
   cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
   cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
@@ -601,12 +603,15 @@ bool processGenotype(indvDat * idat, double * totalAlt){
 
     double mappingP = unphred(idat->MapQ[ri]);
 
-    if( *rit == 1 && idat->nClipping > 1){
+    // will this improve stuff 1-> 2?
+
+
+
+    if( (*rit == 1 && idat->nClipping > 1) ){
       nalt += 1;
       aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
       abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
       bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
-
     }
     else{
       nref += 1;
@@ -1448,6 +1453,8 @@ bool score(string seqid,
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
   tmpOutput  << "RD=" << totalDat.numberOfReads << ";"                               ;
   tmpOutput  << "NC=" << alts.size()     << ";"                                      ;
+  tmpOutput  << "MQ=" << double(totalDat.mapQsum) / double(totalDat.numberOfReads)  << ";";
+  tmpOutput  << "MQF=" << double(totalDat.nLowMapQ) / double(totalDat.numberOfReads)  << ";";
 
   if(esupport.empty() || bestEnd.empty() || (unsigned int)bestEnd.c_str()[0]  == 0){
     bestEnd  =  "." ;
@@ -1512,7 +1519,7 @@ bool filter(BamAlignment & al){
   if(!al.IsMapped()){
     return false;
   }
-  if(al.MapQuality < 15){
+  if(al.MapQuality < 41){
     return false;
   }
   if(al.IsDuplicate()){
