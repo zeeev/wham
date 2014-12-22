@@ -203,7 +203,7 @@ void printHeader(void){
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
  cout << "##INFO=<ID=MQ,Number=1,Type=String,Description=\"Average mapping quality\">"   << endl;
- cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 40\">"   << endl;
+ cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 50\">"   << endl;
   cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
   cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
