@@ -123,3 +123,16 @@ None
 #####Future efforts:
 
 More benchmarking.
+
+#### Version 1.7.0
+
+### Features:
+1. Added average mapping quality (MQ)
+2. Fraction of reads with quality lower than 50
+3. Filtering out reads with mapping quality below 40 (better specificity)
+4. Set several cutoffs based on CHM1 data
+
+### Bug Fixes:
+
+None.
+
