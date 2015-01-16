@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="Wham : Structural variant detection and association testing">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Wham</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/jewmanchue/wham">View on GitHub</a>
+
+          <h1 id="project_title">Wham</h1>
+          <h2 id="project_tagline">Structural variant detection and association testing</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/jewmanchue/wham/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/jewmanchue/wham/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h3>
+<a id="what-is-wham" class="anchor" href="#what-is-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is WHAM?</h3>
+
+<p>WHole-genome Alignment Metrics (WHAM) is a structural variant (SV) caller that integrates several sources of mapping information to identify SVs.  WHAM classifies SVs using a flexible and extendable machine-learning algorithm (random forest).  WHAM is not only accurate at identifying SVs, but its association test can identify shared SVs enriched in a cohort of diseased individuals compared to a background of healthy individuals.   </p>
+
+<p>WHAM can be easily run as a stand alone tool or as part of gkno (<a href="http://gkno.me">http://gkno.me</a>) or bcbio-nextgen (<a href="http://bcbio-nextgen.readthedocs.org">http://bcbio-nextgen.readthedocs.org</a>) pipelines.  </p>
+
+<p>Currently we are preparing the WHAM manuscript.  If you would like to use and cite this tool, for the time being, please cite the WHAM github page.</p>
+
+<h3>
+<a id="installing-wham" class="anchor" href="#installing-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installing WHAM</h3>
+
+<p>WHAM builds in two simple steps... assuming that you have the dependencies.  Most linux environments have cmake, and OpenMP the two requirements for WHAM.  If an install fails you might have to install a few libraries. </p>
+
+<h3>
+<a id="fast-and-dirty-install" class="anchor" href="#fast-and-dirty-install" aria-hidden="true"><span class="octicon octicon-link"></span></a>Fast and dirty install</h3>
+
+<pre><code>git clone --recursive https://github.com/jewmanchue/wham.git
+cd wham
+git checkout v1.7.0
+make
+</code></pre>
+
+<h4>
+<a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span class="octicon octicon-link"></span></a>Dependencies</h4>
+
+<p>For classification of SV variant types <strong>(OPTIONAL)</strong>, a python distribution with the scikit-learn and argparse packages are required. These come standard with the Anaconda release of python, which can be obtained here:</p>
+
+<p><a href="http://continuum.io/downloads">http://continuum.io/downloads</a></p>
+
+<p>If you want to continue with your current python distribution use the following commands <strong>(NOTE: requires Python (&gt;= 2.6 or &gt;= 3.3), NumPy (&gt;= 1.6.1), SciPy (&gt;= 0.9)</strong>:</p>
+
+<pre><code>pip install -U numpy scipy scikit-learn argparse
+</code></pre>
+
+<p>After dependency installation, clone the git repository with the following commands:</p>
+
+<pre><code>git clone --recursive git@github.com:jewmanchue/wham.git
+cd wham
+git checkout v1.7.0
+make
+</code></pre>
+
+<p>If you get an error while downloading wham try https:</p>
+
+<pre><code>git clone --recursive https://github.com/jewmanchue/wham.git
+cd wham
+git checkout v1.7.0
+make
+</code></pre>
+
+<p>To make sure you checked out the correct branch you should see v1.7.0 by typing:</p>
+
+<pre><code>git name-rev --tags --name-only $(git rev-parse HEAD)
+</code></pre>
+
+<h3>
+<a id="wham-input" class="anchor" href="#wham-input" aria-hidden="true"><span class="octicon octicon-link"></span></a>WHAM input</h3>
+
+<p>WHAM uses soft clipping information and supplementary alignments provided by mapping software. 
+We recommend that you use <a href="http://bio-bwa.sourceforge.net">BWA mem</a> for accurate structural variant calls.  The input BAM files must be
+sorted, duplicates marked or removed and the BAM files need to be indexed.  The sorted
+BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later.  </p>
+
+<h3>
+<a id="running-wham" class="anchor" href="#running-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running WHAM</h3>
+
+<p>usage statement:</p>
+
+<pre><code>usage  : WHAM-BAM -x &lt;INT&gt; -r &lt;STRING&gt;     -e &lt;STRING&gt;  -t &lt;STRING&gt;    -b &lt;STRING&gt;
+
+example: WHAM-BAM -x 20    -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
+
+required: t &lt;STRING&gt; -- comma separated list of target bam files
+option  : b &lt;STRING&gt; -- comma separated list of background bam files
+option  : r &lt;STRING&gt; -- a genomic region in the format "seqid:start-end"
+option  : x &lt;INT&gt;    -- set the number of threads, otherwise max
+option  : e &lt;STRING&gt; -- a bedfile that defines regions to score
+
+Version: v1.7.0-dirty
+Contact: zev.kronenberg [at] gmail.com
+Notes  : -If you find a bug, please open a report on github!
+</code></pre>
+
+<h4>
+<a id="running-on-test-data" class="anchor" href="#running-on-test-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running on test data</h4>
+
+<p>We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory. Note that the commands scroll horizontally. </p>
+
+<pre><code>./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf 
+python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf utils/WHAM_training_data.txt &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.CALLS.vcf
+</code></pre>
+
+<p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
+
+<h3>
+<a id="understanding-wham-output" class="anchor" href="#understanding-wham-output" aria-hidden="true"><span class="octicon octicon-link"></span></a>Understanding WHAM output</h3>
+
+<p>WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.  </p>
+
+<pre><code>##fileformat=VCFv4.1
+##INFO=&lt;ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic"&gt;
+##INFO=&lt;ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined"&gt;
+##INFO=&lt;ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target"&gt;
+##INFO=&lt;ID=AT,Number=15,Type=Float,Description="Attributes for classification"&gt;
+##INFO=&lt;ID=PU,Number=1,Type=Integer,Description="Number of reads read supporting position"&gt;
+##INFO=&lt;ID=SU,Number=1,Type=Integer,Description="Number of supplement read supporting position"&gt;
+##INFO=&lt;ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position"&gt;
+##INFO=&lt;ID=SI,Number=1,Type=Float,Description="Shannon entropy"&gt;
+##INFO=&lt;ID=DP,Number=1,Type=Integer,Description="Number of reads at pileup position across individuals passing filters"&gt;
+##INFO=&lt;ID=SP,Number=1,Type=String,Description="Support for endpoint;  none:., mp:mate pair, sr:split read"&gt;
+##INFO=&lt;ID=BE,Number=3,Type=String,Description="Best end position: chr,position,count or none:."&gt;
+##INFO=&lt;ID=DI,Number=1,Type=Character,Description="Consensus is from front or back of pileup : f,b"&gt;
+##INFO=&lt;ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus"&gt;
+##INFO=&lt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
+##INFO=&lt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele"&gt;
+##FORMAT=&lt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
+##FORMAT=&lt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
+##FORMAT=&lt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
+##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
+##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
+##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      NA12877.sorted.bam      NA12882.sorted.bam
+</code></pre>
+
+<p>Here is an unclassified wham example:</p>
+
+<pre><code>6   
+131440530
+.   
+N   
+AGAGTAGAAAGTATCCTTATTTGGTTGGAAAGATCAGATGAAGGGGA 
+.
+.
+LRT=0.3669;WAF=0.250001,0.500001,0.333334;GC=2,1;AT=0.853846,0,0,0,0.146154,0,0.0615385,0.146154,0,0.0846154,0,0,0,0,0,0,0.00769231;SI=1.81279;PU=22;SU=19;CU=140;RD=130;NC=18;SP=sr;BE=6,131440608,19;DI=b;END=131440608;SVLEN=78  
+GT:GL:NR:NA:NS:RD   
+0/1:-151.971,-24.2602,-331.572:24:11:11:35  0/0:-4.5e-05,-255,-255:45:0:0:45    0/1:-151.971,-29.1122,-428.281:31:11:11:42
+</code></pre>
+
+<p>The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below.  The genotypes for the trio are 1/0, 0/0 and 0/1. </p>
+
+<h1></h1>
+
+<p>The info field is comprised of ten key value pairs.</p>
+
+<h4>
+<a id="lrt" class="anchor" href="#lrt" aria-hidden="true"><span class="octicon octicon-link"></span></a>LRT:</h4>
+
+<p>This is the likelihood ratio test statistic quantifying the difference in allele frequencies between the cases and controls.
+  If you are only using WHAM for its structural breakpoint detection this field will contain a -nan. Both  cases (target) and controls (background) bams must be specified using the -t &amp; -b flags to get an LRT score.</p>
+
+<h4>
+<a id="waf" class="anchor" href="#waf" aria-hidden="true"><span class="octicon octicon-link"></span></a>WAF:</h4>
+
+<p>A comma separated list of allele frequencies of the background, target, combined. If control (background) bams were not specified the allele frequency for the background will be listed as -nan.  WHAM treats each breakpoint as a bi-allelic variant and estimates the frequency based on the genotype counts.</p>
+
+<h4>
+<a id="gc" class="anchor" href="#gc" aria-hidden="true"><span class="octicon octicon-link"></span></a>GC:</h4>
+
+<p>Wham does not call a genotype unless there are 3 reliable reads covering a position.  Genotypes of './.' are no-calls.  CG reports the number of genotypes that could be called reliably.</p>
+
+<h4>
+<a id="at" class="anchor" href="#at" aria-hidden="true"><span class="octicon octicon-link"></span></a>AT:</h4>
+
+<p>This field used by wham to determine a classification.  There are 17 read depth normalized counts.  The average user should not worry about this field.</p>
+
+<h4>
+<a id="si" class="anchor" href="#si" aria-hidden="true"><span class="octicon octicon-link"></span></a>SI:</h4>
+
+<p>Consensus sequence complexity measured by Shannon's entropy.  Wham removes calls where the entropy is below 0.5.</p>
+
+<h4>
+<a id="pu" class="anchor" href="#pu" aria-hidden="true"><span class="octicon octicon-link"></span></a>PU:</h4>
+
+<p>The number of primary mappings that support the exact breakpoint reported in the POS field. </p>
+
+<h4>
+<a id="su" class="anchor" href="#su" aria-hidden="true"><span class="octicon octicon-link"></span></a>SU:</h4>
+
+<p>The number of supplementary / split read support for the exact breakpoint reported in the POS field. </p>
+
+<h4>
+<a id="cu" class="anchor" href="#cu" aria-hidden="true"><span class="octicon octicon-link"></span></a>CU:</h4>
+
+<p>WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. </p>
+
+<h4>
+<a id="rd" class="anchor" href="#rd" aria-hidden="true"><span class="octicon octicon-link"></span></a>RD:</h4>
+
+<p>The number of reads covering all individuals joint called</p>
+
+<h4>
+<a id="nc" class="anchor" href="#nc" aria-hidden="true"><span class="octicon octicon-link"></span></a>NC:</h4>
+
+<p>The number of soft-clipped segments there were collapsed into the consensus sequence.</p>
+
+<h4>
+<a id="sp" class="anchor" href="#sp" aria-hidden="true"><span class="octicon octicon-link"></span></a>SP:</h4>
+
+<p>Wham tries to identify the other breakpoint of an SV by first operating on split reads then mate pair mappings.
+  If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.  </p>
+
+<h4>
+<a id="be" class="anchor" href="#be" aria-hidden="true"><span class="octicon octicon-link"></span></a>BE:</h4>
+
+<p>The best candidate endpoint based on split read clustering.</p>
+
+<h4>
+<a id="di" class="anchor" href="#di" aria-hidden="true"><span class="octicon octicon-link"></span></a>DI:</h4>
+
+<p>This field denotes is the breakpoint is supported on the 5' of the pielup or 3' end of pileup.  The value 'f' denotes the '5 and 'b' denotes the 3'. </p>
+
+<h4>
+<a id="end" class="anchor" href="#end" aria-hidden="true"><span class="octicon octicon-link"></span></a>END:</h4>
+
+<p>The end position of the structural variant.  If there is an interchromosomal SV this field will contain a '.'.</p>
+
+<h4>
+<a id="svlen" class="anchor" href="#svlen" aria-hidden="true"><span class="octicon octicon-link"></span></a>SVLEN:</h4>
+
+<p>The distance between the two breakpoints wham identified.   If there is an interchromosomal SV or the endpoint could not be identified this field will contain a '.'.</p>
+
+<h4>
+<a id="wc" class="anchor" href="#wc" aria-hidden="true"><span class="octicon octicon-link"></span></a>WC:</h4>
+
+<p>The class of structural variant classified by the random forest.</p>
+
+<h4>
+<a id="wp" class="anchor" href="#wp" aria-hidden="true"><span class="octicon octicon-link"></span></a>WP:</h4>
+
+<p>The probabilities for each class label generated by the random forest classifier.  </p>
+
+<h1></h1>
+
+<p>The format field is comprised of six colon-delimited fields.</p>
+
+<h4>
+<a id="gt" class="anchor" href="#gt" aria-hidden="true"><span class="octicon octicon-link"></span></a>GT:</h4>
+
+<p>A genotype call.  The nature of the variant is unknown.  WHAM determines the zygosity.</p>
+
+<h4>
+<a id="gl" class="anchor" href="#gl" aria-hidden="true"><span class="octicon octicon-link"></span></a>GL:</h4>
+
+<p>log10 genotype likelihood under a bi-allelic model.</p>
+
+<h4>
+<a id="nr" class="anchor" href="#nr" aria-hidden="true"><span class="octicon octicon-link"></span></a>NR:</h4>
+
+<p>The number of reads that do not support any type of structural variant.</p>
+
+<h4>
+<a id="na" class="anchor" href="#na" aria-hidden="true"><span class="octicon octicon-link"></span></a>NA:</h4>
+
+<p>The number of reads that do support any type of structural variant.</p>
+
+<h4>
+<a id="ns" class="anchor" href="#ns" aria-hidden="true"><span class="octicon octicon-link"></span></a>NS:</h4>
+
+<p>The number of primary reads supporting with a soft clip at POS</p>
+
+<h4>
+<a id="rd-1" class="anchor" href="#rd-1" aria-hidden="true"><span class="octicon octicon-link"></span></a>RD:</h4>
+
+<p>The number of reads covering the individual at POS after filtering</p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Wham maintained by <a href="https://github.com/jewmanchue">jewmanchue</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+              <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-50580904-3");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+
+  </body>
+</html>
