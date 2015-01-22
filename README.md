@@ -1,7 +1,7 @@
 
 ### All WHAM documents can be found on the wiki:
 
-https://github.com/jewmanchue/wham/wiki
+http://jewmanchue.github.io/wham/
 
 
 ### What is WHAM?
