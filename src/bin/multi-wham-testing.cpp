@@ -198,7 +198,7 @@ void printHeader(void){
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
   cout << "##INFO=<ID=SI,Number=1,Type=Float,Description=\"Shannon entropy \">" << endl;
   cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters \">" << endl;
-  cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read\">" << endl;
+  cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read, al:alternative alignment\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
@@ -1076,6 +1076,114 @@ int otherBreak(long int * pos,
 
 }
 
+//XATAG
+int otherBreakAlternative(long int * pos,
+			  map<long int, vector < BamAlignment > > & supliment, 
+			  string & bestEnd,
+			  string & bestSeqid,
+			  int * support,
+			  long int * otherPos
+	             
+	       ){
+  
+#ifdef DEBUG
+  cerr << "N alternative:" << supliment[*pos].size() << endl;
+#endif
+
+ 
+  map<string, map< long int, int > > otherPositions;
+
+#ifdef DEBUG
+  cerr << "Alternative mapping:" << endl;
+#endif
+
+  for(vector<BamAlignment>::iterator it = supliment[*pos].begin(); 
+      it != supliment[*pos].end(); it++){
+
+#ifdef DEBUG
+    cerr << (*it).Name << endl;
+#endif
+    
+    string saTag;
+    if(!(*it).GetTag("XA", saTag)){
+      continue;
+    }
+    
+    vector<string> xaInfo = split(saTag, ";");
+    
+    for(vector<string>::iterator ch = xaInfo.begin(); 
+	ch != xaInfo.end(); ch++){
+      
+      if((*ch).empty()){
+	break;
+      }
+      
+#ifdef DEBUG
+      cerr << saTag << endl;
+#endif
+
+      vector<string> chimera  = split((*ch), ",");
+
+      // remove the strand from XA
+      chimera[1].erase(0,1); 
+
+      vector<cigar> c;
+
+      burnCigar(chimera[2], c);
+
+      if(c.front().type == 'S'){
+	if(otherPositions[chimera[0]].find(atoi(chimera[1].c_str())) 
+	   == otherPositions[chimera[0]].end()){
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())] = 1;
+	}
+	else{
+	  otherPositions[chimera[0]][atoi(chimera[1].c_str())]++;
+	}
+      } 
+      if(c.back().type  == 'S'){
+	long int endP = atoi(chimera[1].c_str());
+	endPos(c, &endP);
+	if(otherPositions[chimera[0]].find(endP) ==
+	   otherPositions[chimera[0]].end()
+	   ){
+	  otherPositions[chimera[0]][endP] = 1;
+	}
+	else{
+	  otherPositions[chimera[0]][endP]++;
+	}
+      } 
+    }
+  }
+  
+  string bestOpt; 
+  int    nbe = 0;
+
+  for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
+      ab != otherPositions.end(); ab++){
+
+    for(map<long int, int>::iterator pos = ab->second.begin();
+	pos != ab->second.end(); pos++){
+
+      if(pos->second > nbe){
+	nbe =  pos->second;
+	stringstream best;
+	best << ab->first << "," << pos->first << "," << pos->second;
+	*otherPos = pos->first;
+	bestSeqid = ab->first;
+	*support = pos->second;
+	bestOpt = best.str();
+      }
+    }
+  }
+  
+  if(!bestOpt.empty()){
+    bestEnd = bestOpt;
+  }
+
+  return otherPositions.size();
+
+}
+
 bool uniqClips(long int * pos, 
 	       map<long int, vector < BamAlignment > > & clusters, 
 	       vector<string> & alts, string & direction){
@@ -1299,11 +1407,18 @@ bool score(string seqid,
   if(otherSeqids > 3){
     return true;
   }
-
   if(!bestEnd.empty()){
     esupport = "sr";
   }
-
+  // trying to find alternative mappings
+  otherSeqids = otherBreakAlternative(pos, totalDat.primary, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
+  
+  if(otherSeqids > 3){
+    return true;
+  }  
+  if(!bestEnd.empty()){
+    esupport = "al";
+  }
   // trying to find mate breakpoint using mate mapping postion.
   if(bestEnd.empty()){
     if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
@@ -1535,6 +1650,10 @@ bool filter(BamAlignment & al){
   if(al.GetTag("XA", xaTag)){
     vector<string> xas = split(xaTag, ";");
       if(xas.size() > 2){
+	#ifdef DEBUG
+	cerr << "failed xa filter" << al.Name << " " << xaTag << endl;
+	#endif
+	
 	return false;
       }
   }
@@ -1627,7 +1746,7 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
     clippedBuffer.sort();
 
     #ifdef DEBUG
-    cerr << "About to score : " << advancedPos << " " << currentPos << endl;
+    cerr << "About to score : " << currentPos << endl;
     #endif
 
     allPileUp.purgePast( &currentPos );    
