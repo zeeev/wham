@@ -1410,15 +1410,7 @@ bool score(string seqid,
   if(!bestEnd.empty()){
     esupport = "sr";
   }
-  // trying to find alternative mappings
-  otherSeqids = otherBreakAlternative(pos, totalDat.primary, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
-  
-  if(otherSeqids > 3){
-    return true;
-  }  
-  if(!bestEnd.empty()){
-    esupport = "al";
-  }
+
   // trying to find mate breakpoint using mate mapping postion.
   if(bestEnd.empty()){
     if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
@@ -1426,6 +1418,17 @@ bool score(string seqid,
       esupport = "mp";
     }
   }
+
+  // trying to find alternative mappings
+  otherSeqids = otherBreakAlternative(pos, totalDat.primary, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
+
+  if(otherSeqids > 3){
+    return true;
+  }
+  if(!bestEnd.empty()){
+    esupport = "al";
+  }
+
   // bestSeqid is the other breakpoint
   // you need at least two reads for a translocation for a split read supported SV
   if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){

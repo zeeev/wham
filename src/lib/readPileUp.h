@@ -27,7 +27,6 @@ class readPileUp {
   std::list <BamTools::BamAlignment> currentData;
 
   std::map <std::string, int> odd;
-
   std::map <long int, std::vector<BamTools::BamAlignment> > primary    ;
   std::map <long int, std::vector<BamTools::BamAlignment> > supplement ;
 
