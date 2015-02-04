@@ -90,7 +90,7 @@ make
 <h3>
 <a id="wham-input" class="anchor" href="#wham-input" aria-hidden="true"><span class="octicon octicon-link"></span></a>WHAM input</h3>
 
-<p>WHAM uses soft clipping information and supplementary alignments provided by mapping software. 
+<p>WHAM uses soft clipping information and supplementary alignments provided by mapping software.
 We recommend that you use <a href="http://bio-bwa.sourceforge.net">BWA mem</a> for accurate structural variant calls.  The input BAM files must be
 sorted, duplicates marked or removed and the BAM files need to be indexed.  The sorted
 BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later.  </p>
@@ -120,7 +120,7 @@ Notes  : -If you find a bug, please open a report on github!
 
 <p>We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory. Note that the commands scroll horizontally. </p>
 
-<pre><code>./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf 
+<pre><code>./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf
 python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf utils/WHAM_training_data.txt &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.CALLS.vcf
 </code></pre>
 
@@ -158,15 +158,15 @@ python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.t
 
 <p>Here is an unclassified wham example:</p>
 
-<pre><code>6   
+<pre><code>6
 131440530
-.   
-N   
-AGAGTAGAAAGTATCCTTATTTGGTTGGAAAGATCAGATGAAGGGGA 
+.
+N
+AGAGTAGAAAGTATCCTTATTTGGTTGGAAAGATCAGATGAAGGGGA
 .
 .
-LRT=0.3669;WAF=0.250001,0.500001,0.333334;GC=2,1;AT=0.853846,0,0,0,0.146154,0,0.0615385,0.146154,0,0.0846154,0,0,0,0,0,0,0.00769231;SI=1.81279;PU=22;SU=19;CU=140;RD=130;NC=18;SP=sr;BE=6,131440608,19;DI=b;END=131440608;SVLEN=78  
-GT:GL:NR:NA:NS:RD   
+LRT=0.3669;WAF=0.250001,0.500001,0.333334;GC=2,1;AT=0.853846,0,0,0,0.146154,0,0.0615385,0.146154,0,0.0846154,0,0,0,0,0,0,0.00769231;SI=1.81279;PU=22;SU=19;CU=140;RD=130;NC=18;SP=sr;BE=6,131440608,19;DI=b;END=131440608;SVLEN=78
+GT:GL:NR:NA:NS:RD
 0/1:-151.971,-24.2602,-331.572:24:11:11:35  0/0:-4.5e-05,-255,-255:45:0:0:45    0/1:-151.971,-29.1122,-428.281:31:11:11:42
 </code></pre>
 
@@ -230,13 +230,15 @@ GT:GL:NR:NA:NS:RD
 <h4>
 <a id="sp" class="anchor" href="#sp" aria-hidden="true"><span class="octicon octicon-link"></span></a>SP:</h4>
 
-<p>Wham tries to identify the other breakpoint of an SV by first operating on split reads then mate pair mappings.
-  If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.  </p>
+<p>Wham tries to identify the other breakpoint of an SV by first processing split reads, then by processing alternative mappings and finally by mate pair mapping.
+  If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was discovered by alternative mapping the support tag will be 'al', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.
+Alternative mapping is provided by bwa-mem under the 'XA' tag.  If a read has more than one alternaitve mapping it is skipped by Wham. If Wham uses mate pair mapping it is looking at the positions of the mate pairs.  If mate pairs share the same starting position this indicates soft-clipping and the other bound of the SV.
+</p>
 
 <h4>
 <a id="be" class="anchor" href="#be" aria-hidden="true"><span class="octicon octicon-link"></span></a>BE:</h4>
 
-<p>The best candidate endpoint based on split read clustering.</p>
+<p>The best candidate endpoint based on split read clustering.  There are three fields: seqid, start, number of supporting reads.</p>
 
 <h4>
 <a id="di" class="anchor" href="#di" aria-hidden="true"><span class="octicon octicon-link"></span></a>DI:</h4>
@@ -280,12 +282,12 @@ GT:GL:NR:NA:NS:RD
 <h4>
 <a id="nr" class="anchor" href="#nr" aria-hidden="true"><span class="octicon octicon-link"></span></a>NR:</h4>
 
-<p>The number of reads that do not support any type of structural variant.</p>
+<p>The number of reads that do not support  the structural variant listed in ALT.</p>
 
 <h4>
 <a id="na" class="anchor" href="#na" aria-hidden="true"><span class="octicon octicon-link"></span></a>NA:</h4>
 
-<p>The number of reads that do support any type of structural variant.</p>
+<p>The number of reads that support  the structural variant listed in ALT.</p>
 
 <h4>
 <a id="ns" class="anchor" href="#ns" aria-hidden="true"><span class="octicon octicon-link"></span></a>NS:</h4>
