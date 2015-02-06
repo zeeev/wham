@@ -135,6 +135,13 @@ sub processLines{
 		$endPos = $end[1];
 	    }
 	}
+
+	if($startPos > $endPos){
+	    my $temp = $startPos;
+	    $startPos = $endPos;
+	    $endPos = $temp;
+	}
+	
 	my $bedLine = "$vcfLine[0]\t$startPos";
 	$bedLine .= "\t$endPos";
 
