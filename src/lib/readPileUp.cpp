@@ -222,7 +222,6 @@ void readPileUp::processPileup(long int * pos){
     // trailing pileup data
     if((*r).Position > *pos){
       continue;
-
     }
 
     mapQsum += (*r).MapQuality ;
@@ -254,9 +253,7 @@ void readPileUp::processPileup(long int * pos){
     }
     // good data
     if((*r).IsMateMapped() && (*r).IsProperPair() ){
-      
       processProperPair(*r, saTag);
-
       continue;
     }    
   
@@ -278,6 +275,7 @@ void readPileUp::clearStats(void){
   mapQsum               = 0;
   mateTooClose          = 0;
   mateTooFar            = 0;
+  evert                 = 0;
   internalInsertion     = 0;
   internalDeletion      = 0;
   numberOfReads         = 0;

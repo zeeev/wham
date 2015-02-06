@@ -6,6 +6,7 @@
 #include <time.h>
 #include <algorithm>
 #include "split.h"
+#include "KMERUTILS.h"
 
 // openMP - swing that hammer
 #include <omp.h>
@@ -65,6 +66,8 @@ struct insertDat{
   map<string, double> sds;  // standard deviation
   map<string, double> lq ;  // 25% of data
   map<string, double> up ;  // 75% of the data
+  map<string, double> avgD; 
+  double overallDepth;
 } insertDists;
 
 struct global_opts {
@@ -74,6 +77,7 @@ struct global_opts {
   int            nthreads      ;
   string         seqid         ;
   string         bed           ; 
+  string         mask          ;
   vector<int>    region        ; 
 } globalOpts;
 
@@ -103,7 +107,7 @@ inline bool aminan(T value)
 
 }
 
-static const char *optString ="ht:b:r:x:e:";
+static const char *optString ="ht:b:r:x:e:m:";
 
 // this lock prevents threads from printing on top of each other
 
@@ -188,16 +192,16 @@ string collapseCigar(vector<CigarOp> & v){
 }
 
 void printHeader(void){
-  cout << "##fileformat=VCFv4.1"                                                                                                                  << endl;
-  cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                                                       << endl;
+  cout << "##fileformat=VCFv4.1"                                                                << endl;
+  cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
   cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
-  cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                                              << endl;
-  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads read supporting position \">" << endl;
-  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplement read supporting position \">" << endl;
+  cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                      << endl;
+  cout << "##INFO=<ID=KM,Number=3,Type=Float,Description=\"Kmer filters. The number of 17bp kmers that do not contain N, the number of hits to the masking DB, the fraction of hits\">" << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads read supporting position\">" << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplement read supporting position\">" << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
-  cout << "##INFO=<ID=SI,Number=1,Type=Float,Description=\"Shannon entropy \">" << endl;
-  cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters \">" << endl;
+  cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters\">" << endl;
   cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read, al:alternative alignment\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
@@ -301,14 +305,15 @@ void printVersion(void){
 }
 
 void printHelp(void){
-  cerr << "usage  : WHAM-BAM -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>   " << endl << endl;
-  cerr << "example: WHAM-BAM -x 20    -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
+  cerr << "usage  : WHAM-BAM -m <STRING> -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>   " << endl << endl;
+  cerr << "example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
 
-  cerr << "required: t <STRING> -- comma separated list of target bam files"           << endl ;
-  cerr << "option  : b <STRING> -- comma separated list of background bam files"       << endl ;
-  cerr << "option  : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
-  cerr << "option  : x <INT>    -- set the number of threads, otherwise max          " << endl ; 
-  cerr << "option  : e <STRING> -- a bedfile that defines regions to score           " << endl ; 
+  cerr << "required   : t <STRING> -- comma separated list of target bam files"           << endl ;
+  cerr << "recommended: m <STRING> -- kmer database for downstream filtering"             << endl ; 
+  cerr << "option     : b <STRING> -- comma separated list of background bam files"       << endl ;
+  cerr << "option     : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
+  cerr << "option     : x <INT>    -- set the number of threads, otherwise max          " << endl ; 
+  cerr << "option     : e <STRING> -- a bedfile that defines regions to score           " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -316,12 +321,19 @@ void printHelp(void){
 void parseOpts(int argc, char** argv){
   int opt = 0;
 
-  globalOpts.bed = "NA";
+  globalOpts.mask = "NA";
+  globalOpts.bed  = "NA";
 
   opt = getopt(argc, argv, optString);
 
   while(opt != -1){
     switch(opt){
+    case 'm':
+      {
+	globalOpts.mask = optarg;
+	cerr << "INFO: WHAM-BAM will screen breakpoints for simple repeats and microstats: " << globalOpts.mask << endl;
+	break;
+      }
     case 'e':
       {
 	globalOpts.bed = optarg;
@@ -425,71 +437,110 @@ double var(vector<double> & data, double mu){
   return variance / (data.size() - 1);
 }
 
-bool grabInsertLengths(string file){
+// gerates per bamfile statistics 
 
-  BamReader bamR;
-  BamAlignment al;
+void grabInsertLengths(string targetfile){
 
+  vector<string> target_group ;
+  target_group.push_back(targetfile);
+  
   vector<double> alIns;
+  vector<double> nReads;
 
-  double clipped  = 0;
-  double naligned = 0;
-
-  bamR.Open(file);
-
-  int i = 1;
-  while(i < 100000 && bamR.GetNextAlignment(al)){
-    if(al.IsFirstMate() && al.IsMapped() && al.IsMateMapped() && abs(double(al.InsertSize)) < 10000){
-      i += 1;
-      alIns.push_back(abs(double(al.InsertSize)));
-    }
-    if(al.IsMapped()){
-      naligned += 1;
-      vector< CigarOp > cd = al.CigarData;
-
-      if(cd.back().Type == 'S' || cd.back().Type == 'H' ){
-        clipped += double(cd.back().Length) / double (al.Length);
-      }
-      if(cd.front().Type == 'S' || cd.front().Type == 'H'){
-	clipped += double(cd.front().Length) / double (al.Length);
-      }
-
-    }
+  BamMultiReader bamR;
+  if(!bamR.Open(target_group) && bamR.LocateIndexes() ){
+    cerr << "FATAL: cannot read - or find index for: " << targetfile << endl;
+    exit(0);
   }
+
+  SamHeader SH = bamR.GetHeader();
+  if(!SH.HasSortOrder()){
+    cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header." << endl;
+    exit(1);
+  }
+
+  RefVector sequences = bamR.GetReferenceData();
 
   bamR.Close();
 
+  int i = 0; // index for while loop
+  int n = 0; // number of reads
+  
+  BamAlignment al;
+
+  while(i < 3 || n < 20000){
+
+    const int randomChr = rand() % (sequences.size() -1);
+    const int randomPos = rand() % (sequences[randomChr].RefLength -1);
+    const int randomEnd = randomPos + 10000;
+
+    if(randomEnd > sequences[randomChr].RefLength){
+      continue; 
+    }
+    if(sequences[randomChr].RefLength < 10000){
+      cerr << "FATAL: Trying to randomly sample depth from the first seqid: " << sequences[randomChr].RefName << endl;
+      cerr << "      " << sequences[randomChr].RefName << " is " << sequences[randomChr].RefLength << " bp "; 
+      cerr << "       Current wham needs the seqid to be longer than 10kb, please contact zev kronenberg if you get this error" << endl << endl;                 
+    }
+    
+    BamMultiReader bamR;
+    if(!bamR.Open(target_group) && bamR.LocateIndexes() ){
+      cerr << "FATAL: cannot read - or find index for: " << targetfile << endl;
+      exit(0);
+    }
+    if(! bamR.SetRegion(0, randomPos, 0, randomEnd)){      
+      continue;
+    }
+        
+    if(!bamR.GetNextAlignmentCore(al)){
+      continue;
+    }
+
+    i++;
+    
+    long int cp = al.GetEndPosition();
+    
+    readPileUp allPileUp;
+    
+    while(bamR.GetNextAlignmentCore(al)){
+      if(al.Position > cp){
+	allPileUp.purgePast(&cp);
+	cp = al.Position;
+	nReads.push_back(allPileUp.currentData.size());
+      }
+      if(al.IsMapped()
+	 && al.IsMateMapped() 
+	 && abs(double(al.InsertSize)) < 10000 
+	 && al.RefID == al.MateRefID
+	 ){	
+	allPileUp.processAlignment(al);
+	alIns.push_back(abs(double(al.InsertSize)));
+	n++;
+      }
+    }
+    bamR.Close();
+  }
+
   double mu       = mean(alIns        );
+  double mud      = mean(nReads       );
   double variance = var(alIns, mu     );
   double sd       = sqrt(variance     );
-
-  insertDists.mus[file] = mu;
-  insertDists.sds[file] = sd;
-
-  cerr << "INFO: mean insert length, fragment standard deviation, number of reads, file : "
-       << insertDists.mus[file] << ", "
-       << insertDists.sds[file] << ", "
-       << i  << ", "
-       << file << endl;
-  cerr << "INFO: fraction of total length clipped, file : " << clipped / naligned
-       << ", "
-       << file << endl;
-
-  return true;
-
-}
-
-
-bool getInsertDists(void){
-
-  bool flag = true;
-
-  for(unsigned int i = 0; i < globalOpts.all.size(); i++){
-    flag = grabInsertLengths(globalOpts.all[i]);
-  }
+  double sdd      = var(nReads, mud   );
   
-  return flag;
-  
+  omp_set_lock(&lock);
+
+  insertDists.mus[target_group[0]]  = mu;
+  insertDists.sds[target_group[0]]  = sd;
+  insertDists.avgD[target_group[0]] = mud;
+
+  cerr << "INFO: for file:" << target_group[0] << endl            
+       << "     " << target_group[0] << ": mean depth: " << mud << endl
+       << "     " << target_group[0] << ": sd   depth: " << sdd << endl
+       << "     " << target_group[0] << ": mean insert length: " << insertDists.mus[target_group[0]] << endl
+       << "     " << target_group[0] << ": sd   insert length: " << insertDists.sds[target_group[0]] << endl
+       << "     " << target_group[0] << ": number of reads used: " << n  << endl << endl;
+       
+  omp_unset_lock(&lock);
 }
 
 void prepBams(BamMultiReader & bamMreader, string group){
@@ -572,7 +623,12 @@ double unphred(double p){
   return pow(10, (-p/10));
 }
 
-bool processGenotype(indvDat * idat, double * totalAlt){
+bool processGenotype(string & fname,
+		     indvDat * idat, 
+		     double * totalAlt, 
+		     double * totalAltGeno,
+		     double * relativeDepth,
+		     insertDat * stats){
 
   string genotype = "./.";
 
@@ -604,8 +660,6 @@ bool processGenotype(indvDat * idat, double * totalAlt){
     double mappingP = unphred(idat->MapQ[ri]);
 
     // will this improve stuff 1-> 2?
-
-
 
     if( (*rit == 1 && idat->nClipping > 1) ){
       nalt += 1;
@@ -658,6 +712,10 @@ bool processGenotype(indvDat * idat, double * totalAlt){
     genotype = "1/1";
     idat->genotypeIndex = 2;
     (*totalAlt) += 2;
+  }
+  if(idat->genotypeIndex != 0){
+    *relativeDepth += (idat->badFlag.size() / stats->avgD[fname]);
+    *totalAltGeno += 1;
   }
 
   idat->genotype = genotype;
@@ -731,7 +789,7 @@ bool loadIndv(map<string, indvDat*> & ti,
       ti[fname]->nClipping++;
     }
     
-    if((*r).IsMapped() && (*r).IsMateMapped() && (*r).IsProperPair()){
+    if((*r).IsMapped() && (*r).IsMateMapped() && ((*r).RefID == (*r).MateRefID)){
 
       ti[fname]->insertSum    += abs(double((*r).InsertSize));
       ti[fname]->mappedPairs  += 1;
@@ -741,11 +799,14 @@ bool loadIndv(map<string, indvDat*> & ti,
 	ti[fname]->sameStrand += 1;
       }
       
+      if((*r).IsReverseStrand() && ! (*r).IsMateReverseStrand() && (*r).Position < (*r).MatePosition){
+	pileup.evert++;
+      }
+
       double ilength = abs ( double ( (*r).InsertSize ));
       
       double iDiff = abs ( ilength - localDists.mus[(*r).Filename] );
       
-
       ti[fname]->inserts.push_back(ilength);
       
       if(iDiff > (3.0 * insertDists.sds[(*r).Filename]) ){
@@ -841,9 +902,13 @@ string infoText(info_field * info){
   if(aminan(info->baf)){
     ss << "WAF=" << info->taf << ",.," << info->aaf << ";";
   }
+  else if(aminan(info->taf)){  
+    ss << "WAF=" << ".," << info->baf << "," << info->aaf << ";";
+  }
   else{
     ss << "WAF=" << info->taf << "," << info->baf << "," << info->aaf << ";";
   }
+ 
   ss << "GC="  << info->tgc << "," << info->bgc << ";";
 
   return ss.str();
@@ -972,13 +1037,13 @@ void endPos(vector<cigar> & cigs, long int * pos){
 
 
 
-int otherBreak(long int * pos,
+int SplitReadEndFinder(long int * pos,
 	       map<long int, vector < BamAlignment > > & supliment, 
 	       string & bestEnd,
 	       string & bestSeqid,
 	       int * support,
-	       long int * otherPos
-	      
+	       long int * otherPos,
+	       string & currentSeqid
 	       ){
   
 #ifdef DEBUG
@@ -989,6 +1054,7 @@ int otherBreak(long int * pos,
     return 0;
   }
 
+  // seqid, pos, number of reads supporting 
   map<string, map< long int, int > > otherPositions;
 
 #ifdef DEBUG
@@ -1049,29 +1115,47 @@ int otherBreak(long int * pos,
   
   string bestOpt; 
   int    nbe = 0;
+  
+  // checking within chromosome
 
-  for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
-      ab != otherPositions.end(); ab++){
+  for(map<long int, int>::iterator pos = otherPositions[currentSeqid].begin();
+      pos != otherPositions[currentSeqid].end(); pos++){
+    if(pos->second > nbe ){
+      nbe =  pos->second;
+      stringstream best;
+      best << currentSeqid << "," << pos->first << "," << pos->second;
+      *otherPos = pos->first;
+      bestSeqid = currentSeqid;
+      *support = pos->second;
+      bestOpt = best.str();
+    }
+  }
 
-    for(map<long int, int>::iterator pos = ab->second.begin();
-	pos != ab->second.end(); pos++){
+  // checking across chromosomes
 
-      if(pos->second > nbe){
-	nbe =  pos->second;
-	stringstream best;
-	best << ab->first << "," << pos->first << "," << pos->second;
-	*otherPos = pos->first;
-	bestSeqid = ab->first;
-	*support = pos->second;
-	bestOpt = best.str();
+  if(nbe < 1){
+    for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
+	ab != otherPositions.end(); ab++){
+      
+      for(map<long int, int>::iterator pos = ab->second.begin();
+	  pos != ab->second.end(); pos++){
+	
+	if(pos->second > nbe && nbe < 2){
+	  nbe =  pos->second;
+	  stringstream best;
+	  best << ab->first << "," << pos->first << "," << pos->second;
+	  *otherPos = pos->first;
+	  bestSeqid = ab->first;
+	  *support = pos->second;
+	  bestOpt = best.str();
+	}
       }
     }
   }
-  
   if(!bestOpt.empty()){
     bestEnd = bestOpt;
   }
-
+  
   return otherPositions.size();
 
 }
@@ -1082,8 +1166,8 @@ int otherBreakAlternative(long int * pos,
 			  string & bestEnd,
 			  string & bestSeqid,
 			  int * support,
-			  long int * otherPos
-	             
+			  long int * otherPos,
+			  string & currentSeqid			  
 	       ){
   
 #ifdef DEBUG
@@ -1158,20 +1242,40 @@ int otherBreakAlternative(long int * pos,
   string bestOpt; 
   int    nbe = 0;
 
-  for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
-      ab != otherPositions.end(); ab++){
+  // checking within chromosome
 
-    for(map<long int, int>::iterator pos = ab->second.begin();
-	pos != ab->second.end(); pos++){
+  for(map<long int, int>::iterator pos = otherPositions[currentSeqid].begin();
+      pos != otherPositions[currentSeqid].end(); pos++){
+    if(pos->second > nbe ){
+      nbe =  pos->second;
+      stringstream best;
+      best << currentSeqid << "," << pos->first << "," << pos->second;
+      *otherPos = pos->first;
+      bestSeqid = currentSeqid;
+      *support = pos->second;
+      bestOpt = best.str();
+    }
+  }
 
-      if(pos->second > nbe){
-	nbe =  pos->second;
-	stringstream best;
-	best << ab->first << "," << pos->first << "," << pos->second;
-	*otherPos = pos->first;
-	bestSeqid = ab->first;
-	*support = pos->second;
-	bestOpt = best.str();
+  // checking across chromosome
+
+
+  if(nbe < 1){
+    for(map< string, map <long int, int> >::iterator ab = otherPositions.begin();
+	ab != otherPositions.end(); ab++){
+      
+      for(map<long int, int>::iterator pos = ab->second.begin();
+	  pos != ab->second.end(); pos++){
+	
+	if(pos->second > nbe && nbe < 1){
+	  nbe =  pos->second;
+	  stringstream best;
+	  best << ab->first << "," << pos->first << "," << pos->second;
+	  *otherPos = pos->first;
+	  bestSeqid = ab->first;
+	  *support = pos->second;
+	  bestOpt = best.str();
+	}
       }
     }
   }
@@ -1355,7 +1459,7 @@ bool clusterMatePos(string & seqid,
       bestPos = pp->first;
     }
   }
-  if(maxCount < 4){
+  if(maxCount < 2){
     return false;
   }
   else{
@@ -1367,8 +1471,6 @@ bool clusterMatePos(string & seqid,
 
     return true;
   }   
- 
-
 }
 
 bool score(string seqid, 
@@ -1376,82 +1478,67 @@ bool score(string seqid,
 	   readPileUp & totalDat, 
 	   insertDat & localDists, 
 	   string & results, 
-	   global_opts localOpts){
+	   global_opts localOpts,
+	   vector<uint64_t> & kmerDB
+	   ){
 
   
   totalDat.processPileup(pos);
   
-  if(double(totalDat.primary[*pos].size()) / double(totalDat.currentData.size()) < 0.20 && totalDat.primary[*pos].size() < 3){
+  if(totalDat.primary[*pos].size() < 3){
     return true;
   }
 
-  if(double(totalDat.primary.size() + totalDat.supplement.size()) > (1.4 * double(totalDat.numberOfReads))){
+
+  stringstream attributes;
+
+  attributes << "AT="
+             << double(totalDat.nPaired) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nMatesMissing) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nSameStrand) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nCrossChr) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nsplitRead) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nf1SameStrand) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nf2SameStrand) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nf1f2SameStrand) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nsplitReadCrossChr) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nsplitMissingMates) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nDiscordant) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.nsameStrandDiscordant) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.ndiscordantCrossChr) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.mateTooClose) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.mateTooFar) / double(totalDat.numberOfReads)
+             << ","
+             << double(totalDat.evert) / double(totalDat.numberOfReads);
+
+
+  // if there are only good mate pairs skip this site (small indels and things that don't generate split reads
+  //   are  going to be missed (NOT MANY))
+
+  if(attributes.str().compare("AT=1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0") == 0){
     return true;
   }
 
-  #ifdef DEBUG
-  cerr << "Passed Cluster filters: " << totalDat.primary[*pos].size() << " " << totalDat.supplement[*pos].size() << endl;
-  #endif
 
-  string bestSeqid ="" ;
-  string bestEnd   ="" ;
-  string esupport  ="" ;
-
-  int otherBreakPointCount    = 0;
-  long int otherBreakPointPos = 0;
-  long int SVLEN              = -1;
-
-  // trying to find mate breakpoint using splitread support
-  int otherSeqids = otherBreak(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
-
-  if(otherSeqids > 3){
-    return true;
-  }
-  if(!bestEnd.empty()){
-    esupport = "sr";
-  }
-
-
-  // trying to find alternative mappings
-
-  if(bestEnd.empty()){
-    otherSeqids = otherBreakAlternative(pos, totalDat.primary, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos);
-    if(otherSeqids > 3){
-      return true;
-    }
-    if(!bestEnd.empty()){
-      esupport = "al";
-    }
-  }
-
-  // trying to find mate breakpoint using mate mapping postion.
-  if(bestEnd.empty()){
-    if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
-      bestSeqid = seqid;
-      esupport = "mp";
-    }
-  }
-
-
-  // bestSeqid is the other breakpoint
-  // you need at least two reads for a translocation for a split read supported SV
-  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
-    if(otherBreakPointCount < 2){
-      return true;
-    }
-  }
-
-  // SVs over a megabase require additional support 
-  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
-    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
-      return true;
-    }
-    else{
-      SVLEN = abs((*pos+1) - otherBreakPointPos);
-    }
-  }
-
- 
+  // finding consensus sequence 
   vector<string> alts ; // pairBreaks;
 
   string direction ;
@@ -1474,17 +1561,92 @@ bool score(string seqid,
     return true;
   }
 
-  double SI = entropy(altSeq);
-  // arbirary cutoff for sequence entropy
-  if(esupport.empty()){
-    if(SI < 0.5){
-      return true;
+  // searchign for repeats 
+
+  stringstream kfilter;
+
+  double nReps  = 0;
+  double nAssay = 0;
+
+  if(altSeq.size() > 17){
+    for(uint16_t l = 0; l < (altSeq.size() - 17); l++){
+      string conKmer = altSeq.substr(l,17);
+      std::size_t found = conKmer.find("N");
+      if (found!=std::string::npos){
+	continue;
+      }
+      nAssay += 1;
+      char * con = new char[18];
+      memcpy(con, conKmer.c_str(), 18);
+      con[17] = '\0';
+      uint64_t front =  charArrayToBin(con, 0);
+      if( binary_search(kmerDB.begin(), kmerDB.end(), front) ){
+	nReps+=1;
+      }
+      delete con;
     }
-    if(totalDat.primary[*pos].size() < 6){
+  }
+
+  double kmHitFrac = double(nReps) / double(nAssay) ; 
+
+  if(aminan(kmHitFrac)){
+    kmHitFrac = 0;
+  }
+  kfilter << nAssay << "," << nReps << "," << kmHitFrac ;
+
+  // trying to locate best end
+
+  string bestSeqid ="" ;
+  string bestEnd   ="" ;
+  string esupport  ="" ;
+
+  int otherBreakPointCount    = 0;
+  long int otherBreakPointPos = 0;
+  long int SVLEN              = -1;
+
+  // trying to find mate breakpoint using splitread support
+  int otherSeqids = SplitReadEndFinder(pos, totalDat.supplement, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos, seqid);
+
+  if(!bestEnd.empty()){
+    esupport = "sr";
+  }
+
+  // trying to find alternative mappings
+
+  if(bestEnd.empty() || seqid.compare(bestSeqid) != 0 ){
+    otherSeqids = otherBreakAlternative(pos, totalDat.primary, bestEnd, bestSeqid, &otherBreakPointCount, &otherBreakPointPos, seqid);
+    if(!bestEnd.empty()){
+      esupport = "al";
+    }
+  }
+
+  // trying to find mate breakpoint using mate mapping postion.
+  if(bestEnd.empty() || seqid.compare(bestSeqid) != 0){
+    if(clusterMatePos(seqid, pos, totalDat.primary, bestEnd, &otherBreakPointCount, &otherBreakPointPos)){    
+      bestSeqid = seqid;
+      esupport = "mp";
+    }
+  }
+
+  // bestSeqid is the other breakpoint
+  // you need at least two reads for a translocation for a split read supported SV
+  if(seqid.compare(bestSeqid) != 0 && ! bestSeqid.empty()){
+    if(otherBreakPointCount < 2){
       return true;
     }
   }
 
+  // SVs over a megabase require additional support 
+  if(seqid.compare(bestSeqid) == 0 && ! bestSeqid.empty()){
+    if(abs(*pos - otherBreakPointPos) > 1000000 && otherBreakPointCount < 2){
+      return true;
+    }
+    else{
+      SVLEN = abs((*pos+1) - otherBreakPointPos);
+    }
+  }
+
+  // preparing data structure to load genotypes
   map < string, indvDat*> ti;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
@@ -1497,9 +1659,17 @@ bool score(string seqid,
   loadIndv(ti, totalDat, localOpts, localDists, pos);
 
   double nAlt = 0;
+  double nAltGeno = 0;
+
+  double alternative_relative_depth_sum = 0;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
-    processGenotype(ti[localOpts.all[t]], &nAlt);
+    processGenotype(localOpts.all[t], 
+		    ti[localOpts.all[t]], 
+		    &nAlt, 
+		    &nAltGeno,
+		    &alternative_relative_depth_sum , 
+		    &localDists);
     #ifdef DEBUG
     cerr << "position: " << *pos << endl; 
     cerr << printIndvDat(ti[localOpts.all[t]]) << endl;
@@ -1510,6 +1680,9 @@ bool score(string seqid,
     cleanUp(ti, localOpts);
     return true;
   }
+
+  attributes << "," << (alternative_relative_depth_sum/nAltGeno) << ";";
+  
   
   info_field * info = new info_field; 
 
@@ -1519,44 +1692,6 @@ bool score(string seqid,
 
   string infoToPrint = infoText(info);
   
-  stringstream attributes;
-
-  attributes << "AT="
-	     << double(totalDat.nPaired) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nMatesMissing) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nSameStrand) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nCrossChr) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nsplitRead) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nf1SameStrand) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nf2SameStrand) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nf1f2SameStrand) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nsplitReadCrossChr) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nsplitMissingMates) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nDiscordant) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.nsameStrandDiscordant) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.ndiscordantCrossChr) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
-	     << ","
-	     << double(totalDat.mateTooClose) / double(totalDat.numberOfReads)
-	     << ","
-             << double(totalDat.mateTooFar) / double(totalDat.numberOfReads)
-	     << ";"; 
-
   infoToPrint.append(attributes.str());
 
   stringstream tmpOutput;
@@ -1569,7 +1704,7 @@ bool score(string seqid,
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
   tmpOutput  << infoToPrint                                                          ;
-  tmpOutput  << "SI=" << SI                               << ";"                     ;
+  tmpOutput  << "KM=" << kfilter.str()                    << ";"                     ;
   tmpOutput  << "PU=" << totalDat.primary[*pos].size()    << ";"                     ;
   tmpOutput  << "SU=" << totalDat.supplement[*pos].size() << ";"                     ;
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
@@ -1641,15 +1776,22 @@ bool filter(BamAlignment & al){
   if(!al.IsMapped()){
     return false;
   }
-  if(al.MapQuality < 41){
-    return false;
-  }
   if(al.IsDuplicate()){
     return false;
   }
   if(! al.IsPrimaryAlignment()
      && ((al.AlignmentFlag & 0x0800) == 0)){
     return false;
+  }
+
+
+  string saTag;
+  if(al.GetTag("SA", saTag)){ 
+  }
+  else{
+    if(al.MapQuality < 21){
+      return false;
+    }
   }
 
   string xaTag;
@@ -1672,14 +1814,18 @@ bool filter(BamAlignment & al){
   return true;
 }
  
-bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
+bool runRegion(int seqidIndex, 
+	       int start, 
+	       int end, 
+	       vector< RefData > seqNames, 
+	       vector<uint64_t> kmerDB){
   
   string regionResults;
 
   omp_set_lock(&lock);
 
   global_opts localOpts = globalOpts;
-  insertDat localDists = insertDists;
+  insertDat localDists  = insertDists;
 
   omp_unset_lock(&lock);
 
@@ -1763,7 +1909,8 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
 	       allPileUp,
 	       localDists, 
 	       regionResults, 
-	       localOpts )){
+	       localOpts,
+	       kmerDB)){
       cerr << "FATAL: problem during scoring" << endl;
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
@@ -1789,6 +1936,27 @@ bool runRegion(int seqidIndex, int start, int end, vector< RefData > seqNames){
   
   All.Close();
 
+  return true;
+}
+
+bool loadKmerDB(vector<uint64_t> & DB){
+
+  ifstream kmerDB (globalOpts.mask);
+  string line;
+
+  uint64_t kmer;
+
+  if(kmerDB.is_open()){
+    while(getline(kmerDB, line)){
+      kmer = std::stoul(line);
+      DB.push_back(kmer);
+    }
+  }
+  else{
+    return false;
+  }
+
+  kmerDB.close();
   return true;
 }
 
@@ -1828,6 +1996,9 @@ bool loadBed(vector<regionDat*> & features, RefVector seqs){
   else{
     return false;
   }
+
+  featureFile.close();
+  
   return true;
 }
 
@@ -1851,31 +2022,42 @@ int main(int argc, char** argv) {
     omp_set_num_threads(globalOpts.nthreads);
   }
  
-  globalOpts.all.reserve(globalOpts.targetBams.size()  + globalOpts.backgroundBams.size());
-  globalOpts.all.insert( globalOpts.all.end(), globalOpts.targetBams.begin(), globalOpts.targetBams.end() );
+  //loading up filenames into a vector
+
+  globalOpts.all.reserve(globalOpts.targetBams.size()                          + globalOpts.backgroundBams.size() );
+  globalOpts.all.insert( globalOpts.all.end(), globalOpts.targetBams.begin(),         globalOpts.targetBams.end() );
   globalOpts.all.insert( globalOpts.all.end(), globalOpts.backgroundBams.begin(), globalOpts.backgroundBams.end() );
+  
+  // loading kmer database
+  vector<uint64_t> kmerDB;
+  if(! (globalOpts.mask.compare("NA") == 0)){
+    if(!loadKmerDB(kmerDB)){
+      cerr << "FATAL: masking file was specified, but could not be opened or read." << endl;
+      exit(1);
+    }
+  }
+
+  cerr << "INFO: gathering stats for each bam file." << endl;
+  cerr << "INFO: this step can take a few minutes." << endl;
+
+ #pragma omp parallel for
+  for(unsigned int i = 0; i < globalOpts.all.size(); i++){
+    grabInsertLengths(globalOpts.all[i]);
+  }
+
+  // the pooled reader
 
   BamMultiReader allReader;
-  
 
-  // checking for bam 
+  // grabbing sam header and checking for sotrted bams
   prepBams(allReader, "all");
   SamHeader SH = allReader.GetHeader();
   if(!SH.HasSortOrder()){
     cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header." << endl;
     exit(1);
   }
-  
-
-
   allReader.Close();
 
-  if(!getInsertDists()){
-    cerr << "FATAL: " << "problem while generating insert lengths dists" << endl;
-    exit(1);
-  }
-
-  cerr << "INFO: generated distributions" << endl;
   prepBams(allReader, "all");  
   RefVector sequences = allReader.GetReferenceData();
   allReader.Close();
@@ -1894,7 +2076,11 @@ int main(int argc, char** argv) {
   }
 
   if(seqidIndex != 0 || globalOpts.region.size() == 2 ){
-    if(! runRegion(seqidIndex, globalOpts.region[0], globalOpts.region[1], sequences)){
+    if(! runRegion(seqidIndex, 
+		   globalOpts.region[0], 
+		   globalOpts.region[1], 
+		   sequences, 
+		   kmerDB)){
       cerr << "WARNING: region failed to run properly." << endl;
     }
     cerr << "INFO: WHAM-BAM finished normally." << endl;
@@ -1939,7 +2125,7 @@ int main(int argc, char** argv) {
     cerr << "INFO: running region: " << sequences[regions[re]->seqidIndex].RefName << ":" << regions[re]->start << "-" << regions[re]->end << endl;
     omp_unset_lock(&lock);
 
-    if(! runRegion( regions[re]->seqidIndex, regions[re]->start, regions[re]->end, sequences)){
+    if(! runRegion( regions[re]->seqidIndex, regions[re]->start, regions[re]->end, sequences, kmerDB)){
       omp_set_lock(&lock);
       cerr << "WARNING: region failed to run properly: " 
 	   << sequences[regions[re]->seqidIndex].RefName 
@@ -1950,10 +2136,6 @@ int main(int argc, char** argv) {
     }
 
   }
-
-    //    (*chunk) = NULL;
-    //    delete (*chunk);
-
 
   cerr << "INFO: WHAM-BAM finished normally." << endl;
   return 0;

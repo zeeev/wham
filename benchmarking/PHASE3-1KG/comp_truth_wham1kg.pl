@@ -180,8 +180,8 @@ VAR: while (<$INB>) {
 
     my %INFO = map {split /;|=/ } $l[7];
 
-    next VAR if $INFO{MQF} > 0.1;
-    next VAR if $INFO{MQ}  < 50 ; 
+#    next VAR if $INFO{MQF} > 0.1;
+#    next VAR if $INFO{MQ}  < 50 ; 
 
     my $endSeqid = -1;
     my $endPos   = -1;

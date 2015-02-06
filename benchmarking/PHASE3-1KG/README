@@ -1,3 +1,6 @@
 The truth file used: Phase3 SV calls (submitted)
 
 4c08f5f534d045f932405942fe62a03e  estd214_1000_Genomes_Consortium_Phase_3.2014-10-13.GRCh37.p4.Submitted.gvf
+81af7553b77d0915867122b99e2c0475  /home/zkronenb/estd214_1000_Genomes_Consortium_Phase_3.2014-10-13.GRCh37.p4.Submitted.NA12878.gvf
+
+perl ~/tools/wham/utils/gvfToBedPe.pl --file ~/estd214_1000_Genomes_Consortium_Phase_3.2014-10-13.GRCh37.p4.Submitted.NA12878.gvf > estd214_1000_Genomes_Consortium_Phase_3.2014-10-13.GRCh37.p4.Submitted.NA12878.bedpe

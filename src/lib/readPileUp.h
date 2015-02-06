@@ -35,6 +35,7 @@ class readPileUp {
   int mapQsum      ;
   int mateTooClose ;
   int mateTooFar   ; 
+  int evert        ;
 
   // internal indels
   int internalInsertion;
