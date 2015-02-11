@@ -206,8 +206,8 @@ void printHeader(void){
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
- cout << "##INFO=<ID=MQ,Number=1,Type=String,Description=\"Average mapping quality\">"   << endl;
- cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 50\">"   << endl;
+  cout << "##INFO=<ID=MQ,Number=1,Type=String,Description=\"Average mapping quality\">"   << endl;
+  cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 50\">"   << endl;
   cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
   cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
@@ -529,9 +529,9 @@ void grabInsertLengths(string targetfile){
   
   omp_set_lock(&lock);
 
-  insertDists.mus[target_group[0]]  = mu;
-  insertDists.sds[target_group[0]]  = sd;
-  insertDists.avgD[target_group[0]] = mud;
+  insertDists.mus[  targetfile ]  = mu;
+  insertDists.sds[  targetfile ]  = sd;
+  insertDists.avgD[ targetfile ] = mud;
 
   cerr << "INFO: for file:" << target_group[0] << endl            
        << "     " << target_group[0] << ": mean depth: " << mud << endl
@@ -799,25 +799,22 @@ bool loadIndv(map<string, indvDat*> & ti,
 	ti[fname]->sameStrand += 1;
       }
       
-      if((*r).IsReverseStrand() && ! (*r).IsMateReverseStrand() && (*r).Position < (*r).MatePosition){
-	pileup.evert++;
-      }
-
       double ilength = abs ( double ( (*r).InsertSize ));
       
       double iDiff = abs ( ilength - localDists.mus[(*r).Filename] );
       
       ti[fname]->inserts.push_back(ilength);
       
-      if(iDiff > (3.0 * insertDists.sds[(*r).Filename]) ){
+      if(iDiff > ( 3.0 * insertDists.sds[(*r).Filename] ) ){
 	bad = 1;
 	ti[fname]->nAboveAvg += 1;
 	ti[fname]->hInserts.push_back(ilength);
       
-	if( ilength - localDists.mus[(*r).Filename] < 0){
+	if( ilength < localDists.mus[(*r).Filename]){
 	  pileup.mateTooClose++;
 	}
-	if( ilength - localDists.mus[(*r).Filename] > 0){
+	if( ilength > localDists.mus[(*r).Filename] ){
+
 	  pileup.mateTooFar++;
 	}
       }
@@ -1489,53 +1486,47 @@ bool score(string seqid,
     return true;
   }
 
+  if(totalDat.nDiscordant == 0 && totalDat.nsplitRead == 0 && totalDat.evert == 0){
+    return true;
+  }
+  
+  if((double(totalDat.nLowMapQ) / double(totalDat.numberOfReads)) == 1){
+    return true;
+  }
+
+  if((double(totalDat.nPaired) / double(totalDat.numberOfReads)) == 1
+     && (double(totalDat.nLowMapQ) / double(totalDat.numberOfReads)) > 0.1
+     ){
+    return true;
+  }
+
 
   stringstream attributes;
 
   attributes << "AT="
-             << double(totalDat.nPaired) / double(totalDat.numberOfReads)
+	     << double(totalDat.nPaired)           / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nMatesMissing) / double(totalDat.numberOfReads)
+	     << double(totalDat.nDiscordant)       / double(totalDat.numberOfReads)
+	     << ","             
+	     << double(totalDat.nMatesMissing)     / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nSameStrand) / double(totalDat.numberOfReads)
+             << double(totalDat.nSameStrand)       / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nCrossChr) / double(totalDat.numberOfReads)
+             << double(totalDat.nCrossChr)         / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nsplitRead) / double(totalDat.numberOfReads)
+             << double(totalDat.nsplitRead)        / double(totalDat.numberOfReads)
+             << "," 
+             << double(totalDat.nf1SameStrand)     / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nf1SameStrand) / double(totalDat.numberOfReads)
+             << double(totalDat.nf2SameStrand)     / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nf2SameStrand) / double(totalDat.numberOfReads)
+             << double(totalDat.nf1f2SameStrand)   / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nf1f2SameStrand) / double(totalDat.numberOfReads)
+	     << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
              << ","
-             << double(totalDat.nsplitReadCrossChr) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.nsplitMissingMates) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.nDiscordant) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.nsameStrandDiscordant) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.ndiscordantCrossChr) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.internalInsertion) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.internalDeletion) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.mateTooClose) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.mateTooFar) / double(totalDat.numberOfReads)
-             << ","
-             << double(totalDat.evert) / double(totalDat.numberOfReads);
+             << double(totalDat.internalDeletion)  / double(totalDat.numberOfReads);
 
 
-  // if there are only good mate pairs skip this site (small indels and things that don't generate split reads
-  //   are  going to be missed (NOT MANY))
-
-  if(attributes.str().compare("AT=1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0") == 0){
-    return true;
-  }
 
 
   // finding consensus sequence 
@@ -1646,6 +1637,12 @@ bool score(string seqid,
     }
   }
 
+  // this eliminates unpaired, which may or maynot be desireable
+  
+  if(bestEnd.empty()){
+    return true;
+  }
+
   // preparing data structure to load genotypes
   map < string, indvDat*> ti;
 
@@ -1657,6 +1654,7 @@ bool score(string seqid,
   }
 
   loadIndv(ti, totalDat, localOpts, localDists, pos);
+
 
   double nAlt = 0;
   double nAltGeno = 0;
@@ -1681,8 +1679,14 @@ bool score(string seqid,
     return true;
   }
 
-  attributes << "," << (alternative_relative_depth_sum/nAltGeno) << ";";
-  
+  attributes << "," 
+	     << double(totalDat.mateTooClose)      / double(totalDat.numberOfReads)
+	     << ","
+	     << double(totalDat.mateTooFar)        / double(totalDat.numberOfReads)
+	     << ","
+	     << double(totalDat.evert)             / double(totalDat.numberOfReads)
+	     << ","
+	     << (alternative_relative_depth_sum/nAltGeno) << ";";
   
   info_field * info = new info_field; 
 
@@ -1770,7 +1774,6 @@ bool score(string seqid,
   return true;
 }
 
-
 bool filter(BamAlignment & al){
 
   if(!al.IsMapped()){
@@ -1783,7 +1786,6 @@ bool filter(BamAlignment & al){
      && ((al.AlignmentFlag & 0x0800) == 0)){
     return false;
   }
-
 
   string saTag;
   if(al.GetTag("SA", saTag)){ 
@@ -1867,6 +1869,14 @@ bool runRegion(int seqidIndex,
 	continue;
       }
       vector< CigarOp > cd = al.CigarData;
+      if(cd.front().Type == 'S'
+	 && cd.back().Type  == 'S'
+	 && cd.front().Length > 10
+	 && cd.back().Length  > 10
+	 ){
+	continue;
+      }
+
       if(cd.front().Type == 'S'){
 	clippedBuffer.push_back(al.Position);
       }
