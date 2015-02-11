@@ -197,10 +197,10 @@ void printHeader(void){
   cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
   cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
   cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                      << endl;
-  cout << "##INFO=<ID=KM,Number=3,Type=Float,Description=\"Kmer filters. The number of 17bp kmers that do not contain N, the number of hits to the masking DB, the fraction of hits\">" << endl;
-  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads read supporting position\">" << endl;
-  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplement read supporting position\">" << endl;
-  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position \">" << endl;
+  cout << "##INFO=<ID=KM,Number=3,Type=Float,Description=\"Kmer filters. The number of 17bp kmers that were assayed, the number of hits to the masking DB, the fraction of hits\">" << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads supporting position\">" << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplemental reads supporting position\">" << endl;
+  cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position\">" << endl;
   cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters\">" << endl;
   cout << "##INFO=<ID=SP,Number=1,Type=String,Description=\"Support for endpoint;  none:., mp:mate pair, sr:split read, al:alternative alignment\">" << endl;
   cout << "##INFO=<ID=BE,Number=3,Type=String,Description=\"Best end position: chr,position,count or none:.\">"                << endl;
@@ -209,7 +209,7 @@ void printHeader(void){
   cout << "##INFO=<ID=MQ,Number=1,Type=String,Description=\"Average mapping quality\">"   << endl;
   cout << "##INFO=<ID=MQF,Number=1,Type=String,Description=\"Fraction of reads with MQ less than 50\">"   << endl;
   cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
-  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between REF and ALT allele\">"         << endl;
+  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between POS and end\">"         << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood\">"                                        << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                 << endl;

@@ -6,6 +6,7 @@ from sklearn.cross_validation import cross_val_score #validation stats from SKle
 import itertools
 import multiprocessing as mp #allows for parallelization of the classification to speed up script.
 
+
 #########################
 #Args
 #########################
@@ -42,7 +43,7 @@ class vcf:
 			if line[0][0] == '#': #process header lines
 				if re.search("##FORMAT", line[0]) and info_boolean == False: #first instance of ##FORMAT..
 					#need to append new INFO fields for the corresponding data
-					print '##INFO=<ID=WC,Number=1,Type=String,Description="WHAM classifier vairant type">'
+					print '##INFO=<ID=WC,Number=1,Type=String,Description="WHAM classifier variant type">'
 					print '##INFO=<ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model">'
 					info_boolean = True #reset boolean to 
 				print "\t".join( line ) #print results to stdout 
@@ -110,12 +111,19 @@ def classify_data( _x, clf, names ):
 	names = string names, zero indexed of variant calls. 
 	"""
 	_x = np.array(_x)
+	#pdb.set_trace()
+#	index = [16,17,18]
+#	_x = map(lambda(x):_x[x], index)
 	class_idx = int( clf.predict(_x) )#predict classifier. can link back to dataset['target_names']
 	prediction = names[ class_idx ] #lookup text based name for classification
 
 	class_probs = clf.predict_proba(_x)[0] #gives weights for your predictions 1:target_names
 	#convert back to text comma separated list
+
 	class_str = ",".join( [ str(i) for i in class_probs ] )
+
+	#this is a terrible hack that make my soul hurt, but gets the job done for 
+	# dels called dups. 
 
 	#parse the two data fields into a string so they can be appended to the vcf file. 
 	return_str = "WC=" + prediction + ";WP=" + class_str 
@@ -246,8 +254,9 @@ with open(arg.training_matrix) as t:
 		if line[0][0] == "#": #add in this statemnt to print error if user supplies files in wrong order.
 			raise ValueError('not a valid WHAM training file. perhaps you supplied arguments in the wrong order? \n please try running with --help arg for instructions') 
         	target.append( line[-1] ) #always have targets [classified SV] as last column
+		
         	d = [ float(i) for i in line[0:-1] ]
-        	data.append( d )
+		data.append( d )
 
 
 #populate the training dataset in sciKitLearn friendly structure. 
@@ -266,7 +275,7 @@ dataset[ 'target_names' ] = np.array( target_parse['names'] )
 ###########
 
 #setup inital params
-clf = RandomForestClassifier( n_estimators=250 )
+clf = RandomForestClassifier( n_estimators=500 )
 #run RFC on dataset with target classifiers; runs the model fit
 clf = clf.fit( dataset['data'], dataset['target'] )
 

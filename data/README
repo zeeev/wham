@@ -1,0 +1,5 @@
+To remove low complexity regions download the LCR bedfile for hg19 and intersect 
+it with SV calls.
+
+
+https://github.com/lh3/varcmp/raw/master/scripts/LCR-hs37d5.bed.gz

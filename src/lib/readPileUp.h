@@ -68,11 +68,11 @@ class readPileUp {
   ~readPileUp();
 
   bool clusterFrontOrBackPrimary(BamTools::BamAlignment &, bool, std::string&);
-  bool processSplitRead(BamTools::BamAlignment&, std::string&);
+  bool processSplitRead(BamTools::BamAlignment &, std::string&);
   bool processDiscordant(BamTools::BamAlignment &, std::string&);
   bool processSupplement(BamTools::BamAlignment &, std::string&);
   bool processMissingMate(BamTools::BamAlignment &, std::string&);
-  bool processProperPair(BamTools::BamAlignment &, std::string&);
+  bool processPair(BamTools::BamAlignment &, std::string&);
 
   void processAlignment( BamTools::BamAlignment);
   void processPileup(long int *);
@@ -88,4 +88,3 @@ class readPileUp {
 };
 
 #endif
-

@@ -24,12 +24,25 @@ bool readPileUp::processDiscordant(BamAlignment & al, string & saTag){
 
   nDiscordant++;
 
-  if(sameStrand(al)){
-    nsameStrandDiscordant++;
+  if(!al.IsMateMapped()){
+    nMatesMissing++;
+    odd[al.Name] = 1;
+    clusterFrontOrBackPrimary(al, true, saTag);
+    return true;
   }
 
-  if((al.RefID =! al.MateRefID)){
-    ndiscordantCrossChr++;
+  if(al.RefID != al.MateRefID){
+    nCrossChr++;
+    ndiscordantCrossChr++; 
+ }
+  
+  if(sameStrand(al)){
+    nSameStrand += 1;
+    odd[al.Name] = 1;
+  }
+  
+  if(sameStrand(al)){
+    nsameStrandDiscordant++;
   }
 
   odd[al.Name] = 1;
@@ -49,8 +62,14 @@ bool readPileUp::processSplitRead(BamAlignment & al, string & saTag){
   }
 
   odd[al.Name] = 1;
+  nsplitRead  += 1;
 
-  nsplitRead += 1;
+  if(al.IsProperPair()){
+    nPaired++;
+  }
+  else{
+    nDiscordant++;
+  }
 
   vector<string> saData = split(sas[0], ",");
   
@@ -118,19 +137,31 @@ bool readPileUp::processMissingMate(BamAlignment & al, string & saTag){
 
 }
 
-bool readPileUp::processProperPair(BamAlignment & al, string & saTag){
+bool readPileUp::processPair(BamAlignment & al, string & saTag){
 
-  nPaired++ ;
+  nPaired++;
 
-  if(sameStrand(al)){
-    nSameStrand += 1;
-    odd[al.Name] = 1;
+  if(al.IsMateMapped()){
+    if(al.RefID != al.MateRefID){
+      nCrossChr++;
+      odd[al.Name] = 1;
+    }
+    else if(sameStrand(al)){
+      nSameStrand += 1;
+      odd[al.Name] = 1;
+    }
+    else if(al.IsReverseStrand() 
+	    && ! al.IsMateReverseStrand() 
+	    && al.Position < al.MatePosition){
+      evert++;
+    }
+    else if(! al.IsReverseStrand()
+	    && al.IsMateReverseStrand()
+	    && al.Position > al.MatePosition){
+      evert++;
+    }
   }
-  if(al.RefID != al.MateRefID){
-    nCrossChr++;
-    odd[al.Name] = 1;
-  }
-
+  
   clusterFrontOrBackPrimary(al, true, saTag);
 
   vector< CigarOp > cd = al.CigarData;
@@ -218,7 +249,7 @@ void readPileUp::processPileup(long int * pos){
 
   for(list<BamAlignment>::iterator r = currentData.begin(); 
       r != currentData.end(); r++){
-  
+
     // trailing pileup data
     if((*r).Position > *pos){
       continue;
@@ -231,32 +262,27 @@ void readPileUp::processPileup(long int * pos){
     if((*r).MapQuality < 50){
       nLowMapQ += 1;
     }
+    
+    if(! (*r).IsMateMapped()){
+      nMatesMissing += 1;
+    }
 
-    string saTag;
-
+    string saTag;   
     // split reads
-    if( (*r).GetTag("SA", saTag) ){
+    if( (*r).GetTag("SA", saTag ) ){
       processSplitRead(*r, saTag);
       continue;
     }
-    // discordant reads
-    if(!(*r).IsProperPair()){
-      processDiscordant(*r, saTag);
-
+   
+    // paired end data
+    if((*r).IsPaired()){
+      if(!(*r).IsProperPair()){
+	nDiscordant++;
+      }
+      processPair(*r, saTag);
       continue;
     }
-    // mates missing
-    if(!(*r).IsMateMapped()){
-      processMissingMate(*r, saTag);
-
-      continue;
-    }
-    // good data
-    if((*r).IsMateMapped() && (*r).IsProperPair() ){
-      processProperPair(*r, saTag);
-      continue;
-    }    
-  
+    
 #ifdef DEBUG
     cerr << "Bleed through: " << (*r).Name << endl;
 #endif
