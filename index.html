@@ -50,7 +50,6 @@
 
 <pre><code>git clone --recursive https://github.com/jewmanchue/wham.git
 cd wham
-git checkout v1.7.0
 make
 </code></pre>
 
@@ -70,7 +69,6 @@ make
 
 <pre><code>git clone --recursive git@github.com:jewmanchue/wham.git
 cd wham
-git checkout v1.7.0
 make
 </code></pre>
 
@@ -78,13 +76,7 @@ make
 
 <pre><code>git clone --recursive https://github.com/jewmanchue/wham.git
 cd wham
-git checkout v1.7.0
 make
-</code></pre>
-
-<p>To make sure you checked out the correct branch you should see v1.7.0 by typing:</p>
-
-<pre><code>git name-rev --tags --name-only $(git rev-parse HEAD)
 </code></pre>
 
 <h3>
@@ -95,82 +87,105 @@ We recommend that you use <a href="http://bio-bwa.sourceforge.net">BWA mem</a> f
 sorted, duplicates marked or removed and the BAM files need to be indexed.  The sorted
 BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later.  </p>
 
+<p>SV identification is difficult in low complexity regions of the genome.  We provide a
+K-mer database to annotate low complexity sequences. These annotations can be found in the KM field in the INFO column if the database is provided to wham. Download and unzip the database before using Wham.
+</p>
+
+<p>
+<a href="http://weatherby.genetics.utah.edu/WHAM_Data/">Wham databases</a>
+</p>
+
+
 <h3>
 <a id="running-wham" class="anchor" href="#running-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running WHAM</h3>
 
 <p>usage statement:</p>
 
-<pre><code>usage  : WHAM-BAM -x &lt;INT&gt; -r &lt;STRING&gt;     -e &lt;STRING&gt;  -t &lt;STRING&gt;    -b &lt;STRING&gt;
+<pre><code>usage  : WHAM-BAM -m &lt;STRING&lt; -x &lt;INT&lt; -r &lt;STRING&lt;     -e &lt;STRING&lt;  -t &lt;STRING&lt;    -b &lt;TRING&lt;
 
-example: WHAM-BAM -x 20    -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
+example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
 
-required: t &lt;STRING&gt; -- comma separated list of target bam files
-option  : b &lt;STRING&gt; -- comma separated list of background bam files
-option  : r &lt;STRING&gt; -- a genomic region in the format "seqid:start-end"
-option  : x &lt;INT&gt;    -- set the number of threads, otherwise max
-option  : e &lt;STRING&gt; -- a bedfile that defines regions to score
+required   : t &lt;STRING&lt; -- comma separated list of target bam files
+recommended: m &lt;STRING&lt; -- kmer database for downstream filtering
+option     : b &lt;STRING&lt; -- comma separated list of background bam files
+option     : r &lt;STRING&lt; -- a genomic region in the format "seqid:start-end"
+option     : x &lt;INT&lt;    -- set the number of threads, otherwise max
+option     : e &lt;TRING&lt; -- a bedfile that defines regions to score
 
-Version: v1.7.0-dirty
+Version: v1.7.0-12-gf04b-dirty
 Contact: zev.kronenberg [at] gmail.com
 Notes  : -If you find a bug, please open a report on github!
+
 </code></pre>
 
 <h4>
-<a id="running-on-test-data" class="anchor" href="#running-on-test-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running on test data</h4>
+<a id="running-on-NA12878" class="anchor" href="#running-on-NA12878" aria-hidden="true"><span class="octicon octicon-link"></span></a>Example of running Wham</h4>
 
-<p>We have supplied a test dataset for you to test your installation and get familiar with usage of WHAM. Try the following commands, run from the wham directory. Note that the commands scroll horizontally. </p>
+<p>
+Here we run Wham on the whole genome on NA12878
+</p>
 
-<pre><code>./bin/WHAM-BAM -t test/simulations/inv-5xsimA.sort.rmdup.chr22.bam &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf
-python utils/classify_WHAM_vcf.py test/simulations/inv-5xsimA.sort.rmdup.chr22.test.vcf utils/WHAM_training_data.txt &gt; test/simulations/inv-5xsimA.sort.rmdup.chr22.CALLS.vcf
+<pre><code>./bin/WHAM-BAM -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err 
+python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_data.txt &gt; NA12878.wham.raw.class.vcf 2&gt; NA12878.wham.raw.class.err
 </code></pre>
 
 <p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
 
+<p> If you wanted to identify repetitive sequences we can provide Wham the K-mer database:</p>
+
+<pre><code>./bin/WHAM-BAM -m ..PATH../microSat_and_simpleRep_hg19.wham.masking.txt -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err 
+
+<p> By default Wham uses all CPUs the machine has. If you only want to use 10 CPUs use the "-x" flag:</p>
+
+<pre><code>./bin/WHAM-BAM -x 10 -m ..PATH../microSat_and_simpleRep_hg19.wham.masking.txt -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err
+
 <h3>
 <a id="understanding-wham-output" class="anchor" href="#understanding-wham-output" aria-hidden="true"><span class="octicon octicon-link"></span></a>Understanding WHAM output</h3>
 
-<p>WHAM outputs an unsorted VCFv4.1 file.  Below is an example header.  </p>
+<p>WHAM outputs an unsorted VCFv4.1 file.  Below is an example from NA12878.  </p>
 
 <pre><code>##fileformat=VCFv4.1
-##INFO=&lt;ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic"&gt;
-##INFO=&lt;ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined"&gt;
-##INFO=&lt;ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target"&gt;
-##INFO=&lt;ID=AT,Number=15,Type=Float,Description="Attributes for classification"&gt;
-##INFO=&lt;ID=PU,Number=1,Type=Integer,Description="Number of reads read supporting position"&gt;
-##INFO=&lt;ID=SU,Number=1,Type=Integer,Description="Number of supplement read supporting position"&gt;
-##INFO=&lt;ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position"&gt;
-##INFO=&lt;ID=SI,Number=1,Type=Float,Description="Shannon entropy"&gt;
-##INFO=&lt;ID=DP,Number=1,Type=Integer,Description="Number of reads at pileup position across individuals passing filters"&gt;
-##INFO=&lt;ID=SP,Number=1,Type=String,Description="Support for endpoint;  none:., mp:mate pair, sr:split read"&gt;
-##INFO=&lt;ID=BE,Number=3,Type=String,Description="Best end position: chr,position,count or none:."&gt;
-##INFO=&lt;ID=DI,Number=1,Type=Character,Description="Consensus is from front or back of pileup : f,b"&gt;
-##INFO=&lt;ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus"&gt;
-##INFO=&lt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
-##INFO=&lt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele"&gt;
-##FORMAT=&lt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
-##FORMAT=&lt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
-##FORMAT=&lt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
-##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
-##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
-##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      NA12877.sorted.bam      NA12882.sorted.bam
+##INFO=&gt;ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic"&gt;
+##INFO=&gt;ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined"&gt;
+##INFO=&gt;ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target"&gt;
+##INFO=&gt;ID=AT,Number=15,Type=Float,Description="Attributes for classification"&gt;
+##INFO=&gt;ID=KM,Number=3,Type=Float,Description="Kmer filters. The number of 17bp kmers that do not contain N, the number of hits to the masking DB, the fraction of hits"&gt;
+##INFO=&gt;ID=PU,Number=1,Type=Integer,Description="Number of reads read supporting position"&gt;
+##INFO=&gt;ID=SU,Number=1,Type=Integer,Description="Number of supplement read supporting position"&gt;
+##INFO=&gt;ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position "&gt;
+##INFO=&gt;ID=DP,Number=1,Type=Integer,Description="Number of reads at pileup position across individuals passing filters"&gt;
+##INFO=&gt;ID=SP,Number=1,Type=String,Description="Support for endpoint;  none:., mp:mate pair, sr:split read, al:alternative alignment"&gt;
+##INFO=&gt;ID=BE,Number=3,Type=String,Description="Best end position: chr,position,count or none:."&gt;
+##INFO=&gt;ID=DI,Number=1,Type=Character,Description="Consensus is from front or back of pileup : f,b"&gt;
+##INFO=&gt;ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus"&gt;
+##INFO=&gt;ID=MQ,Number=1,Type=String,Description="Average mapping quality"&gt;
+##INFO=&gt;ID=MQF,Number=1,Type=String,Description="Fraction of reads with MQ less than 50"&gt;
+##INFO=&gt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
+##INFO=&gt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele"&gt;
+##FORMAT=&gt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
+##FORMAT=&gt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
+##FORMAT=&gt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
+##FORMAT=&gt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
+##FORMAT=&gt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
+##FORMAT=&gt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      
 </code></pre>
 
 <p>Here is an unclassified wham example:</p>
 
-<pre><code>6
-131440530
+<pre><code>chr4
+172988639
 .
 N
-AGAGTAGAAAGTATCCTTATTTGGTTGGAAAGATCAGATGAAGGGGA
+CATTATGGAAAAAAGAAAGNCTTCAGGAATGCTCTGATTGAGGAC
 .
 .
-LRT=0.3669;WAF=0.250001,0.500001,0.333334;GC=2,1;AT=0.853846,0,0,0,0.146154,0,0.0615385,0.146154,0,0.0846154,0,0,0,0,0,0,0.00769231;SI=1.81279;PU=22;SU=19;CU=140;RD=130;NC=18;SP=sr;BE=6,131440608,19;DI=b;END=131440608;SVLEN=78
+LRT=0;WAF=.,0.500001,0.500001;GC=0,1;AT=0.804348,0.304348,0.0217391,0,0,0.304348,0,0.130435,0.304348,0,0,0,0.217391,0,0.50782;KM=11,0,0;PU=20;SU=14;CU=50;RD=46;NC=17;MQ=60;MQF=0;SP=sr;BE=chr4,172992932,14;DI=b;END=172992932;SVLEN=4293;WC=DEL;WP=0.726,0.2,0.058,0.016
 GT:GL:NR:NA:NS:RD
-0/1:-151.971,-24.2602,-331.572:24:11:11:35  0/0:-4.5e-05,-255,-255:45:0:0:45    0/1:-151.971,-29.1122,-428.281:31:11:11:42
+0/1:-276.31,-28.419,-290.126:21:20:20:41
 </code></pre>
 
-<p>The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below.  The genotypes for the trio are 1/0, 0/0 and 0/1. </p>
+<p>The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below.  The genotypes for NA12878 is 0/1. </p>
 
 <h1></h1>
 
