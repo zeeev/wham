@@ -162,6 +162,8 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 ##INFO=&gt;ID=MQF,Number=1,Type=String,Description="Fraction of reads with MQ less than 50"&gt;
 ##INFO=&gt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
 ##INFO=&gt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele"&gt;
+##INFO=&gt;ID=WC,Number=1,Type=String,Description="WHAM classifier variant type"&gt;
+##INFO=&gt;ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model"&gt;
 ##FORMAT=&gt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
 ##FORMAT=&gt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
 ##FORMAT=&gt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
