@@ -101,7 +101,7 @@ K-mer database to annotate low complexity sequences. These annotations can be fo
 
 <p>usage statement:</p>
 
-<pre><code>usage  : WHAM-BAM -m &lt;STRING&lt; -x &lt;INT&lt; -r &lt;STRING&lt;     -e &lt;STRING&lt;  -t &lt;STRING&lt;    -b &lt;TRING&lt;
+<pre><code>usage  : WHAM-BAM -m &lt;STRING&gt; -x &lt;INT&gt; -r &lt;STRING&gt;     -e &lt;STRING&gt;  -t &lt;STRING&gt;    -b &lt;TRING&gt;
 
 example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
 
@@ -169,7 +169,7 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 ##FORMAT=&lt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
 ##FORMAT=&lt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
 ##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
-##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&lt;
+##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
 ##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      
 </code></pre>
