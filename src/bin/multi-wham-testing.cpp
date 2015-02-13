@@ -498,7 +498,7 @@ void grabInsertLengths(string targetfile){
 
     i++;
     
-    long int cp = al.GetEndPosition();
+    long int cp = al.GetEndPosition(false,true);
     
     readPileUp allPileUp;
     
@@ -1760,7 +1760,6 @@ bool score(string seqid,
     return true;
   }
 
-
   #ifdef DEBUG
   cerr << "line: " << tmpOutput.str();
   #endif 
@@ -1796,6 +1795,21 @@ bool filter(BamAlignment & al){
     }
   }
 
+  vector< CigarOp > cd = al.CigarData;
+  if(cd.size() > 6){
+    return false;
+  }
+  
+  // soft clipping on both sides. bad party
+
+  if(cd.front().Type   == 'S' 
+     && cd.back().Type == 'S'
+     && cd.front().Length > 5
+     && cd.back().Length > 5
+     ){
+    return false;
+  }
+
   string xaTag;
   
   if(al.GetTag("XA", xaTag)){
@@ -1812,7 +1826,6 @@ bool filter(BamAlignment & al){
   if(checkN(al.QueryBases)){
     return false;
   }
-
   return true;
 }
  
