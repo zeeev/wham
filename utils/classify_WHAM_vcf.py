@@ -252,12 +252,10 @@ target = []
 with open(arg.training_matrix) as t:
         for line in csv.reader(t,delimiter='\t'):
 		if line[0][0] == "#": #add in this statemnt to print error if user supplies files in wrong order.
-			raise ValueError('not a valid WHAM training file. perhaps you supplied arguments in the wrong order? \n please try running with --help arg for instructions') 
-        	target.append( line[-1] ) #always have targets [classified SV] as last column
-		
-        	d = [ float(i) for i in line[0:-1] ]
-		data.append( d )
-
+			raise ValueError('not a valid WHAM training file. perhaps you supplied arguments in the wrong order? \n please try running with --help arg for instructions')
+                target.append(line[0])  # classified SV
+                at_data = [x for x in line[9].split(";") if x.startswith("AT=")][0]
+                data.append([float(x) for x in at_data.split("=")[-1].split(",")])
 
 #populate the training dataset in sciKitLearn friendly structure. 
 dataset = {} #empty data
