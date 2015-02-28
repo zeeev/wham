@@ -16,6 +16,7 @@ parser.add_argument("VCF", type=str, help="User supplied VCF with WHAM variants;
 parser.add_argument("training_matrix", type=str, help="training dataset for classifier derived from simulated read dataset")
 parser.add_argument("--filter", type=str, help="optional arg for filtering type one of : ['sensitive', 'specific']; defaults to output all data if filtering if argument is not supplied.")
 parser.add_argument("--proc", type=str, help="optional arg for number of proceses to run with classifier; higher thread number will increase speed of classifier; defaults to 1")
+parser.add_argument("--minclassfreq", type=float, help="Minimum frequency required for classification, otherwise variant set as unknown (UNK). Default is to classify everything.")
 arg=parser.parse_args()
 
 
@@ -104,7 +105,7 @@ def parse_targets( target ):
 #method to run observed data through the trained model to output
 #a vcf friendly return of classified variant call and the prediction
 #probabilities for each call
-def classify_data( _x, clf, names ):
+def classify_data( _x, clf, names, minclassfreq ):
 	"""
 	_x = pass the col 8 from vcf
 	clf = machine learning object
@@ -118,6 +119,8 @@ def classify_data( _x, clf, names ):
 	prediction = names[ class_idx ] #lookup text based name for classification
 
 	class_probs = clf.predict_proba(_x)[0] #gives weights for your predictions 1:target_names
+        if minclassfreq and class_probs[class_idx] < minclassfreq:
+                prediction = "UKN"  # set as unknown, not enough evidence for classification
 	#convert back to text comma separated list
 
 	class_str = ",".join( [ str(i) for i in class_probs ] )
@@ -204,6 +207,7 @@ def process_vcf( info ):
 	info[1] = clf object
 	info[2] = dataset dictionary
 	info[3] = filter arg supplied by user
+        info[4] = min classification frequency supplied by user (defaults to None)
 	"""
 	#sys.stderr.write("... running process VCF  with job id %d \n" %(os.getpid() ) ) 
 	#parse the args to function
@@ -211,6 +215,7 @@ def process_vcf( info ):
 	clf = info[1] #randomForest object
 	dataset = info[2] #dataset with class names 
 	filter = info[3] #filter arg supplied by user
+        minclassfreq = info[4]
 
 	#iterate over lines in the chunked data
 	return_list = []
@@ -221,7 +226,7 @@ def process_vcf( info ):
 	
 		if filter_bool:
 			_x = vdat[ 'AT' ].split(",") #create list from data in 'AT' field 
-			results = classify_data( _x, clf, dataset['target_names'] )
+			results = classify_data( _x, clf, dataset['target_names'], minclassfreq )
 		
 			line[7] = line[7] + ";" + results #append data to correct vcf column
 			#print "\t".join( line ) #print results to stdout
@@ -315,7 +320,7 @@ else:
 #setup multiprocessing for the classification of SVs
 ###
 p = mp.Pool( processes = proc_num )
-results = p.imap(process_vcf, itertools.izip( vcf_file, itertools.repeat(clf), itertools.repeat(dataset), itertools.repeat(arg.filter) ) )
+results = p.imap(process_vcf, itertools.izip( vcf_file, itertools.repeat(clf), itertools.repeat(dataset), itertools.repeat(arg.filter), itertools.repeat(arg.minclassfreq) ) )
 
 #iterate over the results and feed to stdout
 for r in results:
