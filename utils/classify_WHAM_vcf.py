@@ -221,6 +221,7 @@ def process_vcf( info ):
 	
 		if filter_bool:
 			_x = vdat[ 'AT' ].split(",") #create list from data in 'AT' field 
+			_x = _x[1:]
 			results = classify_data( _x, clf, dataset['target_names'] )
 		
 			line[7] = line[7] + ";" + results #append data to correct vcf column
@@ -254,8 +255,10 @@ with open(arg.training_matrix) as t:
 		if line[0][0] == "#": #add in this statemnt to print error if user supplies files in wrong order.
 			raise ValueError('not a valid WHAM training file. perhaps you supplied arguments in the wrong order? \n please try running with --help arg for instructions') 
         	target.append( line[-1] ) #always have targets [classified SV] as last column
+
+		#exclude first attribute
 		
-        	d = [ float(i) for i in line[0:-1] ]
+        	d = [ float(i) for i in line[1:-1] ]
 		data.append( d )
 
 

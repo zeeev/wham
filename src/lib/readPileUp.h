@@ -30,6 +30,8 @@ class readPileUp {
   std::map <long int, std::vector<BamTools::BamAlignment> > primary    ;
   std::map <long int, std::vector<BamTools::BamAlignment> > supplement ;
 
+
+  int tooManyCigs  ;
   int nLowMapQ     ;
   int numberOfReads;
   int mapQsum      ;

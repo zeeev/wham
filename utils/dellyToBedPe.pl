@@ -97,10 +97,10 @@ sub processLines{
 
 	my @CIEND = split /,/, $1;
 	    
-	$startPos0 -= $BUFFER + $CIPOS[0] ;
-	$startPos1 += $BUFFER + $CIPOS[1] ;
-	$endPos0   -= $BUFFER + $CIEND[0] ;
-	$endPos1   += $BUFFER + $CIEND[1] ;
+	$startPos0 -= $BUFFER + abs($CIPOS[0]) ;
+	$startPos1 += $BUFFER + abs($CIPOS[1]) ;
+	$endPos0   -= $BUFFER + abs($CIEND[0]) ;
+	$endPos1   += $BUFFER + abs($CIEND[1]) ;
 
 	#wham reports both positional orders 
 	
@@ -149,7 +149,8 @@ sub processLines{
 	$bedline .= "\t.";
 	$bedline .= "\t.";
 	$bedline .= "\t$vcfLine[6]";
-	$bedline .= "\t$vcfLine[7]";
+	$bedline .= "\t$vcfLine[7];start=$vcfLine[1]";
+	$bedline .= "\t$vcfLine[9]";
 
 	print "$bedline\n";
 	

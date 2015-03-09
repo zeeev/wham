@@ -26,6 +26,7 @@ file       - <STRING> - required - filename
 -h,--help       - <FLAG>   - optional - print help statement and die
 -a,--append     - <FLAG>   - optional - concatenate WHAM name to SV annotations (bcbio compatible)
 -b,--buffer     - <INT>    - optional - add basepair to both sides of the SV call [0]
+-c,--confidence - <FLAG>   - optional - use confidence intervals [FALSE]
 
 Info:
 
@@ -38,6 +39,7 @@ Info:
 
 my ($help);
 my $FILE;
+my $CIFLAG        = 0;
 my $APPEND        = 0;
 my $PAIRED        = 0;
 my $BUFFER        = 0;
@@ -46,6 +48,7 @@ my $SINGLE_BUFFER = 0;
 my $opt_success = GetOptions('help'         => \$help,
 			     'file=s'       => \$FILE,
 			     'buffer=s'     => \$BUFFER,
+			     'confidence'   => \$CIFLAG,
 			     'append'       => \$APPEND,
 			     'singletons=s' => \$SINGLE_BUFFER,
 			     'paired'       => \$PAIRED	     
@@ -62,11 +65,15 @@ my $ANNOTATED_FLAG = 0;
 
 checkForAnnotations();
 
+if($CIFLAG){
+    print STDERR "INFO: BEDPE will contain confidence intervals \n";
+}
+
 if($ANNOTATED_FLAG){
-    print STDERR "INFO: BED will include SV type and annotation score\n";
+    print STDERR "INFO: BEDPE will include SV type and annotation score\n";
 }
 else{
-    print STDERR "INFO: BED will NOT include SV type and annotation score\n";
+    print STDERR "INFO: BEDPE will NOT include SV type and annotation score\n";
     print STDERR "      Classify WHAM ouput to get these features in the bed\n";
 }
 
@@ -113,20 +120,39 @@ sub processLines{
 	my %info = map{ split /=|;/} $vcfLine[7];
 
 	#skipping unpaired breakpoints
-	next VCF if $info{"BE"} eq '.';
+	next VCF if $info{"END"} eq '.';
 
 	$svCount++;
-
-	my @otherBreak = split /,/, $info{"BE"};
 	
 	my $fivePrimeChr  = $vcfLine[0];
-	my $threePrimeChr = $otherBreak[0]; 
+	my $threePrimeChr = $info{"CHR2"};
 
 	#one based to zerobased
 	my $startPos0 = $vcfLine[1]    - 1 ;
 	my $startPos1 = $vcfLine[1]    - 1 ;
-	my $endPos0   = $otherBreak[1] - 1 ;
-	my $endPos1   = $otherBreak[1] - 1 ;
+	my $endPos0   = $info{"END"}   - 1 ;
+	my $endPos1   = $info{"END"}   - 1 ;
+	
+
+	my @start_CI = split /,/, $info{"CISTART"};
+	my @end_CI   = split /,/, $info{"CIEND"};
+
+	if($start_CI[0] == $start_CI[1]){
+	    $start_CI[0] -=1;
+	    $start_CI[1] +=1;
+	}
+
+	if($end_CI[0] == $end_CI[1]){
+            $end_CI[0] -=1;
+            $end_CI[1] +=1;
+        }
+
+	if($CIFLAG){
+	    $startPos0 = $start_CI[0] -1;
+	    $startPos1 = $start_CI[1] -1;
+	    $endPos0   = $end_CI[0]   -1; 
+	    $endPos1   = $end_CI[1]   -1;
+	}
 
 	$startPos0 -= $BUFFER;
 	$startPos1 += $BUFFER;
@@ -141,8 +167,8 @@ sub processLines{
 		my $b1 = $startPos1;
 		$startPos0 = $endPos0;
 		$startPos1 = $endPos1;
-		$endPos0 = $startPos0;
-		$endPos1 = $startPos1;
+		$endPos0 = $b0;
+		$endPos1 = $b1;
 	    }
 	}
 
@@ -172,11 +198,17 @@ sub processLines{
 	else{
 	    $bedline .= "\t$svCount:.:$info{SVLEN}\t.";
 	}
+
+	my $startToprint = "start=";
+	$startToprint .= $vcfLine[1] - 1;
+	$startToprint .= ";";
 	
 	$bedline .= "\t.";
 	$bedline .= "\t.";
 	$bedline .= "\t$vcfLine[6]";
-	$bedline .= "\t$vcfLine[7]";
+	$bedline .= "\t$vcfLine[7];$startToprint";
+	$bedline .= "\t$vcfLine[9];";
+	
 
 	print "$bedline\n";
 	

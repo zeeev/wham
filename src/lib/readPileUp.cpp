@@ -57,9 +57,6 @@ bool readPileUp::processSplitRead(BamAlignment & al, string & saTag){
 
   vector<string> sas = split(saTag, ";");
 
-  if(sas.size() > 2){
-    return true;
-  }
 
   odd[al.Name] = 1;
   nsplitRead  += 1;
@@ -139,6 +136,10 @@ bool readPileUp::processMissingMate(BamAlignment & al, string & saTag){
 
 bool readPileUp::processPair(BamAlignment & al, string & saTag){
 
+  #ifdef DEBUG
+  cerr << "processing pair: " << al.Name << " " << al.Position << endl;
+  #endif
+
   nPaired++;
 
   if(al.IsMateMapped()){
@@ -172,7 +173,7 @@ bool readPileUp::processPair(BamAlignment & al, string & saTag){
     switch((*cig).Type){
     case 'I':
       {
-	if((*cig).Length > 25){
+	if((*cig).Length > 3){
 	  internalInsertion += 1;
 	  odd[al.Name] = 1;
 	}
@@ -180,7 +181,7 @@ bool readPileUp::processPair(BamAlignment & al, string & saTag){
       }
     case 'D':
       {
-	if((*cig).Length > 25){
+	if((*cig).Length > 3){
 	  internalDeletion += 1;
 	  odd[al.Name] = 1;
 	}
@@ -190,26 +191,34 @@ bool readPileUp::processPair(BamAlignment & al, string & saTag){
       {
       }
     }
-  }
-  
+  }  
   return true;
 }
-
 
 bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & saTag){
 
   vector< CigarOp > cd = al.CigarData;  
 
+
+#ifdef DEBUG
+  cerr << "clustering read: " << al.Name << " " << al.Position << endl;
+#endif
+
   if((al.AlignmentFlag & 0x0800) != 0){
     if(cd.front().Type == 'H'){
       supplement[al.Position].push_back(al);
     }
-    if(cd.back().Type == 'H'){
+    if(cd.back().Type == 'H' ){
       supplement[al.GetEndPosition(false,true)].push_back(al);
     }
   }
   else{
     if(cd.front().Type == 'S'){
+   
+      #ifdef DEBUG
+      cerr << "front clip: " << al.Name << " " << al.Position << endl; 
+      #endif
+      
       nClippedFront++;
       primary[al.Position].push_back(al);
       odd[al.Name] = 1;
@@ -218,6 +227,12 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
       }
     }
     if(cd.back().Type == 'S'){
+
+
+     #ifdef DEBUG
+      cerr << "back clip: " << al.Name << " " << al.GetEndPosition(false,true) << endl;
+      #endif
+
       nClippedBack++;
       primary[al.GetEndPosition(false,true)].push_back(al);
       odd[al.Name] = 1;
@@ -239,7 +254,6 @@ void readPileUp::printPileUp(void){
 	 << (*r).QueryBases
 	 << endl;
   }
-
 }
 
 void readPileUp::processPileup(long int * pos){
@@ -252,8 +266,26 @@ void readPileUp::processPileup(long int * pos){
 
     // trailing pileup data
     if((*r).Position > *pos){
+
+#ifdef DEBUG
+      cerr << "fail pos greater: " << *pos << " " << (*r).Name << " " << (*r).Position << endl;
+#endif
       continue;
     }
+
+    vector< CigarOp > cd = (*r).CigarData;
+    if(cd.size() > 3){
+      tooManyCigs += 1;
+      
+#ifdef DEBUG
+      cerr << "fail too many cigars" << endl;
+#endif 
+
+    }
+
+#ifdef DEBUG
+    cerr << "currentDat: " << (*r).Name << " " << *pos << endl;
+#endif
 
     mapQsum += (*r).MapQuality ;
 
@@ -297,6 +329,7 @@ void readPileUp::clearClusters(void){
 }
 
 void readPileUp::clearStats(void){
+  tooManyCigs           = 0;
   nLowMapQ              = 0;
   mapQsum               = 0;
   mateTooClose          = 0;
