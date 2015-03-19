@@ -4,3 +4,6 @@
 [submodule "src/seqan"]
 	path = src/seqan
 	url = https://github.com/seqan/seqan.git
+[submodule "src/lib/fastahack"]
+	path = src/lib/fastahack
+	url = https://github.com/ekg/fastahack.git

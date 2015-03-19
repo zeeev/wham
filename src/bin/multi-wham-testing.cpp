@@ -573,11 +573,14 @@ void grabInsertLengths(string & targetfile){
   insertDists.avgD[ targetfile ] = mud;
 
   cerr << "INFO: for file:" << targetfile << endl            
-       << "     " << targetfile << ": mean depth: " << mud << endl
-       << "     " << targetfile << ": sd   depth: " << sdd << endl
-       << "     " << targetfile << ": mean insert length: " << insertDists.mus[targetfile] << endl
-       << "     " << targetfile << ": sd   insert length: " << insertDists.sds[targetfile] << endl
-       << "     " << targetfile << ": number of reads used: " << n  << endl << endl;
+       << "      " << targetfile << ": mean depth: " << mud << endl
+       << "      " << targetfile << ": sd   depth: " << sdd << endl
+       << "      " << targetfile << ": mean insert length: " << insertDists.mus[targetfile] << endl
+       << "      " << targetfile << ": sd   insert length: " << insertDists.sds[targetfile] << endl
+       << "      " << targetfile << ": lower insert length: " << insertDists.mus[targetfile] -(2.5*insertDists.sds[targetfile]) << endl
+       << "      " << targetfile << ": upper insert length: " << insertDists.mus[targetfile] +(2.5*insertDists.sds[targetfile])   << endl 
+       << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
+
        
   omp_unset_lock(&lock);
 }
@@ -808,7 +811,6 @@ bool checkN(string & s){
       n += 1;
     }
   }
-
   if(n > 5){
     return true;
   }
@@ -2116,30 +2118,6 @@ bool filter(BamAlignment & al){
       return false;
     }
   }
-
-  //  vector< CigarOp > cd = al.CigarData;
-  
-  // soft clipping on both sides. bad party
-  
-//  if(cd.front().Type   == 'S' 
-//     && cd.back().Type == 'S'
-//     && cd.front().Length > 5
-//     && cd.back().Length  > 5
-//     ){
-//
-//#ifdef DEBUG
-//    cerr << "double clipping" << al.Name << " " << endl;
-//#endif
-//
-//    return false;
-//  }
-//
-//#ifdef DEBUG
-//    cerr << "failed soft-clipped both sides" << al.Name << " " << endl;
-//#endif
-//    return false;
-//  }
-
 
   string xaTag;  
   if(al.GetTag("XA", xaTag)){
