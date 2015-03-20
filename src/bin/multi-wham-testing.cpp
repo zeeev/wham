@@ -7,6 +7,9 @@
 #include <algorithm>
 #include "split.h"
 #include "KMERUTILS.h"
+#include "fastahack/Fasta.h"
+#include "ssw_cpp.h"
+
 
 // openMP - swing that hammer
 #include <omp.h>
@@ -75,6 +78,7 @@ struct global_opts {
   vector<string> backgroundBams;
   vector<string> all           ;
   int            nthreads      ;
+  string         fasta         ;
   string         seqid         ;
   string         bed           ; 
   string         mask          ;
@@ -107,7 +111,7 @@ inline bool aminan(T value)
 
 }
 
-static const char *optString ="ht:b:r:x:e:m:";
+static const char *optString ="ht:f:b:r:x:e:m:";
 
 // this lock prevents threads from printing on top of each other
 
@@ -344,8 +348,9 @@ void printHelp(void){
 void parseOpts(int argc, char** argv){
   int opt = 0;
 
-  globalOpts.mask = "NA";
-  globalOpts.bed  = "NA";
+  globalOpts.mask  = "NA";
+  globalOpts.bed   = "NA";
+
 
   opt = getopt(argc, argv, optString);
 
@@ -425,6 +430,13 @@ void parseOpts(int argc, char** argv){
     printHelp();
     exit(1);
   }
+  if(globalOpts.fasta.empty()){
+    cerr << "FATAL: Failure to specify fasta file." << endl;
+    cerr << "FATAL: Now exiting wham." << endl;
+    printHelp();
+    exit(1);
+  }
+
 }
 
 double bound(double v){
@@ -2150,6 +2162,11 @@ bool runRegion(int seqidIndex,
   global_opts localOpts = globalOpts;
   insertDat localDists  = insertDists;
 
+  FastaReference RefSeq;
+  RefSeq.open(localOpts.fasta);
+  
+  string RefChunk = RefSeq.getSubSequence(seqNames[seqidIndex].RefName, start + 1, end - start);
+
   omp_unset_lock(&lock);
 
   BamMultiReader All;
@@ -2276,26 +2293,26 @@ bool runRegion(int seqidIndex,
   return true;
 }
 
-bool loadKmerDB(vector<uint64_t> & DB){
-
-  ifstream kmerDB (globalOpts.mask);
-  string line;
-
-  uint64_t kmer;
-
-  if(kmerDB.is_open()){
-    while(getline(kmerDB, line)){
-      kmer = std::stoul(line);
-      DB.push_back(kmer);
-    }
-  }
-  else{
-    return false;
-  }
-
-  kmerDB.close();
-  return true;
-}
+//bool loadKmerDB(vector<uint64_t> & DB){
+//
+//  ifstream kmerDB (globalOpts.mask.c_str());
+//  string line;
+//
+//  uint64_t kmer;
+//
+//  if(kmerDB.is_open()){
+//    while(getline(kmerDB, line)){
+//      kmer = strtoull(line.c_str());
+//      DB.push_back(kmer);
+//    }
+//  }
+//  else{
+//    return false;
+//  }
+//
+//  kmerDB.close();
+//  return true;
+//}
 
 bool loadBed(vector<regionDat*> & features, RefVector seqs){
 
@@ -2310,7 +2327,7 @@ bool loadBed(vector<regionDat*> & features, RefVector seqs){
     index+=1;
   }
 
-  ifstream featureFile (globalOpts.bed);
+  ifstream featureFile (globalOpts.bed.c_str());
 
   string line;
 
@@ -2367,12 +2384,12 @@ int main(int argc, char** argv) {
   
   // loading kmer database
   vector<uint64_t> kmerDB;
-  if(! (globalOpts.mask.compare("NA") == 0)){
-    if(!loadKmerDB(kmerDB)){
-      cerr << "FATAL: masking file was specified, but could not be opened or read." << endl;
-      exit(1);
-    }
-  }
+//  if(! (globalOpts.mask.compare("NA") == 0)){
+//    if(!loadKmerDB(kmerDB)){
+//      cerr << "FATAL: masking file was specified, but could not be opened or read." << endl;
+//      exit(1);
+//    }
+//  }
 
   cerr << "INFO: gathering stats for each bam file." << endl;
   cerr << "INFO: this step can take a few minutes." << endl;

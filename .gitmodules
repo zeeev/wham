@@ -4,6 +4,9 @@
 [submodule "src/seqan"]
 	path = src/seqan
 	url = https://github.com/seqan/seqan.git
-[submodule "src/lib/fastahack"]
-	path = src/lib/fastahack
+[submodule "src/fastahack"]
+	path = src/fastahack
 	url = https://github.com/ekg/fastahack.git
+[submodule "src/Complete-Striped-Smith-Waterman-Library"]
+	path = src/Complete-Striped-Smith-Waterman-Library
+	url = https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library.git
