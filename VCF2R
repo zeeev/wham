@@ -7,7 +7,6 @@ $| = 1;     #Do not buffer output to std error
 #All rights reserved
 #The University of Utah
 ######mhockin@gmail.com
-#hosted on github.com user rufessor
 
 use Getopt::Long;   
 use File::Basename;
@@ -76,7 +75,8 @@ sub ParseCommand{
     my %usrChr_Segments; #container for chr and region information
     if (@pullChrs){
         for (0..$#pullChrs) {
-            push @{$usrChr_Segments{$pullChrs[$_]}}, $pullRegions[$_];
+            my $region_Coords = $pullRegions[$_] ||= 0;
+            push @{$usrChr_Segments{$pullChrs[$_]}}, $region_Coords;
         }
     }
     return(\@pullFields, \@pullInfo, \@pullChrs, \@pullRegions, \%usrChr_Segments, $deparse, $fileOut);
@@ -162,7 +162,7 @@ sub ParseUserRequest{
 sub FindChrRegionCoords{ #Feeds BinarySearch to determine array bounds of given bp coordinates
     my ($usrChrSegments_Hsh_ref, $chr, $SVbyChr_Hsh_ref) = @_;
     my @indxChr_Regions;
-    my @coordinates_ThisChr = split (/,/ ,  $$usrChrSegments_Hsh_ref{$chr}->[0]) if ($$usrChrSegments_Hsh_ref{$chr});
+    my @coordinates_ThisChr = split (/,/ ,  $$usrChrSegments_Hsh_ref{$chr}->[0])  unless ($$usrChrSegments_Hsh_ref{$chr}->[0] == 0);
     if (@coordinates_ThisChr){
         die "Unbounded chr Regions found! REQUIRE \"--region start,end\" coordinate PAIRS on command line!\n" if(@coordinates_ThisChr %2 !=0);
         for (my $i = 0; $i < $#coordinates_ThisChr; $i = $i+2){
@@ -295,29 +295,28 @@ sub Parse_OUTPUT{
         }
     }
     my (@write_Header, @header); #begin parsing header-- find fields that need to be expanded- include suffix for internal field #
-    unless ($deparse){
-        for my $field (@fields_VCF){
-            if (exists $$outputHsh_ref{$field}){
-                if ($field eq 'CHROM' || $field eq 'POS'){ #Default ouput dont repeat
-                    push @header, $field;
-                }elsif ($deparse) {
-                    if (${$outputHsh_ref}{$field}[0] =~ m/[,]/g){  #does field need to be expanded
-                        my @expanded_Field = split (/,/ , ${$outputHsh_ref}{$field}[0]); #get all entries for this data field  
-                        my @expanded_Header;
-                        for my $number_Suffix(1 .. @expanded_Field){
-                            push @expanded_Header, ($field . $number_Suffix);
-                        }
-                        push @header, @expanded_Header;
-                        push @write_Header, $field;
-                    }else { 
-                        push @header, $field;
-                        push @write_Header, $field;
+    for my $field (@fields_VCF){
+        if (exists $$outputHsh_ref{$field}){
+            if ($field eq 'CHROM' || $field eq 'POS'){ #Default ouput dont repeat
+                push @header, $field;
+            }
+            if ($deparse) {
+                if (${$outputHsh_ref}{$field}[0] =~ m/[,]/g){  #does field need to be expanded
+                    my @expanded_Field = split (/,/ , ${$outputHsh_ref}{$field}[0]); #get all entries for this data field  
+                    my @expanded_Header;
+                    for my $number_Suffix(1 .. @expanded_Field){
+                        push @expanded_Header, ($field . $number_Suffix);
                     }
-                }else{
+                    push @header, @expanded_Header;
+                    push @write_Header, $field;
+                }else { 
                     push @header, $field;
                     push @write_Header, $field;
-                }   
-            }
+                }
+            }else{
+                push @header, $field;
+                push @write_Header, $field;
+            }   
         }
     }
     my $ chr = $$outputHsh_ref{CHROM}[0];
@@ -354,3 +353,4 @@ sub WriteOUT{
     print STDERR "File write succesful for chromosome block\n\n";
     return;
 }
+
