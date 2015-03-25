@@ -16,25 +16,17 @@ my %SVbyChr;
 ExecuteScript();
 
 sub ExecuteScript{
-    #parse user command line into appropriate structures using GetOpts::Long
     my ($usr_FieldsAry_ref, $usr_InfoAry_ref, $usr_ChrAry_ref, $usr_RegionAry_ref, $usrChr_SegmentsHsh_ref, $deparse, $fileOut) = ParseCommand();
-    
-    #input file handling
     my $VCF_filePath = shift @ARGV;
     die "VCF data file or file path must bare listed as LAST item on command line for VCF2R\n" unless ($VCF_filePath);
     my ($VCFfile, $dir, $ext) = fileparse($VCF_filePath);
     open (my $VCF_in_FH, '<', $dir.$VCFfile.$ext) or die "Cannot open $VCFfile.$ext using this path $dir\nPlease ensure this is correct\n";
-    
-    #find valid fields from VCF file and Parse user request for valid entries
     my ($valid_VCF_fieldsAry_ref, $valid_VCF_infoAry_ref, $lastFile_POS) = LoadHeader($VCF_in_FH);
     my $output_Field_IndxHsh_ref = ParseUserRequest($valid_VCF_fieldsAry_ref, $valid_VCF_infoAry_ref, $usr_FieldsAry_ref, $usr_InfoAry_ref);
-     
-    #open output file
     open (my $OUT_file_FH, '>', $fileOut) or die "Cannot create output file $fileOut in current directory- please check permissions\n";
-	
-    #continue reading input VCF until new chr, then generate output hash structure, write to file, repeat
     my $header_Write_test = 0; #flag to detect when file header is written- prevents duplicate headers
     my $time_Start = time;
+    my %finished_Chr;
     LINE: while(my @returnVals = LoadData($VCF_in_FH, $lastFile_POS, $usrChr_SegmentsHsh_ref)){
         my ($SVbyChr_Hsh_ref, $chr);
         ($SVbyChr_Hsh_ref, $chr, $lastFile_POS) = @returnVals; 
@@ -42,17 +34,26 @@ sub ExecuteScript{
         print STDERR "Were done loading Chromosome $chr at $timeNow\n";
         my $aryIndxChr_byRegion_ref = FindChrRegionCoords($usrChr_SegmentsHsh_ref, $chr, $SVbyChr_Hsh_ref);
         my $outputHsh_ref = GenerateOUTPUT($aryIndxChr_byRegion_ref, $output_Field_IndxHsh_ref, $SVbyChr_Hsh_ref);
-        #generate and deparse (if requested) output file header and write deparsed header to output file
         my ($write_HeaderAry_ref, $fieldLen);
         ($write_HeaderAry_ref, $fieldLen, $header_Write_test) = Parse_OUTPUT($OUT_file_FH, $outputHsh_ref, $valid_VCF_fieldsAry_ref, 
                                                                              $valid_VCF_infoAry_ref, $deparse, $header_Write_test);
         WriteOUT($OUT_file_FH, $write_HeaderAry_ref, $fieldLen, $outputHsh_ref, $deparse);
-        undef $outputHsh_ref; # clear memory footprint and rebuild on next
         if (eof $VCF_in_FH == 1){
-            print STDERR "END OF INPUT FILE. Perl file position \"tell\" is $lastFile_POS\n";
+            print STDERR "END OF INPUT FILE REACHED. Perl file position \"tell\" is $lastFile_POS\n";
             my $elapsed = time - $time_Start;
             print STDERR "Total processing time for $VCFfile was $elapsed seconds!\n"; 
             last;
+        }
+        if (%$usrChr_SegmentsHsh_ref){
+            my $done = 0;
+            $finished_Chr{$chr} = '';
+            for (keys %$usrChr_SegmentsHsh_ref){
+                $done++ unless (exists $finished_Chr{$_});    
+            }
+            if ($done == 0){
+                print STDERR "finishing file early, we found all requested Chr\n";
+                last;
+            }
         }
     }
     close $VCF_in_FH;
@@ -106,14 +107,17 @@ sub LoadHeader{
 
 sub LoadData{
     my ($VCF_file, $lastFile_POS, $usrChr_SegmentsHsh_ref) = @_;
-    my (%singleLoci, %SVbyChr, @fieldsHeader, @infoHeader, $chr, $chr_Regex);
+    my (%singleLoci, %SVbyChr, @fieldsHeader, @infoHeader, $chr, $chr_Regex, $enable_RegEx_Fail);
 	seek($VCF_file, $lastFile_POS, 0);
     LINE: while (my $line =  <$VCF_file>){
         chomp $line;
         my @currentLine = split (/\t/ , $line);
         if (%$usrChr_SegmentsHsh_ref){
-            next LINE unless (exists $$usrChr_SegmentsHsh_ref{$currentLine[0]});
+            unless (exists $$usrChr_SegmentsHsh_ref{$currentLine[0]}){
+                next LINE unless ($enable_RegEx_Fail)
+                }
         }
+        $enable_RegEx_Fail = 1 unless ($enable_RegEx_Fail);
         $chr = $currentLine[0] unless ($chr);
         $chr_Regex = qr/\A$currentLine[0]\z/i unless ($chr_Regex);
         $currentLine[0] =~ m/$chr_Regex/ ? $lastFile_POS = tell($VCF_file) : return(\%SVbyChr, $chr, $lastFile_POS); 
@@ -278,8 +282,14 @@ sub Parse_OUTPUT{
     my ($outFile, $outputHsh_ref, $valid_VCF_fieldsAry_ref, $valid_VCF_infoAry_ref, $deparse, $header_EXISTS) = @_;
     my @fields_VCF = @$valid_VCF_fieldsAry_ref;
     my @info_VCF = @$valid_VCF_infoAry_ref;
-    splice (@fields_VCF, 7, 1);
-    splice (@fields_VCF, 7, 0, @info_VCF); #MODIFIED IN PLACE- now full WHAM header in WHAM order
+    my $index = 0;
+    for (@fields_VCF){  #splice info header out replace with selected user info sub fields
+        if ($_ =~ m/\AINFO\Z/i){
+            splice (@fields_VCF, $index, 1);
+            splice (@fields_VCF, $index, 0, @info_VCF);
+        }
+        $index++;
+    }
     #check ouputHsh_ref for data consistency prior to parsing header to include subfield indicies
     my $counter = 0;
     my ($fieldLen, $priorLen);
@@ -295,11 +305,12 @@ sub Parse_OUTPUT{
         }
     }
     my (@write_Header, @header); #begin parsing header-- find fields that need to be expanded- include suffix for internal field #
-    for my $field (@fields_VCF){
+    LINE: for my $field (@fields_VCF){
+        if ($field eq "CHROM" || $field eq "POS"){
+            push @header, $field;
+            next LINE;
+        }
         if (exists $$outputHsh_ref{$field}){
-            if ($field eq 'CHROM' || $field eq 'POS'){ #Default ouput dont repeat
-                push @header, $field;
-            }
             if ($deparse) {
                 if (${$outputHsh_ref}{$field}[0] =~ m/[,]/g){  #does field need to be expanded
                     my @expanded_Field = split (/,/ , ${$outputHsh_ref}{$field}[0]); #get all entries for this data field  
@@ -353,4 +364,3 @@ sub WriteOUT{
     print STDERR "File write succesful for chromosome block\n\n";
     return;
 }
-
