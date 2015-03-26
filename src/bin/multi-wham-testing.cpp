@@ -1305,7 +1305,7 @@ void gatherAlternativeAlignments(vector <int> & outBounds,
     // remove the strand from XA
     chimera[1].erase(0,1); 
 
-    int chimPos = atoi( chimera[1].c_str() );
+    int chimPos = atoi( chimera[1].c_str() ) -1;
 
     vector<cigar> c;
     
@@ -1316,6 +1316,7 @@ void gatherAlternativeAlignments(vector <int> & outBounds,
     }
     if(c.back().type == 'S'){
       endPos(c, &chimPos);
+      chimPos = chimPos - 1;
     }
     supports.push_back("xa");
     outBounds.push_back( chimPos );
@@ -1378,13 +1379,14 @@ void gatherSplitReadSupport(vector <int> & outBounds,
 
     burnCigar(chimera[3], c);
 
-    int chimPos = atoi( chimera[1].c_str() );
+    int chimPos = atoi( chimera[1].c_str() ) -1;
 
     if(c.front().type == 'S' && c.back().type == 'S'){
       continue;
     }
     if(c.back().type == 'S'){
       endPos(c, &chimPos);
+      chimPos = chimPos -1;
     } 
     supports.push_back("sr");
     outBounds.push_back( chimPos );
@@ -1462,12 +1464,19 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
   aligner.Align(altSeq.c_str(), endChunk.c_str(), endChunk.size(), filter, &alignment);
 
   if(abs((targetZone - 200 + alignment.ref_begin)-targetZone) < 500){
-    targetZone = (targetZone - 200 + alignment.ref_begin);
-  #ifdef DEBUG
-  cerr << "targetZone switched" << endl;
-  #endif 
+    
 
-  }
+    
+  #ifdef DEBUG
+    cerr << "targetZone before switch: " << targetZone  << endl;
+  #endif 
+  targetZone = (targetZone - 200 + alignment.ref_begin);
+  
+  #ifdef DEBUG
+  cerr << "targetZone after switch: " << targetZone  << endl;
+  #endif
+
+}
 
 
 
@@ -1509,11 +1518,22 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
 
       if(posCounts.find(RoundNum(*pi)) == posCounts.end()){
 	posCounts[RoundNum(*pi)] =  1;
-
       }
       else{
 	posCounts[RoundNum(*pi)] += 1;
+      }
+    }
 
+    map<int, int> RawPosCounts;
+
+    for(vector<int>::iterator pi = outOfBounds.begin();
+	pi != outOfBounds.end(); pi++){
+
+      if(RawPosCounts.find(*pi) == RawPosCounts.end()){
+	RawPosCounts[*pi] =  1;
+      }
+      else{
+        RawPosCounts[*pi] += 1;
       }
     }
 
@@ -1587,6 +1607,26 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
       supports[1] = supportStrings["sr"];
       supports[2] = supportStrings["xa"];
 
+
+      int bh  = 0;
+      int nbp = bestPos;
+
+      for(map<int,int>::iterator rc = RawPosCounts.begin(); rc != RawPosCounts.end(); rc++ ){
+
+	#ifdef DEBUG
+	cerr << "hone pos:" << rc->first << " " << rc->second << endl;
+	#endif
+
+	if(abs(rc->first - bestPos) > 20){
+	  continue;
+	}
+	if(rc->second > bh){
+	  bh = rc->second;
+	  nbp = rc->first;
+	}
+      }
+      
+      bestPos = nbp;
 
       double mu = mean(trimmed);
       double sd = sqrt(var(trimmed, mu));
@@ -2032,7 +2072,11 @@ bool score(string seqid                 ,
     }
   }
 
-  
+  if(seqid.compare(chr2) == 0){
+    if(*pos > otherBreakPointPos){
+      return true;
+    }
+  }
 
   // to vcf 
   elow  += 1;
@@ -2332,10 +2376,9 @@ bool runRegion(int seqidIndex,
 	continue;
       }
       vector< CigarOp > cd = al.CigarData;
-
-//      if(cd.front().Type == 'S' && cd.front().Length > 9){
-//	clippedBuffer.push_back(al.Position);
-//      }
+      if(cd.front().Type == 'S' && cd.front().Length > 9 && al.MapQuality > 5){
+	clippedBuffer.push_back(al.Position);
+      }
       if(cd.back().Type  == 'S' && cd.back().Length > 9 && al.MapQuality > 5){
 	clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
@@ -2361,9 +2404,9 @@ bool runRegion(int seqidIndex,
         continue;
       }
       vector< CigarOp > cd = al.CigarData;
-//      if(cd.front().Type == 'S' && cd.front().Length > 9){
-//        clippedBuffer.push_back(al.Position);
-//      }
+      if(cd.front().Type == 'S' && cd.front().Length > 9 && al.MapQuality > 5){
+        clippedBuffer.push_back(al.Position);
+      }
       if(cd.back().Type  == 'S' && cd.back().Length > 9 && al.MapQuality > 5){
         clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
