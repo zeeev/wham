@@ -68,19 +68,30 @@ sub ParseCommand{
                 'chr=s', => \$pullChrs,        
                 'region=s' => \$pullRegions,  
                 'out=s' => \$fileOut,
-                'parsedeep' => \$deparse);    
-    my @pullFields = split(/,/ , uc $pullFields) if $pullFields;
-    my @pullInfo = split(/,/ , uc $pullInfo) if $pullInfo;
-    my @pullChrs = split(/,/ , $pullChrs) if $pullChrs;
-    my @pullRegions = split(/-/ , $pullRegions) if $pullRegions;
+                'deparse' => \$deparse);    
+    my @Fields = split(/,/ , uc $pullFields) if $pullFields;
+    my @Info = split(/,/ , uc $pullInfo) if $pullInfo;
+    my @Chrs;
+    if ($pullChrs =~ m/-/){ 
+        $pullChrs =~ /\A(\d+)-(\d+)/;
+        @Chrs = ($1 .. $2);
+        if ($pullChrs =~ m/,/){
+         $pullChrs =~ m/\A\d+-\d+,(.+)/;
+         my @listedChr = split (/,/ , $1);
+         push @Chrs, @listedChr;
+        }
+    }else{
+        my @Chrs = split(/,/ , $pullChrs) if $pullChrs;
+    }
+    my @Regions = split(/-/ , $pullRegions) if $pullRegions;
     my %usrChr_Segments; #container for chr and region information
-    if (@pullChrs){
-        for (0..$#pullChrs) {
-            my $region_Coords = $pullRegions[$_] ||= 0;
-            push @{$usrChr_Segments{$pullChrs[$_]}}, $region_Coords;
+    if (@Chrs){
+        for (0..$#Chrs) {
+            my $region_Coords = $Regions[$_] ||= 0;
+            push @{$usrChr_Segments{$Chrs[$_]}}, $region_Coords;
         }
     }
-    return(\@pullFields, \@pullInfo, \@pullChrs, \@pullRegions, \%usrChr_Segments, $deparse, $fileOut);
+    return(\@Fields, \@Info, \@Chrs, \@Regions, \%usrChr_Segments, $deparse, $fileOut);
 }
 
 sub LoadHeader{
@@ -121,7 +132,6 @@ sub LoadData{
         $chr = $currentLine[0] unless ($chr);
         $chr_Regex = qr/\A$currentLine[0]\z/i unless ($chr_Regex);
         $currentLine[0] =~ m/$chr_Regex/ ? $lastFile_POS = tell($VCF_file) : return(\%SVbyChr, $chr, $lastFile_POS); 
-        #index($currentLine[0], $chr) >= 0 ? $lastFile_POS = tell($VCF_file) : return(\%SVbyChr, $chr, $lastFile_POS);
         my @infoData = split (/;/ , $currentLine[7]);
         s/[a-zA-Z]+=//g for @infoData; #remove header from info fields retain data
         $currentLine[7] = '';  #null value saves hash memory- actual values retained under diff hash key- DO NOT DELETE index pos will be wrong later
@@ -166,14 +176,19 @@ sub ParseUserRequest{
 sub FindChrRegionCoords{ #Feeds BinarySearch to determine array bounds of given bp coordinates
     my ($usrChrSegments_Hsh_ref, $chr, $SVbyChr_Hsh_ref) = @_;
     my @indxChr_Regions;
-    my @coordinates_ThisChr = split (/,/ ,  $$usrChrSegments_Hsh_ref{$chr}->[0])  unless ($$usrChrSegments_Hsh_ref{$chr}->[0] == 0);
-    if (@coordinates_ThisChr){
-        die "Unbounded chr Regions found! REQUIRE \"--region start,end\" coordinate PAIRS on command line!\n" if(@coordinates_ThisChr %2 !=0);
-        for (my $i = 0; $i < $#coordinates_ThisChr; $i = $i+2){
-            my ($bpStart, $bpEnd) = @coordinates_ThisChr[$i, $i+1];
-            my $return_Ary_ref = BinarySearchChrPOS($chr, $bpStart, $bpEnd, $SVbyChr_Hsh_ref);
-            unshift @$return_Ary_ref, $chr;
-            push @indxChr_Regions, $return_Ary_ref;
+    if (%$usrChrSegments_Hsh_ref){
+        my @coordinates_ThisChr = split (/,/ ,  $$usrChrSegments_Hsh_ref{$chr}->[0])  unless ($$usrChrSegments_Hsh_ref{$chr}->[0] == 0);
+        if (@coordinates_ThisChr){
+            die "Unbounded chr Regions found! REQUIRE \"--region start,end\" coordinate PAIRS on command line!\n" if(@coordinates_ThisChr %2 !=0);
+            for (my $i = 0; $i < $#coordinates_ThisChr; $i = $i+2){
+                my ($bpStart, $bpEnd) = @coordinates_ThisChr[$i, $i+1];
+                my $return_Ary_ref = BinarySearchChrPOS($chr, $bpStart, $bpEnd, $SVbyChr_Hsh_ref);
+                unshift @$return_Ary_ref, $chr;
+                push @indxChr_Regions, $return_Ary_ref;
+            }
+        }else{
+            my ($region_Start, $region_End) = (0 , $#{$$SVbyChr_Hsh_ref{$chr}}); 
+            push @indxChr_Regions, [$chr, $region_Start, $region_End];
         }
     }else{
         my ($region_Start, $region_End) = (0 , $#{$$SVbyChr_Hsh_ref{$chr}}); 
