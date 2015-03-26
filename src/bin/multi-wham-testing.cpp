@@ -10,7 +10,6 @@
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
 
-
 // openMP - swing that hammer
 #include <omp.h>
 
@@ -144,7 +143,6 @@ double entropy(string& st) {
 }
 
 // rounding ints 
-
 
 int RoundNum(int num)
 {
@@ -356,6 +354,13 @@ void parseOpts(int argc, char** argv){
 
   while(opt != -1){
     switch(opt){
+    case 'f':
+      {
+	globalOpts.fasta =  optarg;
+	cerr << "INFO: WHAM-BAM will using the following fasta: " << globalOpts.fasta << endl;
+	break;
+      }
+
     case 'm':
       {
 	globalOpts.mask = optarg;
@@ -692,7 +697,7 @@ bool processGenotype(string    & fname        ,
   long double abl = 0;
   long double bbl = 0;
 
-  if(idat->badFlag.size() < 3){
+  if(idat->badFlag.size() < 2){
     idat->gls.push_back(-255.0);
     idat->gls.push_back(-255.0);
     idat->gls.push_back(-255.0);
@@ -1395,7 +1400,9 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
 			   long int          * pos	  ,
 			   long int          & setPos     ,
 			   long int          & hi         ,
-			   long int          & lo         ){
+			   long int          & lo         ,
+			   FastaReference    & RefSeq     ,
+			   string            & altSeq     ){
   
 #ifdef DEBUG
   cerr << "hunting for intra chromosomal end" << endl;
@@ -1440,6 +1447,31 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
     targetZone = mean(outOfBounds);
   }
   
+  string endChunk   = RefSeq.getSubSequence(chr2, targetZone-300, 600);
+
+  // Declares a default Aligner
+  StripedSmithWaterman::Aligner aligner;
+  // Declares a default filter
+  StripedSmithWaterman::Filter filter;
+  // Declares an alignment that stores the result
+  StripedSmithWaterman::Alignment alignment;
+  // Aligns the query to the ref
+
+  //  aligner.Align(query.c_str(), ref.c_str(), ref.size(), filter, &alignment);
+
+  aligner.Align(altSeq.c_str(), endChunk.c_str(), endChunk.size(), filter, &alignment);
+
+  if(abs((targetZone - 200 + alignment.ref_begin)-targetZone) < 500){
+    targetZone = (targetZone - 200 + alignment.ref_begin);
+  #ifdef DEBUG
+  cerr << "targetZone switched" << endl;
+  #endif 
+
+  }
+
+
+
+
   long int lowerBoundOut = -1;
   long int upperBoundOut = -1;
 
@@ -1477,9 +1509,11 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
 
       if(posCounts.find(RoundNum(*pi)) == posCounts.end()){
 	posCounts[RoundNum(*pi)] =  1;
+
       }
       else{
 	posCounts[RoundNum(*pi)] += 1;
+
       }
     }
 
@@ -1601,14 +1635,17 @@ void interChromosomeSvEnd(readPileUp   &     totalDat,
       continue;
     }
 
-    //string chr2seqid = seqnames[(*it).MateRefID].RefName;
-    //
-    //if(alternativeChrCounts.find(chr2seqid) != alternativeChrCounts.end()){
-    //  alternativeChrCounts[chr2seqid] += 1;
-    //}
-    //else{
-    //  alternativeChrCounts[chr2seqid] = 1;
-    //}
+    string chr2seqid = seqnames[(*it).MateRefID].RefName;
+    
+    if(chr2seqid.compare(seqid) != 0){
+      
+      if(alternativeChrCounts.find(chr2seqid) != alternativeChrCounts.end()){
+	alternativeChrCounts[chr2seqid] += 1;
+      }
+      else{
+	alternativeChrCounts[chr2seqid] = 1;
+      }
+    }
 
     vector<string> SAhits;
     string saTag;
@@ -1636,33 +1673,33 @@ void interChromosomeSvEnd(readPileUp   &     totalDat,
       }
     }
   
-    vector<string> XAhits;
-    string xaTag;
-
-    if((*it).GetTag("XA", xaTag)){
-      vector<string> tmpHit = split(xaTag, ";");
-      for(vector<string>::iterator s = tmpHit.begin();
-          s != tmpHit.end(); ++s){
-        XAhits.push_back(*s);
-      }
-    }
-
-    for(vector<string>::iterator xah = XAhits.begin();
-        xah != XAhits.end(); xah++){
-
-      if((*xah).empty()){
-        continue;
-      }
-      vector<string> xaDat = split(*xah, ",");
-      if(alternativeChrCounts.find(xaDat[0]) != alternativeChrCounts.end()){
-        alternativeChrCounts[xaDat[0]] += 1;
-      }
-      else{
-        alternativeChrCounts[xaDat[0]] = 1;
-      }
-    }
+//    vector<string> XAhits;
+//    string xaTag;
+//
+//    if((*it).GetTag("XA", xaTag)){
+//      vector<string> tmpHit = split(xaTag, ";");
+//      for(vector<string>::iterator s = tmpHit.begin();
+//          s != tmpHit.end(); ++s){
+//        XAhits.push_back(*s);
+//      }
+//    }
+//
+//    for(vector<string>::iterator xah = XAhits.begin();
+//        xah != XAhits.end(); xah++){
+//
+//      if((*xah).empty()){
+//        continue;
+//      }
+//      vector<string> xaDat = split(*xah, ",");
+//      if(alternativeChrCounts.find(xaDat[0]) != alternativeChrCounts.end()){
+//        alternativeChrCounts[xaDat[0]] += 1;
+//      }
+//      else{
+//        alternativeChrCounts[xaDat[0]] = 1;
+//      }
+//    }
+//  
   }
-  
   string bestChr2;
   int Chr2Count = 0;
 
@@ -1726,11 +1763,14 @@ bool score(string seqid                 ,
 	   string           & results   , 
 	   global_opts localOpts        ,
 	   vector<uint64_t> & kmerDB    ,
-	   vector<RefData>  & seqnames  ){
+	   vector<RefData>  & seqnames  ,
+	   int              & offset    ,
+	   string           & RefChunk  ,
+	   FastaReference   & RefSeq    ){
   
   totalDat.processPileup(pos);
   
-  if(totalDat.primary[*pos].size() < 3 && 
+  if(totalDat.primary[*pos].size() < 2 && 
      totalDat.supplement[*pos].size() < 2
      ){
 #ifdef DEBUG
@@ -1739,15 +1779,15 @@ bool score(string seqid                 ,
     return true;
   }
 
-  if(totalDat.nDiscordant   == 0 
-     && totalDat.nsplitRead == 0 
-     && totalDat.evert      == 0 
-     && totalDat.primary[*pos].size() < 4){
-#ifdef DEBUG
-    cerr << "left scoring because there was no discordant, no splits, no everts" << endl;
-#endif
-    return true;
-  }
+//  if(totalDat.nDiscordant   == 0 
+//     && totalDat.nsplitRead == 0 
+//     && totalDat.evert      == 0 
+//     && totalDat.primary[*pos].size() < 4){
+//#ifdef DEBUG
+//    cerr << "left scoring because there was no discordant, no splits, no everts" << endl;
+//#endif
+//    return true;
+//  }
   
 //  if((double(totalDat.nLowMapQ) / double(totalDat.numberOfReads)) == 1){
 //#ifdef DEBUG
@@ -1813,14 +1853,6 @@ bool score(string seqid                 ,
     return true;
   }
   
-  if(nn / double(altSeq.size()) > 0.30 || nn > 18){
-
-   #ifdef DEBUG
-    cerr << "returned too much mismatch in con" << endl;
-    #endif
-
-    return true;
-  }
   
   // searchign for repeats 
 
@@ -1895,6 +1927,8 @@ bool score(string seqid                 ,
 
   interChromosomeSvEnd(totalDat, seqid, chr2, pos, outOfbounds, seqnames);
 
+
+
   if(intraChromosomeSvEnd(insertLength, 
 			  outOfbounds, 
 			  supports,
@@ -1904,7 +1938,9 @@ bool score(string seqid                 ,
 			  pos, 
 			  otherBreakPointPos,
 			  ehigh,
-			  elow
+			  elow,
+			  RefSeq,
+			  altSeq
 			  )){
     SVLEN = abs( (*pos) - otherBreakPointPos  ) ;
   
@@ -1913,6 +1949,90 @@ bool score(string seqid                 ,
     }
 }
 
+
+  //  string localChunk = RefSeq.getSubSequence(seqid, (*pos-200),400);
+  string localChunk = RefChunk.substr(offset-200, 400);
+  string endChunk   = RefSeq.getSubSequence(chr2, otherBreakPointPos-200, 400);
+
+  // Declares a default Aligner
+  StripedSmithWaterman::Aligner aligner;
+  // Declares a default filter
+  StripedSmithWaterman::Filter filter;
+  // Declares an alignment that stores the result
+  StripedSmithWaterman::Alignment alignmentEnd ;
+  StripedSmithWaterman::Alignment alignment;
+  // Aligns the query to the ref
+
+  //  aligner.Align(query.c_str(), ref.c_str(), ref.size(), filter, &alignment);
+
+  aligner.Align(altSeq.c_str(), localChunk.c_str(), localChunk.size(), filter, &alignment);
+  aligner.Align(altSeq.c_str(), endChunk.c_str(), endChunk.size(), filter, &alignmentEnd);
+
+#ifdef DEBUG
+  cerr << "local Pos SSW: "  << (*pos - 200 + alignment.ref_begin) << " "  << alignment.sw_score << endl;
+  cerr << "end Pos SSW  : "  << (otherBreakPointPos - 200 + alignmentEnd.ref_begin) << " " << alignmentEnd.sw_score << endl;
+#endif 
+
+
+
+
+//  cerr << "===== SSW result =====" << endl;
+//  cerr << "Best Smith-Waterman score:\t" << alignment.sw_score << endl
+//       << "Next-best Smith-Waterman score:\t" << alignment.sw_score_next_best << endl
+//       << "Reference start:\t" << alignment.ref_begin << endl
+//       << "Reference end:\t" << alignment.ref_end << endl
+//       << "Query start:\t" << alignment.query_begin << endl
+//       << "Query end:\t" << alignment.query_end << endl
+//       << "Next-best reference end:\t" << alignment.ref_end_next_best << endl
+//       << "Number of mismatches:\t" << alignment.mismatches << endl
+//       << "Cigar: " << alignment.cigar_string << endl
+//       << "current seqid: " << seqid << endl
+//       << "best seqid2  : " << chr2  << endl
+//       << "best Pos2    : " << otherBreakPointPos << endl
+//       << "con          : " << altSeq << endl
+//       << "Pos1: " << *pos << " " << (*pos - 200 + alignment.ref_begin) << endl;
+//  cerr << "======================" << endl;
+
+
+  string reportRef = "N";
+
+  if(alignment.mismatches < 5 && 
+     totalDat.internalDeletion > 0 && 
+     totalDat.internalDeletion > totalDat.internalInsertion){
+    otherBreakPointPos = (*pos - 200 + alignment.ref_begin);
+    if(seqid.compare(chr2) == 0){
+      
+      if(otherBreakPointPos >= *pos){
+	SVLEN = abs(*pos - otherBreakPointPos)-1;
+	reportRef = RefChunk.substr(offset, SVLEN+1);
+	altSeq    = RefChunk.substr(offset, 1); 
+      }
+      else{
+	otherBreakPointPos = 0;
+      }
+    }
+  }
+
+  
+  if(alignment.mismatches < 5 &&
+     alignment.query_begin > 0 &&
+     totalDat.internalInsertion > 0 &&
+				    totalDat.internalDeletion  < totalDat.internalInsertion){
+  otherBreakPointPos = (*pos - 200 + alignment.ref_begin);
+  if(seqid.compare(chr2) == 0){
+      
+      if(otherBreakPointPos >= *pos){
+	SVLEN = alignment.query_begin ;
+	reportRef = RefChunk.substr(offset-1, 2);
+        altSeq    = reportRef + altSeq.substr(0, alignment.query_begin);
+      }
+      else{
+        otherBreakPointPos = 0;
+      }
+    }
+  }
+
+  
 
   // to vcf 
   elow  += 1;
@@ -2020,7 +2140,7 @@ bool score(string seqid                 ,
   tmpOutput  << seqid           << "\t"  ;       // CHROM
   tmpOutput  << (*pos) +1       << "\t"  ;       // POS
   tmpOutput  << "."             << "\t"  ;       // ID
-  tmpOutput  << "N"             << "\t"  ;       // REF
+  tmpOutput  << reportRef       << "\t"  ;       // REF
   tmpOutput  << altSeq          << "\t"  ;       // ALT
   tmpOutput  << "."             << "\t"  ;       // QUAL
   tmpOutput  << "."             << "\t"  ;       // FILTER
@@ -2097,14 +2217,14 @@ bool filter(BamAlignment & al){
 
   if(!al.IsMapped()){
     return false;
-    #ifdef DEBUG
-    cerr << "failed not mapped " << al.Name << " " << endl;
+#ifdef DEBUG
+    //    cerr << "failed not mapped " << al.Name << " " << endl;
 #endif
   }
   if(al.IsDuplicate()){
     return false;
-    #ifdef DEBUG
-    cerr << "failed duplicate read " << al.Name << " " << endl;
+#ifdef DEBUG
+    //    cerr << "failed duplicate read " << al.Name << " " << endl;
 #endif
 
   }
@@ -2112,7 +2232,7 @@ bool filter(BamAlignment & al){
      && ((al.AlignmentFlag & 0x0800) == 0)){
     
     #ifdef DEBUG
-    cerr << "failed not primary not split " << al.Name << " " << endl;
+    //    cerr << "failed not primary not split " << al.Name << " " << endl;
 #endif
 
 
@@ -2125,7 +2245,7 @@ bool filter(BamAlignment & al){
   else{
     if(al.MapQuality < 1){
 #ifdef DEBUG
-      cerr << "failed mapping quality too low" << al.Name << " " << endl;
+      //      cerr << "failed mapping quality too low" << al.Name << " " << endl;
 #endif
       return false;
     }
@@ -2136,7 +2256,7 @@ bool filter(BamAlignment & al){
     vector<string> xas = split(xaTag, ";");
       if(xas.size() > 5){
 	#ifdef DEBUG
-	cerr << "failed xa filter" << al.Name << " " << xaTag << endl;
+	//	cerr << "failed xa filter" << al.Name << " " << xaTag << endl;
 	#endif
 	
 	return false;
@@ -2163,10 +2283,11 @@ bool runRegion(int seqidIndex,
   insertDat localDists  = insertDists;
 
   FastaReference RefSeq;
+
   RefSeq.open(localOpts.fasta);
   
-  string RefChunk = RefSeq.getSubSequence(seqNames[seqidIndex].RefName, start + 1, end - start);
-
+  string refChunk = RefSeq.getSubSequence(seqNames[seqidIndex].RefName, start-200, (end-start)+200);
+  
   omp_unset_lock(&lock);
 
   BamMultiReader All;
@@ -2201,7 +2322,7 @@ bool runRegion(int seqidIndex,
     while(clippedBuffer.empty()){
       hasNextAlignment = All.GetNextAlignment(al);
 #ifdef DEBUG
-      cerr << "clipping buffer empty " << al.Name << " " << al.Position << endl;
+      //      cerr << "clipping buffer empty " << al.Name << " " << al.Position << endl;
 #endif
       
       if(!hasNextAlignment){
@@ -2212,10 +2333,10 @@ bool runRegion(int seqidIndex,
       }
       vector< CigarOp > cd = al.CigarData;
 
-      if(cd.front().Type == 'S' && cd.front().Length > 9){
-	clippedBuffer.push_back(al.Position);
-      }
-      if(cd.back().Type  == 'S' && cd.back().Length > 9){
+//      if(cd.front().Type == 'S' && cd.front().Length > 9){
+//	clippedBuffer.push_back(al.Position);
+//      }
+      if(cd.back().Type  == 'S' && cd.back().Length > 9 && al.MapQuality > 5){
 	clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
       allPileUp.processAlignment(al);
@@ -2224,14 +2345,14 @@ bool runRegion(int seqidIndex,
     clippedBuffer.sort();
     
 #ifdef DEBUG
-    cerr << "clipping buffer not empty; front: " << clippedBuffer.front() << "back: " << clippedBuffer.back() << endl;
+    //    cerr << "clipping buffer not empty; front: " << clippedBuffer.front() << "back: " << clippedBuffer.back() << endl;
 #endif
 
     while(al.Position <= clippedBuffer.front()){
       hasNextAlignment = All.GetNextAlignment(al);
 
 #ifdef DEBUG
-      cerr << "clipping not buffer empty " << al.Name << " " << al.Position << endl;
+      //      cerr << "clipping not buffer empty " << al.Name << " " << al.Position << endl;
 #endif
       if(!hasNextAlignment){
         break;
@@ -2240,10 +2361,10 @@ bool runRegion(int seqidIndex,
         continue;
       }
       vector< CigarOp > cd = al.CigarData;
-      if(cd.front().Type == 'S' && cd.front().Length > 9){
-        clippedBuffer.push_back(al.Position);
-      }
-      if(cd.back().Type  == 'S' && cd.back().Length > 9){
+//      if(cd.front().Type == 'S' && cd.front().Length > 9){
+//        clippedBuffer.push_back(al.Position);
+//      }
+      if(cd.back().Type  == 'S' && cd.back().Length > 9 && al.MapQuality > 5){
         clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
       allPileUp.processAlignment(al);
@@ -2257,6 +2378,8 @@ bool runRegion(int seqidIndex,
 
     allPileUp.purgePast( &currentPos );    
 
+    int offset = currentPos - start + 200;
+
     if(! score(seqNames[seqidIndex].RefName, 
 	       &currentPos, 
 	       allPileUp,
@@ -2264,7 +2387,11 @@ bool runRegion(int seqidIndex,
 	       regionResults, 
 	       localOpts,
 	       kmerDB,
-	       seqNames)){
+	       seqNames,
+	       offset,
+	       refChunk,
+	       RefSeq
+	       )){
       cerr << "FATAL: problem during scoring" << endl;
       cerr << "FATAL: wham exiting"           << endl;
       exit(1);
