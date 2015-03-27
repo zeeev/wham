@@ -137,7 +137,7 @@ bool readPileUp::processMissingMate(BamAlignment & al, string & saTag){
 bool readPileUp::processPair(BamAlignment & al, string & saTag){
 
   #ifdef DEBUG
-  cerr << "processing pair: " << al.Name << " " << al.Position << endl;
+  //  cerr << "processing pair: " << al.Name << " " << al.Position << endl;
   #endif
 
   nPaired++;
@@ -201,7 +201,7 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
 
 
 #ifdef DEBUG
-  cerr << "clustering read: " << al.Name << " " << al.Position << endl;
+  //  cerr << "clustering read: " << al.Name << " " << al.Position << endl;
 #endif
 
   if((al.AlignmentFlag & 0x0800) != 0){
@@ -216,7 +216,7 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
     if(cd.front().Type == 'S'){
    
       #ifdef DEBUG
-      cerr << "front clip: " << al.Name << " " << al.Position << endl; 
+      //      cerr << "front clip: " << al.Name << " " << al.Position << endl; 
       #endif
       
       nClippedFront++;
@@ -230,7 +230,7 @@ bool readPileUp::clusterFrontOrBackPrimary(BamAlignment & al, bool p, string & s
 
 
      #ifdef DEBUG
-      cerr << "back clip: " << al.Name << " " << al.GetEndPosition(false,true) << endl;
+      //      cerr << "back clip: " << al.Name << " " << al.GetEndPosition(false,true) << endl;
       #endif
 
       nClippedBack++;
@@ -268,7 +268,7 @@ void readPileUp::processPileup(long int * pos){
     if((*r).Position > *pos){
 
 #ifdef DEBUG
-      cerr << "fail pos greater: " << *pos << " " << (*r).Name << " " << (*r).Position << endl;
+      //      cerr << "fail pos greater: " << *pos << " " << (*r).Name << " " << (*r).Position << endl;
 #endif
       continue;
     }
@@ -278,13 +278,13 @@ void readPileUp::processPileup(long int * pos){
       tooManyCigs += 1;
       
 #ifdef DEBUG
-      cerr << "fail too many cigars" << endl;
+      //      cerr << "fail too many cigars" << endl;
 #endif 
 
     }
 
 #ifdef DEBUG
-    cerr << "currentDat: " << (*r).Name << " " << *pos << endl;
+    //    cerr << "currentDat: " << (*r).Name << " " << *pos << endl;
 #endif
 
     mapQsum += (*r).MapQuality ;

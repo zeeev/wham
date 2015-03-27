@@ -216,24 +216,26 @@ string collapseCigar(vector<CigarOp> & v){
 }
 
 void printHeader(void){
-  cout << "##fileformat=VCFv4.1"                                                                << endl;
-  cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">" << endl;
-  cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">" << endl;
-  cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"  << endl;
-  cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                      << endl;
+  cout << "##fileformat=VCFv4.1"                                                                                            << endl;
+  cout << "##INFO=<ID=LRT,Number=1,Type=Float,Description=\"Likelihood Ratio Test Statistic\">"                             << endl;
+  cout << "##INFO=<ID=WAF,Number=3,Type=Float,Description=\"Allele frequency of: background,target,combined\">"             << endl;
+  cout << "##INFO=<ID=GC,Number=2,Type=Integer,Description=\"Number of called genotypes in: background,target\">"           << endl;
+  cout << "##INFO=<ID=AT,Number=15,Type=Float,Description=\"Attributes for classification\">"                               << endl;
   cout << "##INFO=<ID=KM,Number=3,Type=Float,Description=\"Kmer filters. The number of 17bp kmers that were assayed, the number of hits to the masking DB, the fraction of hits\">" << endl;
-  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads supporting position\">" << endl;
-  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplemental reads supporting position\">" << endl;
+  cout << "##INFO=<ID=PU,Number=1,Type=Integer,Description=\"Number of reads supporting position\">"                        << endl;
+  cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplemental reads supporting position\">"           << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position\">" << endl;
   cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters\">" << endl;
-  cout << "##INFO=<ID=SP,Number=3,Type=Integer,Description=\"Number of reads supporting endpoint: insertsize,split-read,alternative-mapping  m\">" << endl;
-  cout << "##INFO=<ID=CHR2,Number=3,Type=String,Description=\"Other seqid\">"                << endl;
+  cout << "##INFO=<ID=SP,Number=3,Type=Integer,Description=\"Number of reads supporting endpoint: insertsize,split-read,alternative-mapping\">" << endl;
+  cout << "##INFO=<ID=CHR2,Number=3,Type=String,Description=\"Other seqid\">"                                               << endl;
+  cout << "##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"PE confidence interval around END\">"                       << endl;
+  cout << "##INFO=<ID=CISTART,Number=2,Type=Integer,Description=\"PE confidence interval around POS\">"                     << endl;
   cout << "##INFO=<ID=DI,Number=1,Type=Character,Description=\"Consensus is from front or back of pileup : f,b\">"          << endl;
   cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
-  cout << "##INFO=<ID=MQ,Number=1,Type=Float,Description=\"Average mapping quality\">"   << endl;
-  cout << "##INFO=<ID=MQF,Number=1,Type=Float,Description=\"Fraction of reads with MQ less than 50\">"   << endl;
+  cout << "##INFO=<ID=MQ,Number=1,Type=Float,Description=\"Average mapping quality\">"                                      << endl;
+  cout << "##INFO=<ID=MQF,Number=1,Type=Float,Description=\"Fraction of reads with MQ less than 50\">"                      << endl;
   cout << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"      << endl;
-  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between POS and end\">"         << endl;
+  cout << "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between POS and end\">"                << endl;
   cout << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">"                                                  << endl;
   cout << "##FORMAT=<ID=GL,Number=A,Type=Float,Description=\"Genotype likelihood\">"                                        << endl;
   cout << "##FORMAT=<ID=NR,Number=1,Type=Integer,Description=\"Number of reads that do not support a SV\">"                 << endl;
