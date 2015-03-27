@@ -1463,14 +1463,14 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
 
   aligner.Align(altSeq.c_str(), endChunk.c_str(), endChunk.size(), filter, &alignment);
 
-  if(abs((targetZone - 200 + alignment.ref_begin)-targetZone) < 500){
+  if(abs((targetZone - 500 + alignment.ref_begin)-targetZone) < 500){
     
 
     
   #ifdef DEBUG
     cerr << "targetZone before switch: " << targetZone  << endl;
   #endif 
-  targetZone = (targetZone - 200 + alignment.ref_begin);
+  targetZone = (targetZone - 500 + alignment.ref_begin);
   
   #ifdef DEBUG
   cerr << "targetZone after switch: " << targetZone  << endl;
@@ -1893,7 +1893,10 @@ bool score(string seqid                 ,
     return true;
   }
   
-  
+  if(nn / double(altSeq.size()) > 0.50 || nn > 20){
+    return true;
+  }
+
   // searchign for repeats 
 
   stringstream kfilter;
@@ -1991,8 +1994,19 @@ bool score(string seqid                 ,
 
 
   //  string localChunk = RefSeq.getSubSequence(seqid, (*pos-200),400);
+
+  #ifdef DEBUG
+  cerr << "substr: " << seqid << " " << *pos << " " << otherBreakPointPos << endl;
+  cerr << "offset: " << offset - 500 << " " << RefChunk.size() << endl;
+#endif
+
   string localChunk = RefChunk.substr(offset-200, 400);
   string endChunk   = RefSeq.getSubSequence(chr2, otherBreakPointPos-200, 400);
+
+  #ifdef DEBUG
+  cerr << "substrok: " << seqid << " " << *pos << " " << otherBreakPointPos << endl;
+  #endif
+
 
   // Declares a default Aligner
   StripedSmithWaterman::Aligner aligner;
@@ -2323,6 +2337,13 @@ bool runRegion(int seqidIndex,
 
   omp_set_lock(&lock);
 
+  if((start - 500) < 0){
+    start = 500;
+  }
+  if((end + 500) > seqNames[seqidIndex].RefLength){
+    end = seqNames[seqidIndex].RefLength -500; 
+  }
+
   global_opts localOpts = globalOpts;
   insertDat localDists  = insertDists;
 
@@ -2330,7 +2351,7 @@ bool runRegion(int seqidIndex,
 
   RefSeq.open(localOpts.fasta);
   
-  string refChunk = RefSeq.getSubSequence(seqNames[seqidIndex].RefName, start-200, (end-start)+200);
+  string refChunk = RefSeq.getSubSequence(seqNames[seqidIndex].RefName, start-500, (end-start)+500);
   
   omp_unset_lock(&lock);
 
@@ -2341,7 +2362,6 @@ bool runRegion(int seqidIndex,
   if(!All.SetRegion(seqidIndex, start, seqidIndex, end)){
     return false;
   }
-
 
   BamAlignment al     ;
   readPileUp allPileUp;
@@ -2421,7 +2441,11 @@ bool runRegion(int seqidIndex,
 
     allPileUp.purgePast( &currentPos );    
 
-    int offset = currentPos - start + 200;
+    int offset = currentPos - start + 500;
+
+    #ifdef DEBUG
+    cerr << "cp: " << currentPos << " st: " << start << " st+: " << start + 200 << " of: " << offset << endl;
+    #endif
 
     if(! score(seqNames[seqidIndex].RefName, 
 	       &currentPos, 
