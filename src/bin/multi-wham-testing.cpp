@@ -1821,15 +1821,15 @@ bool score(string seqid                 ,
     return true;
   }
 
-//  if(totalDat.nDiscordant   == 0 
-//     && totalDat.nsplitRead == 0 
-//     && totalDat.evert      == 0 
-//     && totalDat.primary[*pos].size() < 4){
-//#ifdef DEBUG
-//    cerr << "left scoring because there was no discordant, no splits, no everts" << endl;
-//#endif
-//    return true;
-//  }
+  if(totalDat.nDiscordant   == 0 
+     && totalDat.nsplitRead == 0 
+     && totalDat.evert      == 0 
+     && totalDat.primary[*pos].size() < 3){
+#ifdef DEBUG
+    cerr << "left scoring because there was no discordant, no splits, no everts" << endl;
+#endif
+    return true;
+  }
   
 //  if((double(totalDat.nLowMapQ) / double(totalDat.numberOfReads)) == 1){
 //#ifdef DEBUG
@@ -1895,7 +1895,10 @@ bool score(string seqid                 ,
     return true;
   }
   
-  if(nn / double(altSeq.size()) > 0.50 || nn > 20){
+  if(nn / double(altSeq.size()) > 0.50 ){
+    #ifdef DEBUG
+    cerr << "too many N" << endl;
+#endif
     return true;
   }
 
@@ -1967,12 +1970,10 @@ bool score(string seqid                 ,
   long int shigh              = *pos;
   long int slow               = *pos;
 
+  // mp,sr,sa
   int supports[3] = {0,0,0};
 
-
   interChromosomeSvEnd(totalDat, seqid, chr2, pos, outOfbounds, seqnames);
-
-
 
   if(intraChromosomeSvEnd(insertLength, 
 			  outOfbounds, 
@@ -2090,6 +2091,11 @@ bool score(string seqid                 ,
 
   if(seqid.compare(chr2) == 0){
     if(*pos > otherBreakPointPos){
+
+    #ifdef DEBUG
+      cerr << "Start is upstream" << endl;
+#endif
+
       return true;
     }
   }
