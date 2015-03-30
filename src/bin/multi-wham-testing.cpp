@@ -401,11 +401,24 @@ void parseOpts(int argc, char** argv){
     case 'r':
       {
 	vector<string> tmp_region = split(optarg, ":");
-	vector<string> start_end = split(tmp_region[1], "-");
 
-	globalOpts.seqid = tmp_region[0];
-	globalOpts.region.push_back(atoi(start_end[0].c_str()));
-	globalOpts.region.push_back(atoi(start_end[1].c_str()));
+	if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
+	  cerr << "FATAL: region was not set correctly" << endl;
+	  cerr << "INFO:  region format: seqid:start-end" << endl; 
+	  exit(1);
+	}
+
+	vector<string> start_end = split(tmp_region[1], "-");
+        globalOpts.seqid = tmp_region[0];
+        globalOpts.region.push_back(atoi(start_end[0].c_str()));
+        globalOpts.region.push_back(atoi(start_end[1].c_str()));
+
+
+	if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
+	  cerr << "FATAL: region was not set correctly" << endl;
+          cerr << "INFO:  region format: seqid:start-end" << endl;
+          exit(1);
+	}
 		
 	cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
 	
