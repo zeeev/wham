@@ -2360,6 +2360,7 @@ bool runRegion(int seqidIndex,
   
   if(seqNames[seqidIndex].RefLength < 2000){
     cerr << "WARNING: " << seqNames[seqidIndex].RefName << " is too short to assay: " << seqNames[seqidIndex].RefLength << endl; 
+    omp_unset_lock(&lock);
     return false;
   }
 
