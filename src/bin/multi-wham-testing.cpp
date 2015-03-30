@@ -2642,7 +2642,7 @@ int main(int argc, char** argv) {
   }
   
   vector< regionDat* > regions; 
-  if(globalOpts.bed == "NA"){
+  if(globalOpts.bed.compare("NA") == 0){
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
       int start = 500;
       if((*sit).RefLength < 2000){
