@@ -2734,7 +2734,8 @@ int main(int argc, char** argv) {
   cerr << "INFO: gathering stats for each bam file." << endl;
   cerr << "INFO: this step can take a few minutes." << endl;
 
-  // #pragma omp parallel for schedule(dynamic, 3)
+
+#pragma omp parallel for schedule(dynamic, 3)
   for(unsigned int i = 0; i < globalOpts.all.size(); i++){
     grabInsertLengths(globalOpts.all[i]);
   }
@@ -2809,7 +2810,7 @@ int main(int argc, char** argv) {
     loadBed(regions, sequences);
   }
 
- #pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 3)
   
   for(unsigned int re = 0; re < regions.size(); re++){
 
