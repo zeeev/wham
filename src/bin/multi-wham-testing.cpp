@@ -73,15 +73,17 @@ struct insertDat{
 } insertDists;
 
 struct global_opts {
-  vector<string> targetBams    ;
-  vector<string> backgroundBams;
-  vector<string> all           ;
-  int            nthreads      ;
-  string         fasta         ;
-  string         seqid         ;
-  string         bed           ; 
-  string         mask          ;
-  vector<int>    region        ; 
+  vector<string> targetBams      ;
+  vector<string> backgroundBams  ;
+  vector<string> all             ;
+  int            nthreads        ;
+  string         fasta           ;
+  string         seqid           ;
+  string         bed             ; 
+  string         mask            ;
+  int            qualLookup[126] ;
+  int            qualCut         ;
+  vector<int>    region          ; 
 } globalOpts;
 
 
@@ -110,7 +112,26 @@ inline bool aminan(T value)
 
 }
 
-static const char *optString ="ht:f:b:r:x:e:m:";
+static const char *optString ="ht:f:b:r:x:e:m:q:";
+
+
+
+// this lookup is good for sanger and illumina 1.8+
+
+int SangerLookup[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
+			 -1,-1,-1, 0, 1,  2, 3, 4, 5, 6, // 30-39   31-40
+			 7 , 8, 9,10,11, 12,13,14,15,16, // 40-49   41-50
+			 17,18,19,20,21, 22,23,24,25,26, // 50-59   51-60
+			 27,28,29,30,31, 32,33,34,35,36, // 60-69   61-70
+			 37,38,39,40,41, -1,-1,-1,-1,-1, // 70-79   71-80
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 80-89   81-90
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 90-99   91-100
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 100-109 101-110
+			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
+			 -1,-1,-1,-1,-1, -1           }; // 120-119 121-130
+
 
 // this lock prevents threads from printing on top of each other
 
@@ -336,11 +357,13 @@ void printHelp(void){
   cerr << "example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
 
   cerr << "required   : t <STRING> -- comma separated list of target bam files"           << endl ;
-  cerr << "recommended: m <STRING> -- kmer database for downstream filtering"             << endl ; 
   cerr << "option     : b <STRING> -- comma separated list of background bam files"       << endl ;
   cerr << "option     : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
-  cerr << "option     : x <INT>    -- set the number of threads, otherwise max          " << endl ; 
-  cerr << "option     : e <STRING> -- a bedfile that defines regions to score           " << endl ; 
+  cerr << "option     : x <INT>    -- set the number of threads, otherwise max [all]    " << endl ; 
+  cerr << "option     : e <STRING> -- a bedfile that defines regions to score  [none]   " << endl ; 
+  cerr << "option     : q <INT>    -- exclude soft-cliped sequences with average base   " << endl ;
+  cerr << "                           quality below phred scaled value (0-41) [5]       " << endl ; 
+
   cerr << endl;
   printVersion();
 }
@@ -351,18 +374,27 @@ void parseOpts(int argc, char** argv){
   globalOpts.mask  = "NA";
   globalOpts.bed   = "NA";
 
-
+  globalOpts.qualCut = 5 ;
+  
   opt = getopt(argc, argv, optString);
 
   while(opt != -1){
     switch(opt){
+
+    case 'q':
+    {
+      globalOpts.qualCut = atoi(((string)optarg).c_str());
+      cerr << "INFO: WHAM-BAM skip soft-clips with average base quality below: " << globalOpts.qualCut << endl;
+      break; 
+    }
+    
     case 'f':
       {
 	globalOpts.fasta =  optarg;
 	cerr << "INFO: WHAM-BAM will using the following fasta: " << globalOpts.fasta << endl;
 	break;
       }
-
+      
     case 'm':
       {
 	globalOpts.mask = optarg;
@@ -503,7 +535,13 @@ double var(vector<double> & data, double mu){
 // gerates per bamfile statistics 
 
 void grabInsertLengths(string & targetfile){
+
   
+  omp_set_lock(&lock);
+  int quals [126];
+  memcpy(quals, SangerLookup, 126*sizeof(int));
+  omp_unset_lock(&lock);
+
   vector<double> alIns;
   vector<double> nReads;
 
@@ -531,8 +569,10 @@ void grabInsertLengths(string & targetfile){
   
   BamAlignment al;
 
-  while(i < 5 || n < 100000){
+  int qsum = 0;
+  int qnum = 0;
 
+  while(i < 5 || n < 100000){
 
     unsigned int max = 20;
     
@@ -563,7 +603,7 @@ void grabInsertLengths(string & targetfile){
     
     readPileUp allPileUp;
     
-    while(bamR.GetNextAlignmentCore(al)){
+    while(bamR.GetNextAlignment(al)){
       if(!al.IsMapped() || ! al.IsProperPair()){
 	continue;
       }
@@ -574,6 +614,27 @@ void grabInsertLengths(string & targetfile){
       if(al.GetTag("SA", any)){
 	continue;
       }
+
+      string squals = al.Qualities;
+      
+      // summing base qualities (quals is the lookup)
+
+      for(unsigned int q = 0 ; q < squals.size(); q++){
+	qsum += quals[ int(squals[q]) ];
+	qnum += 1;
+
+	if(quals[int(squals[q])] < 0){
+	  omp_set_lock(&lock);
+	  cerr << endl;
+	  cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41)               " << endl;
+	  cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
+	  cerr << endl;
+	  omp_unset_lock(&lock);
+	  exit(1);
+	}
+      }
+
+
       if(al.Position > cp){
 	allPileUp.purgePast(&cp);
 	cp = al.GetEndPosition(false,true);
@@ -605,15 +666,15 @@ void grabInsertLengths(string & targetfile){
   insertDists.avgD[ targetfile ] = mud;
 
   cerr << "INFO: for file:" << targetfile << endl            
-       << "      " << targetfile << ": mean depth: " << mud << endl
-       << "      " << targetfile << ": sd   depth: " << sdd << endl
-       << "      " << targetfile << ": mean insert length: " << insertDists.mus[targetfile] << endl
-       << "      " << targetfile << ": sd   insert length: " << insertDists.sds[targetfile] << endl
-       << "      " << targetfile << ": lower insert length: " << insertDists.mus[targetfile] -(2.5*insertDists.sds[targetfile]) << endl
-       << "      " << targetfile << ": upper insert length: " << insertDists.mus[targetfile] +(2.5*insertDists.sds[targetfile])   << endl 
+       << "      " << targetfile << ": mean depth: ......... " << mud << endl
+       << "      " << targetfile << ": sd   depth: ......... " << sdd << endl
+       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
+       << "      " << targetfile << ": sd   insert length: . " << insertDists.sds[targetfile] << endl
+       << "      " << targetfile << ": lower insert length:  " << insertDists.mus[targetfile] -(2.5*insertDists.sds[targetfile]) << endl
+       << "      " << targetfile << ": upper insert length:  " << insertDists.mus[targetfile] +(2.5*insertDists.sds[targetfile])   << endl 
+       << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << " " << qsum << " " << qnum << endl
        << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
 
-       
   omp_unset_lock(&lock);
 }
 
@@ -1133,7 +1194,7 @@ void endPos(vector<cigar> & cigs, int * pos){
 
 bool uniqClips(long int * pos, 
 	       map<long int, vector < BamAlignment > > & clusters, 
-	       vector<string> & alts, string & direction){
+	       vector<string> & alts, string & direction, global_opts & localOpts){
 
   map<string, vector<string> >  clippedSeqs;
 
@@ -1142,40 +1203,90 @@ bool uniqClips(long int * pos,
 
   for( vector < BamAlignment >::iterator it = clusters[(*pos)].begin(); 
        it != clusters[(*pos)].end(); it++){
-    
-    if(((*it).AlignmentFlag & 0x0800) != 0 || !(*it).IsPrimaryAlignment()){
-#ifdef DEBUG
-      cerr << "fail clip:" << (*it).Name << endl;
-#endif
-      
-      continue;
-      
-    }
-    
+        
     vector< CigarOp > cd = (*it).CigarData;
-  
+    
     if((*it).Position == (*pos)){
       string clip = (*it).QueryBases.substr(0, cd.front().Length);
       if(clip.size() < 5){
 	continue;
       }
 
+      int start = cd.front().Length - 5;      
+
+      if(start < 0){
+	start = 0 ;
+      }
+
+      int sum = 0;
+      int num = 0;
+
+      string quals = (*it).Qualities.substr(start, 10);
+
       #ifdef DEBUG
-      cerr << "clip: " << clip << endl;
+      cerr << "clip seq : " << clip << endl;
+      cerr << "clip qual: " << quals << endl;
+
       #endif
+
+      for(unsigned int q = 0 ; q < quals.size() ; q++){
+        sum += localOpts.qualLookup[ int(quals[q]) ] ;
+	num += 1;
+      }
+
+      #ifdef DEBUG
+      cerr << "clip avgQ: " << double(sum)/double(num) << endl;
+      #endif 
+
+      if((double(sum)/double(num)) < localOpts.qualCut){
+      
+#ifdef DEBUG
+	cerr << "clip fail due to low qual" << endl;
+#endif
+	continue;
+      }
+
 
       clippedSeqs["f"].push_back(clip);
       fcount += 1;
     }
     if((*it).GetEndPosition(false,true) == (*pos)){
+
       string clip = (*it).QueryBases.substr( (*it).Length - cd.back().Length );
       if(clip.size() < 5){
 	continue;
       }
 
+      int start = (*it).Length - cd.back().Length - 5;
+
+      int sum = 0;
+      int num = 0;
+
+      string quals = (*it).Qualities.substr(start, 10);
+
+
       #ifdef DEBUG
-      cerr << "clip: " << clip << endl;
+      cerr << "clip seq : " << clip << endl;
+      cerr << "clip qual: " << quals << endl;
+
       #endif
+
+      for(unsigned int q = 0 ; q < quals.size() ; q++){
+        sum += localOpts.qualLookup[ int(quals[q]) ] ;
+        num += 1;
+      }
+
+#ifdef DEBUG
+      cerr << "clip avgQ: " << double(sum)/double(num) <<endl;
+#endif
+
+      if((double(sum)/double(num)) < localOpts.qualCut){
+
+#ifdef DEBUG
+	cerr << "clip fail due to low qual" << endl;
+#endif
+        continue;
+      }
 
       clippedSeqs["b"].push_back(clip);    
       bcount += 1;
@@ -1492,8 +1603,6 @@ bool intraChromosomeSvEnd( vector <int>      & inBounds   ,
   #endif
 
 }
-
-
 
 
   long int lowerBoundOut = -1;
@@ -1816,7 +1925,7 @@ bool score(string seqid                 ,
 	   readPileUp       & totalDat  , 
 	   insertDat        & localDists, 
 	   string           & results   , 
-	   global_opts localOpts        ,
+	   global_opts      & localOpts ,
 	   vector<uint64_t> & kmerDB    ,
 	   vector<RefData>  & seqnames  ,
 	   int              & offset    ,
@@ -1884,7 +1993,7 @@ bool score(string seqid                 ,
   
   string direction ;
   
-  uniqClips(pos, totalDat.primary, alts, direction);
+  uniqClips(pos, totalDat.primary, alts, direction, localOpts);
   
   if(alts.size() < 2){
     
@@ -2070,6 +2179,9 @@ bool score(string seqid                 ,
      totalDat.internalDeletion > 0 && 
      totalDat.internalDeletion > totalDat.internalInsertion){
     otherBreakPointPos = (*pos - 200 + alignment.ref_begin);
+    elow  = otherBreakPointPos -10;
+    ehigh = otherBreakPointPos +10;
+
     if(seqid.compare(chr2) == 0){
       
       if(otherBreakPointPos >= *pos){
@@ -2089,6 +2201,9 @@ bool score(string seqid                 ,
      totalDat.internalInsertion > 0 &&
 				    totalDat.internalDeletion  < totalDat.internalInsertion){
   otherBreakPointPos = (*pos - 200 + alignment.ref_begin);
+  elow  = otherBreakPointPos -10;
+  ehigh = otherBreakPointPos +10;
+
   if(seqid.compare(chr2) == 0){
       
       if(otherBreakPointPos >= *pos){
@@ -2106,16 +2221,12 @@ bool score(string seqid                 ,
     if(*pos > otherBreakPointPos){
 
     #ifdef DEBUG
-      cerr << "Start is upstream" << endl;
+      cerr << "left scoring: start is upstream" << endl;
 #endif
 
       return true;
     }
   }
-
-  // to vcf 
-  elow  += 1;
-  ehigh += 1;
  
   if(SVLEN > 1000000 && supports[0] == 0 && supports[1] == 0 ){
 #ifdef DEBUG
@@ -2126,11 +2237,11 @@ bool score(string seqid                 ,
     return true;
   }
 
-  if(otherBreakPointPos == 0){
+  if(otherBreakPointPos == 0 ){
 #ifdef DEBUG
     cerr << "other breakpoint was not found" << endl;
 #endif
-
+    
     return true;
   }
 
@@ -2276,6 +2387,10 @@ bool score(string seqid                 ,
 
   if(enrichment == 0 ){
     cleanUp(ti, localOpts);
+  #ifdef DEBUG
+    cerr << "left scoring: no enrichment" << endl;
+  #endif
+
     return true;
   }
 
@@ -2373,6 +2488,9 @@ bool runRegion(int seqidIndex,
   }
 
   global_opts localOpts = globalOpts;
+
+  memcpy(localOpts.qualLookup, SangerLookup, 126*sizeof(int));
+
   insertDat localDists  = insertDists;
 
   FastaReference RefSeq;
@@ -2616,7 +2734,7 @@ int main(int argc, char** argv) {
   cerr << "INFO: gathering stats for each bam file." << endl;
   cerr << "INFO: this step can take a few minutes." << endl;
 
-  // #pragma omp parallel for
+  // #pragma omp parallel for schedule(dynamic, 3)
   for(unsigned int i = 0; i < globalOpts.all.size(); i++){
     grabInsertLengths(globalOpts.all[i]);
   }
