@@ -199,8 +199,8 @@ sub processLines{
 	    $bedline .= "\t$svCount:.:$info{SVLEN}\t.";
 	}
 
-	my $startToprint = "start=";
-	$startToprint .= $vcfLine[1] - 1;
+	my $startToprint = "1based-start=";
+	$startToprint .= $vcfLine[1];
 	$startToprint .= ";";
 	
 	$bedline .= "\t.";

@@ -68,6 +68,19 @@ bool readPileUp::processSplitRead(BamAlignment & al, string & saTag){
     nDiscordant++;
   }
 
+  //everts
+  if(al.IsReverseStrand()
+     && ! al.IsMateReverseStrand()
+     && al.Position < al.MatePosition){
+    evert++;
+  }
+  else if(! al.IsReverseStrand()
+	  && al.IsMateReverseStrand()
+	  && al.Position > al.MatePosition){
+    evert++;
+  }
+
+
   vector<string> saData = split(sas[0], ",");
   
   // checking if the two splitread fragments

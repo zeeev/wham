@@ -19,9 +19,11 @@ RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
 
 
-all: createBin bamtools libbamtools.a buildWHAMBAM clean
-debug: createBin bamtools libbamtools.a buildWHAMBAMD clean
+all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM clean
+debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD clean
 
+mvSSW:
+	cp src/lib/ssw.c src/Complete-Striped-Smith-Waterman-Library/src
 createBin:
 	-mkdir bin
 bamtools:

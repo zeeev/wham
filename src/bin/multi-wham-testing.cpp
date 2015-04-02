@@ -83,6 +83,7 @@ struct global_opts {
   string         mask            ;
   int            qualLookup[126] ;
   int            qualCut         ;
+  int            MQ              ;
   vector<int>    region          ; 
 } globalOpts;
 
@@ -112,8 +113,7 @@ inline bool aminan(T value)
 
 }
 
-static const char *optString ="ht:f:b:r:x:e:m:q:";
-
+static const char *optString ="ht:f:b:r:x:e:m:q:p:";
 
 
 // this lookup is good for sanger and illumina 1.8+
@@ -354,16 +354,17 @@ void printVersion(void){
 
 void printHelp(void){
   cerr << "usage  : WHAM-BAM -m <STRING> -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>   " << endl << endl;
-  cerr << "example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
+  cerr << "example: WHAM-BAM -q 20 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
 
-  cerr << "required   : t <STRING> -- comma separated list of target bam files"           << endl ;
-  cerr << "option     : b <STRING> -- comma separated list of background bam files"       << endl ;
+  cerr << "required   : t <STRING> -- comma separated list of target bam files          " << endl ;
+  cerr << "option     : b <STRING> -- comma separated list of background bam files      " << endl ;
   cerr << "option     : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
   cerr << "option     : x <INT>    -- set the number of threads, otherwise max [all]    " << endl ; 
   cerr << "option     : e <STRING> -- a bedfile that defines regions to score  [none]   " << endl ; 
   cerr << "option     : q <INT>    -- exclude soft-cliped sequences with average base   " << endl ;
   cerr << "                           quality below phred scaled value (0-41) [5]       " << endl ; 
-
+  cerr << "option     : p <INT>    -- exclude soft-clipped reads with mapping quality   " << endl ;
+  cerr << "                           below value [5]                                   " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -375,12 +376,18 @@ void parseOpts(int argc, char** argv){
   globalOpts.bed   = "NA";
 
   globalOpts.qualCut = 5 ;
-  
+  globalOpts.MQ      = 0 ;
+
   opt = getopt(argc, argv, optString);
 
   while(opt != -1){
     switch(opt){
-
+    case 'p':
+      {
+	globalOpts.MQ = atoi(((string)optarg).c_str());
+	cerr << "INFO: WHAM-BAM skip soft-clips with mapping quaity below: " << globalOpts.MQ << endl;
+	break;
+      }
     case 'q':
     {
       globalOpts.qualCut = atoi(((string)optarg).c_str());
@@ -1221,7 +1228,7 @@ bool uniqClips(long int * pos,
       int sum = 0;
       int num = 0;
 
-      string quals = (*it).Qualities.substr(start, 10);
+      string quals = (*it).Qualities.substr(start, 5);
 
       #ifdef DEBUG
       cerr << "clip seq : " << clip << endl;
@@ -1257,12 +1264,12 @@ bool uniqClips(long int * pos,
 	continue;
       }
 
-      int start = (*it).Length - cd.back().Length - 5;
+      int start = (*it).Length - cd.back().Length;
 
       int sum = 0;
       int num = 0;
 
-      string quals = (*it).Qualities.substr(start, 10);
+      string quals = (*it).Qualities.substr(start, 5);
 
 
       #ifdef DEBUG
@@ -2026,36 +2033,36 @@ bool score(string seqid                 ,
 
   // searchign for repeats 
 
-  stringstream kfilter;
-  
-  double nReps  = 0;
-  double nAssay = 0;
-
-  if(altSeq.size() > 17){
-    for(uint16_t l = 0; l < (altSeq.size() - 17); l++){
-      string conKmer = altSeq.substr(l,17);
-      std::size_t found = conKmer.find("N");
-      if (found!=std::string::npos){
-	continue;
-      }
-      nAssay += 1;
-      char * con = new char[18];
-      memcpy(con, conKmer.c_str(), 18);
-      con[17] = '\0';
-      uint64_t front =  charArrayToBin(con, 0);
-      if( binary_search(kmerDB.begin(), kmerDB.end(), front) ){
-	nReps+=1;
-      }
-      delete con;
-    }
-  }
-
-  double kmHitFrac = double(nReps) / double(nAssay) ; 
-  
-  if(aminan(kmHitFrac)){
-    kmHitFrac = 0;
-  }
-  kfilter << nAssay << "," << nReps << "," << kmHitFrac ;
+//  stringstream kfilter;
+//  
+//  double nReps  = 0;
+//  double nAssay = 0;
+//
+//  if(altSeq.size() > 17){
+//    for(uint16_t l = 0; l < (altSeq.size() - 17); l++){
+//      string conKmer = altSeq.substr(l,17);
+//      std::size_t found = conKmer.find("N");
+//      if (found!=std::string::npos){
+//	continue;
+//      }
+//      nAssay += 1;
+//      char * con = new char[18];
+//      memcpy(con, conKmer.c_str(), 18);
+//      con[17] = '\0';
+//      uint64_t front =  charArrayToBin(con, 0);
+//      if( binary_search(kmerDB.begin(), kmerDB.end(), front) ){
+//	nReps+=1;
+//      }
+//      delete con;
+//    }
+//  }
+//
+//  double kmHitFrac = double(nReps) / double(nAssay) ; 
+//  
+//  if(aminan(kmHitFrac)){
+//    kmHitFrac = 0;
+//  }
+//  kfilter << nAssay << "," << nReps << "," << kmHitFrac ;
    
   // preparing data structure to load genotypes
   map < string, indvDat*> ti;
@@ -2217,16 +2224,16 @@ bool score(string seqid                 ,
     }
   }
 
-  if(seqid.compare(chr2) == 0){
-    if(*pos > otherBreakPointPos){
-
-    #ifdef DEBUG
-      cerr << "left scoring: start is upstream" << endl;
-#endif
-
-      return true;
-    }
-  }
+//  if(seqid.compare(chr2) == 0){
+//    if(*pos > otherBreakPointPos){
+//
+//    #ifdef DEBUG
+//      cerr << "left scoring: start is upstream" << endl;
+//#endif
+//
+//      return true;
+//    }
+//  }
  
   if(SVLEN > 1000000 && supports[0] == 0 && supports[1] == 0 ){
 #ifdef DEBUG
@@ -2338,7 +2345,6 @@ bool score(string seqid                 ,
   tmpOutput  << "CF=" << cf                               << ";"                     ;
   tmpOutput  << "CISTART=" << slow << "," << shigh                              << ";"                     ;
   tmpOutput  << "CIEND=" << elow << "," << ehigh                              << ";"                     ;
-  tmpOutput  << "KM=" << kfilter.str()                    << ";"                     ;
   tmpOutput  << "PU=" << totalDat.primary[*pos].size()    << ";"                     ;
   tmpOutput  << "SU=" << totalDat.supplement[*pos].size() << ";"                     ;
   tmpOutput  << "CU=" << totalDat.primary.size() + totalDat.supplement.size() << ";" ; 
@@ -2542,10 +2548,10 @@ bool runRegion(int seqidIndex,
 	continue;
       }
       vector< CigarOp > cd = al.CigarData;
-      if(cd.front().Type == 'S' && cd.front().Length > 9 && al.MapQuality > 5){
+      if(cd.front().Type == 'S' && cd.front().Length > 9 && al.MapQuality  > localOpts.MQ){
 	clippedBuffer.push_back(al.Position);
       }
-      if(cd.back().Type  == 'S' && cd.back().Length > 9 && al.MapQuality > 5){
+      if(cd.back().Type  == 'S' && cd.back().Length  > 9 && al.MapQuality  > localOpts.MQ){
 	clippedBuffer.push_back(al.GetEndPosition(false,true));
       }
       allPileUp.processAlignment(al);

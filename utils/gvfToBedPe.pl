@@ -77,11 +77,30 @@ sub processLines{
 	
 	my $bedline;
 	
-	my $start0 =   $gvfLine[3] - 1 - $BUFFER;
-	my $start1 =   $gvfLine[3] - 1 + $BUFFER;
+	my $start0 = $gvfLine[3] ;
+	my $start1 = $gvfLine[3] ;
 
-	my $end0   = $gvfLine[4] - 1 - $BUFFER;
-	my $end1   = $gvfLine[4] - 1 + $BUFFER;
+	my $end0   = $gvfLine[4] ;
+	my $end1   = $gvfLine[4] ;
+
+
+	#	Start_range=7570074,7570074;End_range=7571521,7571521;
+	
+	if($line =~ /Start_range=(.*?);/){
+	    my @sr = split /,/, $1;
+	    $start0 = $sr[0] - 1 ;
+	    $start1 = $sr[1] - 1 ; 
+	}
+	if($line =~ /End_range=(.*?);/){
+            my @er = split /,/,$1;
+            $end0 = $er[0] - 1 ;
+            $end1 = $er[1] - 1 ;
+        }
+
+	$start0 -= $BUFFER;
+	$start1 += $BUFFER;
+	$end0   -= $BUFFER;
+	$end1   += $BUFFER;
 
 	$bedline .= "$gvfLine[0]";
 	$bedline .= "\t$start0";
