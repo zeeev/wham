@@ -82,8 +82,9 @@ struct global_opts {
   string         bed             ; 
   string         mask            ;
   int            qualLookup[126] ;
-  int            qualCut         ;
-  int            MQ              ;
+  int            qualCut         ; // average base pair quality for 5nt left or right of the breakpoint
+  int            MQ              ; // required mapping quality for soft-clipped reads
+  unsigned int   min             ; // number of soft-clips with the same start or end
   vector<int>    region          ; 
 } globalOpts;
 
@@ -361,6 +362,8 @@ void printHelp(void){
   cerr << "option     : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
   cerr << "option     : x <INT>    -- set the number of threads, otherwise max [all]    " << endl ; 
   cerr << "option     : e <STRING> -- a bedfile that defines regions to score  [none]   " << endl ; 
+  cerr << "option     : m <INT>    -- minimum number of soft-clips supporting           " << endl ;
+  cerr << "                           START [3]                                         " << endl ;                
   cerr << "option     : q <INT>    -- exclude soft-cliped sequences with average base   " << endl ;
   cerr << "                           quality below phred scaled value (0-41) [5]       " << endl ; 
   cerr << "option     : p <INT>    -- exclude soft-clipped reads with mapping quality   " << endl ;
@@ -377,6 +380,7 @@ void parseOpts(int argc, char** argv){
 
   globalOpts.qualCut = 5 ;
   globalOpts.MQ      = 0 ;
+  globalOpts.min     = 3 ;
 
   opt = getopt(argc, argv, optString);
 
@@ -404,8 +408,8 @@ void parseOpts(int argc, char** argv){
       
     case 'm':
       {
-	globalOpts.mask = optarg;
-	cerr << "INFO: WHAM-BAM will screen breakpoints for simple repeats and microstats: " << globalOpts.mask << endl;
+	globalOpts.min = atoi(((string)optarg).c_str());
+	cerr << "INFO: WHAM-BAM requires : " << globalOpts.min << " soft-clips to score breakpoint " << endl;
 	break;
       }
     case 'e':
@@ -1941,7 +1945,7 @@ bool score(string seqid                 ,
   
   totalDat.processPileup(pos);
   
-  if(totalDat.primary[*pos].size() < 2 && 
+  if(totalDat.primary[*pos].size() < localOpts.min && 
      totalDat.supplement[*pos].size() < 2
      ){
 #ifdef DEBUG
