@@ -354,8 +354,8 @@ void printVersion(void){
 }
 
 void printHelp(void){
-  cerr << "usage  : WHAM-BAM -m <STRING> -x <INT> -r <STRING>     -e <STRING>  -t <STRING>    -b <STRING>   " << endl << endl;
-  cerr << "example: WHAM-BAM -q 20 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
+  cerr << "usage  : WHAM-BAM -m <INT> -q <INT> -p <INT> -x <INT> -r <STRING> -e <STRING> -t <STRING> -b <STRING> " << endl << endl;
+  cerr << "example: WHAM-BAM -m 2 -q 15 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
 
   cerr << "required   : t <STRING> -- comma separated list of target bam files          " << endl ;
   cerr << "option     : b <STRING> -- comma separated list of background bam files      " << endl ;
