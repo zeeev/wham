@@ -406,7 +406,10 @@ void parseOpts(int argc, char** argv){
     case 'i':
       {
 	cerr << "INFO: base quality is Illumina 1.3+ Phred+64 NOT sanger Phred+33" << endl;
-	memcpy(SangerLookup, IlluminaOneThree, 126*sizeof(int));
+	for(unsigned int z = 0; z < 126; z++){
+	  SangerLookup[z] = IlluminaOneThree[z];
+	}
+	break;
       }
     case 'p':
       {
