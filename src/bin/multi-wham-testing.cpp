@@ -640,6 +640,7 @@ void grabInsertLengths(string & targetfile){
 	  omp_set_lock(&lock);
 	  cerr << endl;
 	  cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
+	  cerr << "INFO : offending qual: " q << " " << quals[q] << endl;
 	  cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
 	  cerr << endl;
 	  omp_unset_lock(&lock);
