@@ -367,9 +367,9 @@ void printHelp(void){
   cerr << "option     : m <INT>    -- minimum number of soft-clips supporting           " << endl ;
   cerr << "                           START [3]                                         " << endl ;                
   cerr << "option     : q <INT>    -- exclude soft-cliped sequences with average base   " << endl ;
-  cerr << "                           quality below phred scaled value (0-41) [5]       " << endl ; 
+  cerr << "                           quality below phred scaled value (0-41) [20]      " << endl ; 
   cerr << "option     : p <INT>    -- exclude soft-clipped reads with mapping quality   " << endl ;
-  cerr << "                           below value [5]                                   " << endl ; 
+  cerr << "                           below value [15]                                  " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -380,9 +380,9 @@ void parseOpts(int argc, char** argv){
   globalOpts.mask  = "NA";
   globalOpts.bed   = "NA";
 
-  globalOpts.qualCut = 5 ;
-  globalOpts.MQ      = 0 ;
-  globalOpts.min     = 3 ;
+  globalOpts.qualCut = 20 ;
+  globalOpts.MQ      = 15 ;
+  globalOpts.min     = 3  ;
 
   opt = getopt(argc, argv, optString);
 
