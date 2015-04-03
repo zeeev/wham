@@ -407,6 +407,9 @@ void parseOpts(int argc, char** argv){
       {
 	cerr << "INFO: base quality is Illumina 1.3+ Phred+64 NOT sanger Phred+33" << endl;
 	for(unsigned int z = 0; z < 126; z++){
+
+	  cerr <<   z << " " << SangerLookup[z] << " " << IlluminaOneThree[z] << endl;
+
 	  SangerLookup[z] = IlluminaOneThree[z];
 	}
 	break;
