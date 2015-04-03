@@ -114,7 +114,7 @@ inline bool aminan(T value)
 
 }
 
-static const char *optString ="ht:f:b:r:x:e:m:q:p:";
+static const char *optString ="ht:f:b:r:x:e:m:q:p:i";
 
 
 // this lookup is good for sanger and illumina 1.8+
@@ -132,6 +132,20 @@ int SangerLookup[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
 			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 100-109 101-110
 			 -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
 			 -1,-1,-1,-1,-1, -1           }; // 120-119 121-130
+
+int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 30-39   31-40
+                             -1,-1,-1,-1,-1  -1,-1,-1,-1,-1, // 40-49   41-50
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 50-59   51-60
+                             -1,-1,-1, 0, 1,  2, 3, 4, 5, 6, // 60-69   61-70
+                              7, 8, 9,10,11, 12,13,14,15,16, // 70-79   71-80
+                             17,18,19,20,21, 22,23,24,25,26, // 80-89   81-90
+                             27,28,29,30,31, 32,33,34,35,36, // 90-99   91-100
+                             37,38,39,40,-1, -1,-1,-1,-1,-1, // 100-109 101-110
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
+                             -1,-1,-1,-1,-1, -1           }; // 120-119 121-130
 
 
 // this lock prevents threads from printing on top of each other
@@ -370,6 +384,7 @@ void printHelp(void){
   cerr << "                           quality below phred scaled value (0-41) [20]      " << endl ; 
   cerr << "option     : p <INT>    -- exclude soft-clipped reads with mapping quality   " << endl ;
   cerr << "                           below value [15]                                  " << endl ; 
+  cerr << "option     : i          -- base quality is Illumina 1.3+ Phred+64            " << endl ; 
   cerr << endl;
   printVersion();
 }
@@ -388,6 +403,11 @@ void parseOpts(int argc, char** argv){
 
   while(opt != -1){
     switch(opt){
+    case 'i':
+      {
+	cerr << "INFO: base quality is Illumina 1.3+ Phred+64 NOT sanger Phred+33" << endl;
+	memcpy(SangerLookup, IlluminaOneThree, 126*sizeof(int));
+      }
     case 'p':
       {
 	globalOpts.MQ = atoi(((string)optarg).c_str());
@@ -549,7 +569,7 @@ double var(vector<double> & data, double mu){
 
 void grabInsertLengths(string & targetfile){
 
-  
+
   omp_set_lock(&lock);
   int quals [126];
   memcpy(quals, SangerLookup, 126*sizeof(int));
@@ -639,9 +659,10 @@ void grabInsertLengths(string & targetfile){
 	if(quals[int(squals[q])] < 0){
 	  omp_set_lock(&lock);
 	  cerr << endl;
-	  cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
-	  cerr << "INFO : offending qual: " << q << " " << quals[q] << endl;
-	  cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
+          cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
+          cerr << "INFO : offending qual string: " << squals << endl;
+          cerr << "INFO : offending qual char  : " << squals[q] << endl;
+          cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
 	  cerr << endl;
 	  omp_unset_lock(&lock);
 	  exit(1);
