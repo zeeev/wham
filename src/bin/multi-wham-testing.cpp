@@ -611,7 +611,16 @@ void grabInsertLengths(string & targetfile){
   int qsum = 0;
   int qnum = 0;
 
+  int fail = 0;
+
+
   while(i < 5 || n < 100000){
+
+    fail += 1;
+    if(fail > 1000000){
+      cerr << "FATAL: was not able to gather stats on bamfile: " << targetfile << endl;
+      exit(1);
+    }
 
     unsigned int max = 20;
     
@@ -2773,7 +2782,7 @@ int main(int argc, char** argv) {
 //  }
 
   cerr << "INFO: gathering stats for each bam file." << endl;
-  cerr << "INFO: this step can take a few minutes." << endl;
+
 
 
 #pragma omp parallel for schedule(dynamic, 3)
