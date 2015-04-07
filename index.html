@@ -139,7 +139,7 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 
 <p><b> Sensitivity and specificity can be controlled by adjusting -q and -p flags.  WHAM interrogates a potential structural variant if more than two soft-clipped reads share the same start or end.
 By requiring higher base quality and mapping quality of soft-clipped reads the specificity can be increased. Soft-clipping can occur because of low quality bases at the five-prime or three-prime end of a read.  
-here we require a minimum mapping quality of 30 and a minimum base quality of 35:
+In the sample below a minimum mapping quality of 30 and a minimum base quality of 35 is used:
 
 <pre><code>./bin/WHAM-BAM -f hg19.fa -p 30 -q 35 -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
@@ -151,11 +151,11 @@ here we require a minimum mapping quality of 30 and a minimum base quality of 35
 
 <p><b> There are two ways to run WHAM in regions.  The first is to set a region using the -r option. In the example below we score chr1 0-100,000 with WHAM:</b></p>
 
-<pre><code>./bin/WHAM-BAM -f hg19.fa -r chr1:0-100000 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; 
+<pre><code>./bin/WHAM-BAM -f hg19.fa -r chr1:0-100000 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; </pre></code>
 
 <p><b> Alternatively, WHAM can take a bedfile defining the regions to run.  This is highly advised if you have exome data - or - sparse coverage: </b></p>
 
-<pre><code>./bin/WHAM-BAM -f hg19.fa -e regions.bed -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; 
+<pre><code>./bin/WHAM-BAM -f hg19.fa -e regions.bed -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; </pre></code>
 
 
 
