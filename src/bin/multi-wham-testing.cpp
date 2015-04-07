@@ -365,7 +365,7 @@ void printVersion(void){
   cerr << "Contact: zev.kronenberg [at] gmail.com " << endl;
   cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
   cerr << "         -The options -m,-q, and -p, control the sensitivity and specificity" << endl;
-  cerr << "         -If you have exome data use the -e option for best performace      " << endl;
+  cerr << "         -If you have exome data use the -e option for best performance     " << endl;
   cerr << endl;
 }
 
