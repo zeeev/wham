@@ -16,9 +16,8 @@ parser.add_argument("VCF", type=str, help="User supplied VCF with WHAM variants;
 parser.add_argument("training_matrix", type=str, help="training dataset for classifier derived from simulated read dataset")
 parser.add_argument("--filter", type=str, help="optional arg for filtering type one of : ['sensitive', 'specific']; defaults to output all data if filtering if argument is not supplied.")
 parser.add_argument("--proc", type=str, help="optional arg for number of proceses to run with classifier; higher thread number will increase speed of classifier; defaults to 1")
-parser.add_argument("--minclassfreq", type=float, help="Minimum frequency required for classification, otherwise variant set as unknown (UNK). Default is to classify everything.")
+parser.add_argument("--minclassfreq", default=0, type=float, help="optional arg for minimum frequency required for classification, otherwise variant set as unknown (UNK). Default is to classify everything.")
 arg=parser.parse_args()
-
 
 #########################
 #Functions
@@ -105,7 +104,7 @@ def parse_targets( target ):
 #method to run observed data through the trained model to output
 #a vcf friendly return of classified variant call and the prediction
 #probabilities for each call
-def classify_data( _x, clf, names, minclassfreq ):
+def classify_data( _x, clf, names, minclassfreq=None ):
 	"""
 	_x = pass the col 8 from vcf
 	clf = machine learning object
@@ -119,6 +118,7 @@ def classify_data( _x, clf, names, minclassfreq ):
 	prediction = names[ class_idx ] #lookup text based name for classification
 
 	class_probs = clf.predict_proba(_x)[0] #gives weights for your predictions 1:target_names
+	#if minclass is set and is below threshold, we change prediction to UKN - unknown
         if minclassfreq and class_probs[class_idx] < minclassfreq:
                 prediction = "UKN"  # set as unknown, not enough evidence for classification
 	#convert back to text comma separated list
@@ -227,7 +227,7 @@ def process_vcf( info ):
 		if filter_bool:
 			_x = vdat[ 'AT' ].split(",") #create list from data in 'AT' field 
 			_x = _x[1:]
-			results = classify_data( _x, clf, dataset['target_names'] )
+			#results = classify_data( _x, clf, dataset['target_names'] )
 			results = classify_data( _x, clf, dataset['target_names'], minclassfreq )
 
 			line[7] = line[7] + ";" + results #append data to correct vcf column
@@ -311,6 +311,8 @@ sys.stderr.write("\t results from cross validation:\n\t %f%s \n" %( avg_val, '%'
 
 sys.stderr.write("processing VCF file through classifier... \n" ) 
 sys.stderr.write("...running parent process with job id %d \n can use this ID to exit \n" %(os.getpid() ) )
+sys.stderr.write("minclassfreq var is set to = %f \n" %( arg.minclassfreq ) )
+
 #load VCF file into class obj
 vcf_file = vcf(arg.VCF)
 
