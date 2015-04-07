@@ -105,7 +105,7 @@ option     : x &lt;INT&gt;    -- set the number of threads, otherwise max [all]
 option     : e &lt;STRING&gt; -- a bedfile that defines regions to score  [none]
 option     : m &lt;INT&gt;    -- minimum number of soft-clips supporting
                            START [3]
-option     : q &lt;INT&gt;    -- exclude soft-cliped sequences with average base
+option     : q &lt;INT&gt;    -- exclude soft-clipped sequences with average base
                            quality below phred scaled value (0-41) [20]
 option     : p &lt;INT&gt;    -- exclude soft-clipped reads with mapping quality
                            below value [15]
@@ -115,7 +115,7 @@ Version: v1.7.0-57-g76af
 Contact: zev.kronenberg [at] gmail.com
 Notes  : -If you find a bug, please open a report on github!
          -The options -m,-q, and -p, control the sensitivity and specificity
-         -If you have exome data use the -e option for best performace
+         -If you have exome data use the -e option for best performance
 
 </code></pre>
 
@@ -127,18 +127,37 @@ Notes  : -If you find a bug, please open a report on github!
 Here we run Wham on the whole genome on NA12878
 </p>
 
-<pre><code>./bin/WHAM-BAM -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err 
+<pre><code>./bin/WHAM-BAM -f hg19.fa -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err 
 python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_data.txt &gt; NA12878.wham.raw.class.vcf 2&gt; NA12878.wham.raw.class.err
 </code></pre>
 
-<p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
+<p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file given the reference fasta and the bam file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
 
 <p><b> By default Wham uses all CPUs the machine has. If you only want to use 10 CPUs use the "-x" flag:</b></p>
 
-<pre><code>./bin/WHAM-BAM -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
+<pre><code>./bin/WHAM-BAM -f hg19.fa -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
-<p><b> Sensitivity and specificity can be controlled by adjusting -q and -p.  WHAM interogates a potential strucutral variant if more than two soft-clipped reads share the same start or end.
-By requiring higher base quality and mapping quality of soft-clipped reads the specificity can be increased. Soft-clipping can occur becasue of low quality bases at the five-prime or three-prime end of a read.  
+<p><b> Sensitivity and specificity can be controlled by adjusting -q and -p flags.  WHAM interrogates a potential structural variant if more than two soft-clipped reads share the same start or end.
+By requiring higher base quality and mapping quality of soft-clipped reads the specificity can be increased. Soft-clipping can occur because of low quality bases at the five-prime or three-prime end of a read.  
+here we require a minimum mapping quality of 30 and a minimum base quality of 35:
+
+<pre><code>./bin/WHAM-BAM -f hg19.fa -p 30 -q 35 -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
+
+<p><b> To run WHAM with association testing you need to specify a set of target and background files.  Here is hypothetical example where we test three target files (A.bam,B.bam,C.bam) vs. three background files (D.bam,E.bam,F.bam) </b></p>
+
+<pre><code>./bin/WHAM-BAM -f hg19.fa -t A.bam,B.bam,C.bam -b D.bam,E.bam,F.bam &gt; wham.raw.vcf 2&gt;  wham.raw.err </pre></code>
+
+<p><b> The output of this command will non-zero LRT values.  The higher the LRT value the more likely the allele frequency (of the structural variant) is different between the target group and background group.</b></p>
+
+<p><b> There are two ways to run WHAM in regions.  The first is to set a region using the -r option. In the example below we score chr1 0-100,000 with WHAM:</b></p>
+
+<pre><code>./bin/WHAM-BAM -f hg19.fa -r chr1:0-100000 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; 
+
+<p><b> Alternatively, WHAM can take a bedfile defining the regions to run.  This is highly advised if you have exome data - or - sparse coverage: </b></p>
+
+<pre><code>./bin/WHAM-BAM -f hg19.fa -e regions.bed -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt; 
+
+
 
 <h3>
 <a id="understanding-wham-output" class="anchor" href="#understanding-wham-output" aria-hidden="true"><span class="octicon octicon-link"></span></a>Understanding WHAM output</h3>
@@ -256,7 +275,7 @@ GT:GL:NR:NA:NS:RD
 
 <p>Wham tries to identify the other breakpoint of an SV by first processing split reads, then by processing alternative mappings and finally by mate pair mapping.
   If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was discovered by alternative mapping the support tag will be 'al', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.
-Alternative mapping is provided by bwa-mem under the 'XA' tag.  If a read has more than one alternaitve mapping it is skipped by Wham. If Wham uses mate pair mapping it is looking at the positions of the mate pairs.  If mate pairs share the same starting position this indicates soft-clipping and the other bound of the SV.
+Alternative mapping is provided by bwa-mem under the 'XA' tag.  If a read has more than one alternative mapping it is skipped by Wham. If Wham uses mate pair mapping it is looking at the positions of the mate pairs.  If mate pairs share the same starting position this indicates soft-clipping and the other bound of the SV.
 </p>
 
 <h4>
@@ -267,17 +286,17 @@ Alternative mapping is provided by bwa-mem under the 'XA' tag.  If a read has mo
 <h4>
 <a id="di" class="anchor" href="#di" aria-hidden="true"><span class="octicon octicon-link"></span></a>DI:</h4>
 
-<p>This field denotes is the breakpoint is supported on the 5' of the pielup or 3' end of pileup.  The value 'f' denotes the '5 and 'b' denotes the 3'. </p>
+<p>This field denotes is the breakpoint is supported on the 5' of the pileup or 3' end of pileup.  The value 'f' denotes the '5 and 'b' denotes the 3'. </p>
 
 <h4>
 <a id="end" class="anchor" href="#end" aria-hidden="true"><span class="octicon octicon-link"></span></a>END:</h4>
 
-<p>The end position of the structural variant.  If there is an interchromosomal SV this field will contain a '.'.</p>
+<p>The end position of the structural variant.  If there is an inter-chromosomal SV this field will contain a '.'.</p>
 
 <h4>
 <a id="svlen" class="anchor" href="#svlen" aria-hidden="true"><span class="octicon octicon-link"></span></a>SVLEN:</h4>
 
-<p>The distance between the two breakpoints wham identified.   If there is an interchromosomal SV or the endpoint could not be identified this field will contain a '.'.</p>
+<p>The distance between the two breakpoints wham identified.   If there is an inter-chromosomal SV or the endpoint could not be identified this field will contain a '.'.</p>
 
 <h4>
 <a id="wc" class="anchor" href="#wc" aria-hidden="true"><span class="octicon octicon-link"></span></a>WC:</h4>
