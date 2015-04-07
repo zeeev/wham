@@ -91,7 +91,7 @@ BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later
 <h3>
 <a id="running-wham" class="anchor" href="#running-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running WHAM</h3>
 
-<p>usage statement:</p>
+<p><b>usage statement:</b></p>
 
 
 <pre><code>usage  : WHAM-BAM -m &lt;INT&gt; -q &lt;INT&gt; -p &lt;INT&gt; -x &lt;INT&gt; -r &lt;STRING&gt; -e &lt;STRING&gt; -t &lt;STRING&gt; -b &lt;STRING>
@@ -133,21 +133,19 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 
 <p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
 
-<p><b> If you wanted to identify repetitive sequences we can provide Wham the K-mer database:</b></p>
-
-<pre><code>./bin/WHAM-BAM -m ..PATH../microSat_and_simpleRep_hg19.wham.masking.txt -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
-
 <p><b> By default Wham uses all CPUs the machine has. If you only want to use 10 CPUs use the "-x" flag:</b></p>
 
-<pre><code>./bin/WHAM-BAM -x 10 -m ..PATH../microSat_and_simpleRep_hg19.wham.masking.txt -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
+<pre><code>./bin/WHAM-BAM -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
+<p><b> Sensitivity and specificity can be controlled by adjusting -q and -p.  WHAM interogates a potential strucutral variant if more than two soft-clipped reads share the same start or end.
+By requiring higher base quality and mapping quality of soft-clipped reads the specificity can be increased. Soft-clipping can occur becasue of low quality bases at the five-prime or three-prime end of a read.  
 
 <h3>
 <a id="understanding-wham-output" class="anchor" href="#understanding-wham-output" aria-hidden="true"><span class="octicon octicon-link"></span></a>Understanding WHAM output</h3>
 
 <p>WHAM outputs an unsorted VCFv4.1 file.  Below is an example from NA12878.  </p>
 
-<pre><code>##fileformat=VCFv4.1
+<pre><code>
 ##fileformat=VCFv4.1
 ##INFO=&lt;ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic"&gt;
 ##INFO=&lt;ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined"&gt;
@@ -174,7 +172,7 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 ##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
 ##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
 ##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA12878.sorted.bam
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	9618x1.sort.rmdup.bam
 </code></pre>
 
 <p>Here is a deletion call:</p>
