@@ -87,36 +87,38 @@ We recommend that you use <a href="http://bio-bwa.sourceforge.net">BWA mem</a> f
 sorted, duplicates marked or removed and the BAM files need to be indexed.  The sorted
 BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later.  </p>
 
-<p>SV identification is difficult in low complexity regions of the genome.  We provide a
-K-mer database to annotate low complexity sequences. These annotations can be found in the KM field in the INFO column if the database is provided to wham. Download and unzip the database before using Wham.
-</p>
-
-<p>
-<a href="http://weatherby.genetics.utah.edu/WHAM_Data/">Wham databases</a>
-</p>
-
 
 <h3>
 <a id="running-wham" class="anchor" href="#running-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Running WHAM</h3>
 
 <p>usage statement:</p>
 
-<pre><code>usage  : WHAM-BAM -m &lt;STRING&gt; -x &lt;INT&gt; -r &lt;STRING&gt;     -e &lt;STRING&gt;  -t &lt;STRING&gt;    -b &lt;TRING&gt;
 
-example: WHAM-BAM -m microSat_and_simpleRep_hg19.wham.masking.txt -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
+<pre><code>usage  : WHAM-BAM -m &lt;INT&gt; -q &lt;INT&gt; -p &lt;INT&gt; -x &lt;INT&gt; -r &lt;STRING&gt; -e &lt;STRING&gt; -t &lt;STRING&gt; -b &lt;STRING>
+
+example: WHAM-BAM -m 2 -q 15 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
 
 required   : t &lt;STRING&gt; -- comma separated list of target bam files
-recommended: m &lt;STRING&gt; -- kmer database for downstream filtering
 option     : b &lt;STRING&gt; -- comma separated list of background bam files
 option     : r &lt;STRING&gt; -- a genomic region in the format "seqid:start-end"
-option     : x &lt;INT&gt;    -- set the number of threads, otherwise max
-option     : e &lt;TRING&gt; -- a bedfile that defines regions to score
+option     : x &lt;INT&gt;    -- set the number of threads, otherwise max [all]
+option     : e &lt;STRING&gt; -- a bedfile that defines regions to score  [none]
+option     : m &lt;INT&gt;    -- minimum number of soft-clips supporting
+                           START [3]
+option     : q &lt;INT&gt;    -- exclude soft-cliped sequences with average base
+                           quality below phred scaled value (0-41) [20]
+option     : p &lt;INT&gt;    -- exclude soft-clipped reads with mapping quality
+                           below value [15]
+option     : i          -- base quality is Illumina 1.3+ Phred+64
 
-Version: v1.7.0-12-gf04b-dirty
+Version: v1.7.0-57-g76af
 Contact: zev.kronenberg [at] gmail.com
 Notes  : -If you find a bug, please open a report on github!
+         -The options -m,-q, and -p, control the sensitivity and specificity
+         -If you have exome data use the -e option for best performace
 
 </code></pre>
+
 
 <h4>
 <a id="running-on-NA12878" class="anchor" href="#running-on-NA12878" aria-hidden="true"><span class="octicon octicon-link"></span></a>Example of running Wham</h4>
@@ -146,32 +148,33 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 <p>WHAM outputs an unsorted VCFv4.1 file.  Below is an example from NA12878.  </p>
 
 <pre><code>##fileformat=VCFv4.1
+##fileformat=VCFv4.1
 ##INFO=&lt;ID=LRT,Number=1,Type=Float,Description="Likelihood Ratio Test Statistic"&gt;
 ##INFO=&lt;ID=WAF,Number=3,Type=Float,Description="Allele frequency of: background,target,combined"&gt;
 ##INFO=&lt;ID=GC,Number=2,Type=Integer,Description="Number of called genotypes in: background,target"&gt;
 ##INFO=&lt;ID=AT,Number=15,Type=Float,Description="Attributes for classification"&gt;
-##INFO=&lt;ID=KM,Number=3,Type=Float,Description="Kmer filters. The number of 17bp kmers that do not contain N, the number of hits to the masking DB, the fraction of hits"&gt;
-##INFO=&lt;ID=PU,Number=1,Type=Integer,Description="Number of reads read supporting position"&gt;
-##INFO=&lt;ID=SU,Number=1,Type=Integer,Description="Number of supplement read supporting position"&lt;
-##INFO=&lt;ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position "&gt;
+##INFO=&lt;ID=KM,Number=3,Type=Float,Description="Kmer filters. The number of 17bp kmers that were assayed, the number of hits to the masking DB, the fraction of hits"&gt;
+##INFO=&lt;ID=PU,Number=1,Type=Integer,Description="Number of reads supporting position"&gt;
+##INFO=&lt;ID=SU,Number=1,Type=Integer,Description="Number of supplemental reads supporting position"&gt;
+##INFO=&lt;ID=CU,Number=1,Type=Integer,Description="Number of neighboring all soft clip clusters across all individuals at pileup position"&gt;
 ##INFO=&lt;ID=DP,Number=1,Type=Integer,Description="Number of reads at pileup position across individuals passing filters"&gt;
-##INFO=&lt;ID=SP,Number=1,Type=String,Description="Support for endpoint;  none:., mp:mate pair, sr:split read, al:alternative alignment"&gt;
-##INFO=&lt;ID=BE,Number=3,Type=String,Description="Best end position: chr,position,count or none:."&gt;
+##INFO=&lt;ID=SP,Number=3,Type=Integer,Description="Number of reads supporting endpoint: insertsize,split-read,alternative-mapping"&gt;
+##INFO=&lt;ID=CHR2,Number=3,Type=String,Description="Other seqid"&gt;
+##INFO=&lt;ID=CIEND,Number=2,Type=Integer,Description="PE confidence interval around END"&gt;
+##INFO=&lt;ID=CISTART,Number=2,Type=Integer,Description="PE confidence interval around POS"&gt;
 ##INFO=&lt;ID=DI,Number=1,Type=Character,Description="Consensus is from front or back of pileup : f,b"&gt;
 ##INFO=&lt;ID=NC,Number=1,Type=String,Description="Number of soft clipped sequences collapsed into consensus"&gt;
-##INFO=&lt;ID=MQ,Number=1,Type=String,Description="Average mapping quality"&gt;
-##INFO=&lt;ID=MQF,Number=1,Type=String,Description="Fraction of reads with MQ less than 50"&gt;
+##INFO=&lt;ID=MQ,Number=1,Type=Float,Description="Average mapping quality"&gt;
+##INFO=&lt;ID=MQF,Number=1,Type=Float,Description="Fraction of reads with MQ less than 50"&gt;
 ##INFO=&lt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
-##INFO=&lt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT allele"&gt;
-##INFO=&lt;ID=WC,Number=1,Type=String,Description="WHAM classifier variant type"&gt;
-##INFO=&lt;ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model"&gt;
+##INFO=&lt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between POS and end"&gt;
 ##FORMAT=&lt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
 ##FORMAT=&lt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
 ##FORMAT=&lt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
 ##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
 ##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
 ##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
-#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam      
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA12878.sorted.bam
 </code></pre>
 
 <p>Here is a deletion call:</p>
