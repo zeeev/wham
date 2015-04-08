@@ -185,27 +185,30 @@ In the command below a minimum mapping quality of 30, a minimum base quality of 
 ##INFO=&lt;ID=MQF,Number=1,Type=Float,Description="Fraction of reads with MQ less than 50"&gt;
 ##INFO=&lt;ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"&gt;
 ##INFO=&lt;ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between POS and end"&gt;
+##INFO=&lt;ID=WC,Number=1,Type=String,Description="WHAM classifier variant type"&gt;
+##INFO=&lt;ID=WP,Number=4,Type=Float,Description="WHAM probability estimate for each structural variant classification from RandomForest model"&gt;
 ##FORMAT=&lt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;
 ##FORMAT=&lt;ID=GL,Number=A,Type=Float,Description="Genotype likelihood"&gt;
 ##FORMAT=&lt;ID=NR,Number=1,Type=Integer,Description="Number of reads that do not support a SV"&gt;
 ##FORMAT=&lt;ID=NA,Number=1,Type=Integer,Description="Number of reads supporting a SV"&gt;
 ##FORMAT=&lt;ID=NS,Number=1,Type=Integer,Description="Number of reads with a softclip at POS for individual"&gt;
 ##FORMAT=&lt;ID=RD,Number=1,Type=Integer,Description="Number of reads passing filters"&gt;
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	9618x1.sort.rmdup.bam
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT  NA12878.sorted.bam
+
 </code></pre>
 
 <p>Here is a deletion call:</p>
 
-<pre><code>chr4
-172988639
+<pre><code>chr1
+69943725
 .
 N
-CATTATGGAAAAAAGAAAGNCTTCAGGAATGCTCTGATTGAGGAC
+ATATTTAAAATGCATCACTTGTGACAACAAATAGTTGGATCTT
 .
 .
-LRT=0;WAF=.,0.500001,0.500001;GC=0,1;AT=0.804348,0.304348,0.0217391,0,0,0.304348,0,0.130435,0.304348,0,0,0,0.217391,0,0.50782;KM=11,0,0;PU=20;SU=14;CU=50;RD=46;NC=17;MQ=60;MQF=0;SP=sr;BE=chr4,172992932,14;DI=b;END=172992932;SVLEN=4293;WC=DEL;WP=0.726,0.2,0.058,0.016
+LRT=0;WAF=.,1,1;GC=0,1;AT=0.785714,0.285714,0,0,0,0.857143,0,0.535714,0.857143,0,0,0.0357143,0.392857,0,0.2601;ISTART=69943723,69943725;CIEND=69943948,69944094;PU=15;SU=24;CU=17;RD=28;NC=14;MQ=60;MQF=0;SP=4,24,0;CHR2=chr1;DI=b;END=69944022;SVLEN=298;WC=DEL;WP=0.984,0.0,0.016,0.0
 GT:GL:NR:NA:NS:RD
-0/1:-276.31,-28.419,-290.126:21:20:20:41
+1/1:-255,-255,-1.6e-05:0:16:15:16
 </code></pre>
 
 <p>The first several columns should be familiar to most users as chrom, pos, ID, ref, alt, qual, filter.  The details for the info, format, and genotype fields can be found below.  The genotypes for NA12878 is 0/1. </p>
@@ -236,14 +239,17 @@ GT:GL:NR:NA:NS:RD
 <p>This field used by wham to determine a classification.  There are 15 read depth normalized counts.  The average user should not worry about this field.</p>
 
 <h4>
-<a id="KM" class="anchor" href="#at" aria-hidden="true"><span class="octicon octicon-link"></span></a>KM:</h4>
-
-<p> Kmer identification.  This field contains the number of Kmers (17bp) that did not contain a "N" character, The number of Kmers that were found in the database, and the fraction of Kmers found in the datbase </p>
+<a id="CF" class="anchor" href="#at" aria-hidden="true"><span class="octicon octicon-link"></span></a>AT:</h4>
+<p>Fraction of reads with more than three cigar operations</p>
 
 <h4>
-<a id="si" class="anchor" href="#si" aria-hidden="true"><span class="octicon octicon-link"></span></a>SI:</h4>
+<a id="CISTART" class="anchor" href="#at" aria-hidden="true"><span class="octicon octicon-link"></span></a>AT:</h4>
+<p>Confidence interval for POS, based on the other positions of the soft-clipped sequences in the pileup</p>
 
-<p>Consensus sequence complexity measured by Shannon's entropy.  Wham removes calls where the entropy is below 0.5.</p>
+<h4>
+<a id="CIEND" class="anchor" href="#at" aria-hidden="true"><span class="octicon octicon-link"></span></a>AT:</h4>
+<p>Confidence interval for END, based on the other positions of mate-pair, split-read and alternative alignments.</p>
+
 
 <h4>
 <a id="pu" class="anchor" href="#pu" aria-hidden="true"><span class="octicon octicon-link"></span></a>PU:</h4>
@@ -271,32 +277,43 @@ GT:GL:NR:NA:NS:RD
 <p>The number of soft-clipped segments there were collapsed into the consensus sequence.</p>
 
 <h4>
-<a id="sp" class="anchor" href="#sp" aria-hidden="true"><span class="octicon octicon-link"></span></a>SP:</h4>
+<a id="MQ" class="anchor" href="#nc" aria-hidden="true"><span class="octicon octicon-link"></span></a>NC:</h4>
 
-<p>Wham tries to identify the other breakpoint of an SV by first processing split reads, then by processing alternative mappings and finally by mate pair mapping.
-  If the endpoint was identified by split reads the support tag will be 'sr', if the breakpoint was discovered by alternative mapping the support tag will be 'al', if the breakpoint was identified using mate pair mapping the support tag will be 'mp', otherwise the tag will be '.'.
-Alternative mapping is provided by bwa-mem under the 'XA' tag.  If a read has more than one alternative mapping it is skipped by Wham. If Wham uses mate pair mapping it is looking at the positions of the mate pairs.  If mate pairs share the same starting position this indicates soft-clipping and the other bound of the SV.
-</p>
+<p>The average mapping quality.</p>
 
 <h4>
-<a id="be" class="anchor" href="#be" aria-hidden="true"><span class="octicon octicon-link"></span></a>BE:</h4>
+<a id="MQF" class="anchor" href="#nc" aria-hidden="true"><span class="octicon octicon-link"></span></a>NC:</h4>
 
-<p>The best candidate endpoint based on split read clustering.  There are three fields: seqid, start, number of supporting reads.</p>
+<p>The fraction of reads with a mapping quality less than 50.</p>
+
+
+<h4>
+<a id="sp" class="anchor" href="#sp" aria-hidden="true"><span class="octicon octicon-link"></span></a>SP:</h4>
+
+<p>The support for the END pos (mate-pair, split-read, and alternative alignments).
+</p>
+
+
+<h4>
+<a id="CHR2" class="anchor" href="#end" aria-hidden="true"><span class="octicon octicon-link"></span></a>END:</h4>
+
+<p>The other seqid.  For translocations CHROM does not equal CHR2.</p>
 
 <h4>
 <a id="di" class="anchor" href="#di" aria-hidden="true"><span class="octicon octicon-link"></span></a>DI:</h4>
 
 <p>This field denotes is the breakpoint is supported on the 5' of the pileup or 3' end of pileup.  The value 'f' denotes the '5 and 'b' denotes the 3'. </p>
 
+
 <h4>
 <a id="end" class="anchor" href="#end" aria-hidden="true"><span class="octicon octicon-link"></span></a>END:</h4>
 
-<p>The end position of the structural variant.  If there is an inter-chromosomal SV this field will contain a '.'.</p>
+<p>The END position of the structural variant.</p>
 
 <h4>
 <a id="svlen" class="anchor" href="#svlen" aria-hidden="true"><span class="octicon octicon-link"></span></a>SVLEN:</h4>
 
-<p>The distance between the two breakpoints wham identified.   If there is an inter-chromosomal SV or the endpoint could not be identified this field will contain a '.'.</p>
+<p>The distance between the two breakpoints wham identified.  The length with be zero if the event is inter-chromosomal.</p>
 
 <h4>
 <a id="wc" class="anchor" href="#wc" aria-hidden="true"><span class="octicon octicon-link"></span></a>WC:</h4>
