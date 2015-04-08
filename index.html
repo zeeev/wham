@@ -131,7 +131,7 @@ Here we run Wham on the whole NA12878 genome:
 python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_data.txt &gt; NA12878.wham.raw.class.vcf 2&gt; NA12878.wham.raw.class.err
 </code></pre>
 
-<p>The first command runs WHAM on your input BAM file and outputs an unsorted VCF file given the reference fasta and the bam file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
+<p>The first command runs WHAM on the input bam file and outputs an unsorted VCF file given the reference fasta and the bam file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
 
 <p><b> By default Wham uses all CPUs the machine has. If you only want to use 10 CPUs use the "-x" flag:</b></p>
 
