@@ -137,11 +137,11 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 
 <pre><code>./bin/WHAM-BAM -f hg19.fa -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
-<p><b> Sensitivity and specificity can be controlled by adjusting -q and -p flags.  WHAM interrogates a potential structural variant if more than two soft-clipped reads share the same start or end.
+<p><b> Sensitivity and specificity can be controlled by adjusting -q, -p and -m flags.  WHAM interrogates a potential structural variant if more than two soft-clipped reads share the same start or end.
 By requiring higher base quality and mapping quality of soft-clipped reads the specificity can be increased. Soft-clipping can occur because of low quality bases at the five-prime or three-prime end of a read.  
-In the sample below a minimum mapping quality of 30 and a minimum base quality of 35 is used:
+In the command below a minimum mapping quality of 30, a minimum base quality of 35 and five soft-clips are required for a SV call:
 
-<pre><code>./bin/WHAM-BAM -f hg19.fa -p 30 -q 35 -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
+<pre><code>./bin/WHAM-BAM -f hg19.fa -p 30 -q 35 -m 5 -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
 <p><b> To run WHAM with association testing you need to specify a set of target and background files.  Here is hypothetical example where we test three target files (A.bam,B.bam,C.bam) vs. three background files (D.bam,E.bam,F.bam) </b></p>
 
