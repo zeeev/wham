@@ -43,7 +43,7 @@
 <h3>
 <a id="installing-wham" class="anchor" href="#installing-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installing WHAM</h3>
 
-<p>WHAM builds in two simple steps... assuming that you have the dependencies.  Most linux environments have cmake, and OpenMP the two requirements for WHAM.  If an install fails you might have to install a few libraries. </p>
+<p>WHAM builds in two simple steps assuming that you have the dependencies.  Most linux environments have cmake and OpenMP the two requirements for WHAM.  If an install fails you may have to install these libraries. </p>
 
 <h3>
 <a id="fast-and-dirty-install" class="anchor" href="#fast-and-dirty-install" aria-hidden="true"><span class="octicon octicon-link"></span></a>Fast and dirty install</h3>
@@ -56,7 +56,7 @@ make
 <h4>
 <a id="dependencies" class="anchor" href="#dependencies" aria-hidden="true"><span class="octicon octicon-link"></span></a>Dependencies</h4>
 
-<p>For classification of SV variant types <strong>(OPTIONAL)</strong>, a python distribution with the scikit-learn and argparse packages are required. These come standard with the Anaconda release of python, which can be obtained here:</p>
+<p>For classification of SV variant types <strong>(OPTIONAL)</strong>, a python distribution with the scikit-learn and argparse packages is required. These come standard with the Anaconda release of python, which can be obtained here:</p>
 
 <p><a href="http://continuum.io/downloads">http://continuum.io/downloads</a></p>
 
@@ -133,7 +133,7 @@ python utils/classify_WHAM_vcf.py NA12878.wham.raw.vcf wham/data/WHAM_training_d
 
 <p>The first command runs WHAM on the input bam file and outputs an unsorted VCF file given the reference fasta and the bam file. The second command runs the WHAM classifier, which uses information from the SV calls and from a training dataset to classify each SV call (insertions, deletions, etc.).  After classification the output VCF file will have two new keys in the info field: "WC" and "WP".</p>
 
-<p><b> By default Wham uses all CPUs the machine has. If you only want to use 10 CPUs use the "-x" flag:</b></p>
+<p><b> By default Wham uses all CPUs the machine has. If you only want to use fewer CPUs use the "-x[n]" flag where 'n' is the number of desired CPUs:</b></p>
 
 <pre><code>./bin/WHAM-BAM -f hg19.fa -x 10 -t NA12878.sort.bam &gt; NA12878.wham.raw.vcf 2&gt;  NA12878.wham.raw.err </pre></code>
 
@@ -264,12 +264,12 @@ GT:GL:NR:NA:NS:RD
 <h4>
 <a id="cu" class="anchor" href="#cu" aria-hidden="true"><span class="octicon octicon-link"></span></a>CU:</h4>
 
-<p>WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there are soft-clipping is reported at CU. </p>
+<p>WHAM skips between positions that have soft-clipping.  There are some number of reads that cover a given soft-clipping position.  These reads can have soft-clipping at other locations.  The number of other positions where there is soft-clipping is reported in CU. </p>
 
 <h4>
 <a id="rd" class="anchor" href="#rd" aria-hidden="true"><span class="octicon octicon-link"></span></a>RD:</h4>
 
-<p>The number of reads covering all individuals joint called</p>
+<p>Combined read depth across indviduals after filtering </p>
 
 <h4>
 <a id="nc" class="anchor" href="#nc" aria-hidden="true"><span class="octicon octicon-link"></span></a>NC:</h4>
@@ -290,14 +290,14 @@ GT:GL:NR:NA:NS:RD
 <h4>
 <a id="sp" class="anchor" href="#sp" aria-hidden="true"><span class="octicon octicon-link"></span></a>SP:</h4>
 
-<p>The support for the END pos (mate-pair, split-read, and alternative alignments).
+<p>The support counts for the END pos (mate-pair, split-read, and alternative alignments).
 </p>
 
 
 <h4>
 <a id="CHR2" class="anchor" href="#end" aria-hidden="true"><span class="octicon octicon-link"></span></a>CHR2:</h4>
 
-<p>The other seqid. For translocations CHROM does not equal CHR2.</p>
+<p>The other seqid. For translocations the field CHROM does not equal the CHR2 field.</p>
 
 <h4>
 <a id="di" class="anchor" href="#di" aria-hidden="true"><span class="octicon octicon-link"></span></a>DI:</h4>
