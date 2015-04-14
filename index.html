@@ -99,6 +99,7 @@ BAM files need to have the HD:SO tag, this is provided by samtools 0.19 or later
 example: WHAM-BAM -m 2 -q 15 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam
 
 required   : t &lt;STRING&gt; -- comma separated list of target bam files
+required   : f &lt;STRING&gt; -- reference sequence reads were aligned to
 option     : b &lt;STRING&gt; -- comma separated list of background bam files
 option     : r &lt;STRING&gt; -- a genomic region in the format "seqid:start-end"
 option     : x &lt;INT&gt;    -- set the number of threads, otherwise max [all]
