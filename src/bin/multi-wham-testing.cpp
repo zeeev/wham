@@ -370,10 +370,12 @@ void printVersion(void){
 }
 
 void printHelp(void){
-  cerr << "usage  : WHAM-BAM -m <INT> -q <INT> -p <INT> -x <INT> -r <STRING> -e <STRING> -t <STRING> -b <STRING> " << endl << endl;
-  cerr << "example: WHAM-BAM -m 2 -q 15 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
+  cerr << "usage  : WHAM-BAM -f <STRING> -m <INT> -q <INT> -p <INT> -x <INT> -r <STRING> -e <STRING> -t <STRING> -b <STRING> " << endl << endl;
+  cerr << "example: WHAM-BAM if my.fasta -m 2 -q 15 -p 10 -x 20 -r chr1:0-10000 -e genes.bed -t a.bam,b.bam -b c.bam,d.bam" << endl << endl; 
 
   cerr << "required   : t <STRING> -- comma separated list of target bam files          " << endl ;
+  cerr << "required   : f <STRING> -- reference sequence reads were aligned to          " << endl ;
+
   cerr << "option     : b <STRING> -- comma separated list of background bam files      " << endl ;
   cerr << "option     : r <STRING> -- a genomic region in the format \"seqid:start-end\"" << endl ;
   cerr << "option     : x <INT>    -- set the number of threads, otherwise max [all]    " << endl ; 
@@ -2075,40 +2077,6 @@ bool score(string seqid                 ,
     return true;
   }
 
-  // searchign for repeats 
-
-//  stringstream kfilter;
-//  
-//  double nReps  = 0;
-//  double nAssay = 0;
-//
-//  if(altSeq.size() > 17){
-//    for(uint16_t l = 0; l < (altSeq.size() - 17); l++){
-//      string conKmer = altSeq.substr(l,17);
-//      std::size_t found = conKmer.find("N");
-//      if (found!=std::string::npos){
-//	continue;
-//      }
-//      nAssay += 1;
-//      char * con = new char[18];
-//      memcpy(con, conKmer.c_str(), 18);
-//      con[17] = '\0';
-//      uint64_t front =  charArrayToBin(con, 0);
-//      if( binary_search(kmerDB.begin(), kmerDB.end(), front) ){
-//	nReps+=1;
-//      }
-//      delete con;
-//    }
-//  }
-//
-//  double kmHitFrac = double(nReps) / double(nAssay) ; 
-//  
-//  if(aminan(kmHitFrac)){
-//    kmHitFrac = 0;
-//  }
-//  kfilter << nAssay << "," << nReps << "," << kmHitFrac ;
-   
-  // preparing data structure to load genotypes
   map < string, indvDat*> ti;
 
   for(unsigned int t = 0; t < localOpts.all.size(); t++){
