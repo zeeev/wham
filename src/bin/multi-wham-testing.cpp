@@ -2258,6 +2258,9 @@ bool score(string seqid                 ,
     return true;
   }
 
+  
+
+
   if(otherBreakPointPos == 0 ){
 #ifdef DEBUG
     cerr << "other breakpoint was not found" << endl;
@@ -2316,6 +2319,15 @@ bool score(string seqid                 ,
     #endif 
   }
   
+
+  if(altSeq.size() < 5){
+    cleanUp(ti, localOpts);
+    return true;
+  #ifdef DEBUG
+    cerr << "left scoring because alt seq is less than 5" << endl;
+  #endif
+
+  }
 
   if(nAlt == 0 ){
     cleanUp(ti, localOpts);
