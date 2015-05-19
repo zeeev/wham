@@ -19,7 +19,7 @@ RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
 
 
-all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM clean
+all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM buildDumper clean
 debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD clean
 
 mvSSW:
@@ -45,5 +45,7 @@ buildWHAMDUMPER:
 	$(CC) $(CFLAGS) -g src/lib/*cpp   src/bin/multi-wham.cpp $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-DUMPER $(RUNTIME)
 buildWHAMBAMGENE:
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing-gene.cpp  $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-GENE $(RUNTIME)
+buildDumper:
+	$(CC) $(CFLAGS) -g src/lib/*cpp src/bin/graph-er.cpp $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-SUPRISE $(RUNTIME)
 clean:
 	-@rm *.a
