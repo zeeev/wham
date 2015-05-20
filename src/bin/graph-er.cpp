@@ -671,17 +671,17 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
 void splitToGraph(BamAlignment al, vector<saTag> & sa){
 
   if(!al.IsMapped()){
-    cerr << "fail: not mapped" << endl;
+    //    cerr << "fail: not mapped" << endl;
     return;
   }
 
   if(sa.size() > 1){
-    cerr << "fail: too many fragments in split" << endl;
+    //    cerr << "fail: too many fragments in split" << endl;
     return;
   }
 
   if(sa[0].seqid != al.RefID){
-    cerr << "fail: split to different chr" << endl;
+    //    cerr << "fail: split to different chr" << endl;
     return;
   }
 
@@ -980,10 +980,7 @@ void loadBam(string & bamFile){
 
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
-    if(seqidIndex != 0){
-      seqidIndex+=1;
-      continue;
-    }
+
     seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
 
     for(;start < (*sit).RefLength ; start += 1000000){
@@ -1097,26 +1094,26 @@ string dotviz(vector<node *> ns){
 
       if((*iz)->support['S'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dotted] ;\n" ;	
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dotted,penwidth=" << (*iz)->support['S'] << "];\n";
 	}
 	if((*it)->pos != (*iz)->R->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dotted] ;\n" ;
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dotted,penwidth=" << (*iz)->support['S'] << "];\n";
 	}
       }
       else if((*iz)->support['I'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos <<  " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=red] ;\n" ;
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos <<  " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=red,penwidth=" << (*iz)->support['I'] << "];\n";
 	}
 	if((*it)->pos != (*iz)->R->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=red] ;\n" ;
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=red,penwidth=" << (*iz)->support['I'] << "];\n";
 	}
       }
       else if((*iz)->support['D'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=blue] ;\n" ;
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=blue,penwidth=" << (*iz)->support['D'] << "];\n";
 	}
 	if((*it)->pos != (*iz)->R->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=blue] ;\n" ;
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=blue,penwidth=" << (*iz)->support['D'] << "];\n";
 	}
       }
       else{
@@ -1167,7 +1164,7 @@ void dump(){
 
 	  getTree(globalGraph.nodes[it->first][itt->first], tree);
 	  
-	  if(tree.size() < 20 || tree.size() > 100){
+	  if(tree.size() > 20 ){
 	    continue;
 	  }
 
