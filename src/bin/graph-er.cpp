@@ -124,6 +124,57 @@ static const char *optString = "f:h";
 omp_lock_t lock;
 omp_lock_t glock;
 
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : int pointer, vector cigDat
+
+ Function does   : finds end position
+
+ Function returns: void
+
+*/
+
+void endPos(vector<cigDat> & cigs, int * pos){
+
+  for(vector<cigDat>::iterator it = cigs.begin();
+      it != cigs.end(); it++){
+
+    switch( (*it).Type ){
+    case 'M':
+      {
+        *pos += (*it).Length;
+        break;
+      }
+    case 'X':
+      {
+        *pos += (*it).Length;
+        break;
+      }
+    case 'D':
+      {
+        *pos += (*it).Length;
+        break;
+      }
+    case '=':
+      {
+        *pos += (*it).Length;
+        break;
+      }
+    case 'N':
+      {
+	*pos += (*it).Length;
+        break;
+      }
+    default:
+      break;
+    }
+  }
+  // WARNING: this needs to be double checked
+  *pos -= 1;
+}
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : node pointer, vector of node pointers
@@ -448,6 +499,16 @@ bool indelToGraph(BamAlignment & ba){
 	p += ci->Length;
 	break;
       }
+    case '=':
+      {
+        p += ci->Length;
+        break;
+      }
+    case 'N':
+      {
+        p += ci->Length;
+        break;
+      }
     case 'X':
       {
 	p += ci->Length;
@@ -464,8 +525,9 @@ bool indelToGraph(BamAlignment & ba){
     case 'D':
       {
 	hit = true;
+	//	cerr << "adding indel to graph " << p << " " << ci->Length << endl; 
 	addIndelToGraph(ba.RefID, p, p + ci->Length, 'D');
-
+	p += ci->Length;
 	break;
       }
     default :
@@ -606,7 +668,7 @@ bool pairFailed(readPair * rp){
 
 */
 
-void parseCigar(vector<cigDat> parsedCigar, string cigar){
+void parseCigar(vector<cigDat> & parsedCigar, string cigar){
 
   unsigned int spot = 0;
 
@@ -649,7 +711,7 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
     sDat.seqid = il[sat[0]];
     sDat.pos   = atoi(sat[1].c_str()) - 1;
     sDat.strand = sat[2];
-    parseCigar(sDat.cig,sat[3]);
+    parseCigar(sDat.cig, sat[3]);
     parsed.push_back(sDat);
 
   }
@@ -666,7 +728,6 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
  Function returns: NA
 
 */
-
 
 void splitToGraph(BamAlignment al, vector<saTag> & sa){
 
@@ -685,25 +746,40 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
     return;
   }
 
-  if(al.CigarData[0].Type == 'S' && al.CigarData[al.CigarData.size() -1 ].Type == 'S'){
+  if(sa.front().cig.front().Type == 'S' && sa.front().cig.back().Type == 'S'){
     return;
   }
-  else if(al.CigarData[0].Type == 'S'){
+
+  if(al.CigarData.front().Type == 'S' && al.CigarData.back().Type == 'S'){
+    return;
+  }
+  
+  if(al.CigarData.front().Type == 'S'){
+
     int start = al.Position; 
-    int end   = sa[0].pos  ;
-    
-    if(start > end){
-      start = sa[0].pos;
-      end   = al.Position;
+    int end   = sa.front().pos  ;
+
+    if(sa.front().cig.back().Type == 'S'){
+      endPos(sa[0].cig, &end);
     }
     
+    if(start > end){
+      int tmp = start;
+      start = end;
+      end   = tmp;
+    }
+    //    cerr << "name: " << al.Name << " pos: " << al.Position << " cig: " << joinCig(al.CigarData) << " start: " << start << " end: " << end  << " al refID " << al.RefID << " split seq index: " << sa[0].seqid << endl;
     addIndelToGraph(al.RefID, start, end, 'S');
   }
   else{
     int start =  al.GetEndPosition(false,true);
-    int end   = sa[0].pos                  ;
+    int end   = sa.front().pos                  ;
+    if(sa[0].cig.back().Type == 'S'){
+      endPos(sa.front().cig, &end);
+    }
+    //    cerr << "name: " << al.Name << " pos: " << al.Position << " cig: " << joinCig(al.CigarData) << " start: " << start << " end: " << end  << " al refID " << al.RefID << " split seq index: " << sa[0].seqid << endl;
 
-    if(start > end){
+    if(start > end){      
       start = sa[0].pos;
       end   = al.GetEndPosition(false,true);
     }
@@ -735,11 +811,11 @@ void processPair(readPair * rp, map<string, int> & il){
     return;
   }
 
-  if(rp->al1.IsMapped() && rp->al2.IsMapped()){
-    if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
-      return;
-    }
-  }
+  //if(rp->al1.IsMapped() && rp->al2.IsMapped()){
+  //  if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
+  //    return;
+  //  }
+  //}
 
   if(rp->al1.GetTag("SA", sa1)){
     vector<saTag> parsedSa1;
@@ -752,11 +828,13 @@ void processPair(readPair * rp, map<string, int> & il){
     vector<saTag> parsedSa2;
     parseSA(parsedSa2, sa2, il);
     //    cerr << sa2 << endl;
-        splitToGraph(rp->al1, parsedSa2);
+    splitToGraph(rp->al2, parsedSa2);
     //    cerr << "s2 processed " << endl;
   }
-
+  
+  //  cerr << joinCig(rp->al1.CigarData) << endl;
   indelToGraph(rp->al1);
+  //  cerr << joinCig(rp->al2.CigarData) << endl;
   indelToGraph(rp->al2);
 
 }
@@ -784,7 +862,6 @@ bool runRegion(string filename,
 
 
   map<string, int> localInverseLookUp;
-
 
 
   omp_set_lock(&lock);
@@ -981,11 +1058,26 @@ void loadBam(string & bamFile){
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
 
+//    if(seqidIndex != 0){
+//      continue;
+//    }
+    
     seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
+    
+    //      regionDat * chunk = new regionDat;
+    
+
+
+//    chunk->seqidIndex = seqidIndex;
+//    chunk->start      = 2911196;
+//    chunk->end        = 2913196;
+//    regions.push_back(chunk);
+//    
+//    break;
 
     for(;start < (*sit).RefLength ; start += 1000000){
       regionDat * chunk = new regionDat;
-
+      
       chunk->seqidIndex = seqidIndex;
       chunk->start      = start;
       chunk->end        = start + 1000000 ;
@@ -1000,7 +1092,6 @@ void loadBam(string & bamFile){
       regions.push_back(lastChunk);
     }
   }
-
   // closing the bam reader before running regions
   br.Close();
 
@@ -1100,7 +1191,7 @@ string dotviz(vector<node *> ns){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dotted,penwidth=" << (*iz)->support['S'] << "];\n";
 	}
       }
-      else if((*iz)->support['I'] > 0){
+      if((*iz)->support['I'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos <<  " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=red,penwidth=" << (*iz)->support['I'] << "];\n";
 	}
@@ -1108,20 +1199,12 @@ string dotviz(vector<node *> ns){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=red,penwidth=" << (*iz)->support['I'] << "];\n";
 	}
       }
-      else if((*iz)->support['D'] > 0){
+      if((*iz)->support['D'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=blue,penwidth=" << (*iz)->support['D'] << "];\n";
 	}
 	if((*it)->pos != (*iz)->R->pos){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=blue,penwidth=" << (*iz)->support['D'] << "];\n";
-	}
-      }
-      else{
-	if((*it)->pos != (*iz)->L->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << ";\n" ;
-	}
-	if((*it)->pos != (*iz)->R->pos){
-	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << ";\n" ;
 	}
       }
     }
