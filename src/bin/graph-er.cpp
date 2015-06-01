@@ -115,9 +115,48 @@ struct graph{
 }globalGraph;
 
 
+struct insertDat{
+  map<string, double> mus; // mean of insert length for each indvdual across 1e6 reads
+  map<string, double> sds;  // standard deviation
+  map<string, double> lq ;  // 25% of data
+  map<string, double> up ;  // 75% of the data
+  map<string, double> avgD;
+  double overallDepth;
+} insertDists;
+
 // options
 
 static const char *optString = "f:h";
+
+
+int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
+                            -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
+                            -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
+                            -1,-1, 0, 1, 2,  3, 4, 5, 6, 7, // 30-39   31-40
+			    8, 9,10,11,12, 13,14,15,16,17, // 40-49   41-50
+                            18,19,20,21,22, 23,24,25,26,27, // 50-59   51-60
+                            28,29,30,31,32, 33,34,35,36,37, // 60-69   61-70
+                            38,39,40,41,42, 43,44,45,46,47, // 70-79   71-80
+                            48,49,50,51,52, 53,54,55,56,57, // 80-89   81-90
+                            58,59,60,61,62, 63,64,65,66,67, // 90-99   91-100
+                            68,69,70,71,72, 73,74,75,76,77, // 100-109 101-110
+                            78,79,80,81,82, 83,84,85,86,87, // 110-119 111-120
+                            88,89,90,91,92, 93           }; // 120-119 121-130
+
+int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 30-39   31-40
+                             -1,-1,-1,-1,-1  -1,-1,-1,-1,-1, // 40-49   41-50
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 50-59   51-60
+                             -1,-1,-1,-1,-1,  0, 1, 2, 3, 4, // 60-69   61-70
+			     5, 6, 7, 8, 9, 10,11,12,13,14, // 70-79   71-80
+                             15,16,17,18,19, 20,21,22,23,24, // 80-89   81-90
+                             25,26,27,28,29, 30,31,32,33,34, // 90-99   91-100
+                             35,36,37,38,39, 40,-1,-1,-1,-1, // 100-109 101-110
+                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
+                             -1,-1,-1,-1,-1, -1,-1        }; // 120-119 121-130
+
 
 // omp lock
 
@@ -125,6 +164,55 @@ omp_lock_t lock;
 omp_lock_t glock;
 
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of ints
+
+ Function does   : calculates the mean
+
+ Function returns: double
+
+*/
+
+double mean(vector<int> & data){
+
+  double sum = 0;
+
+  for(vector<int>::iterator it = data.begin(); it != data.end(); it++){
+    sum += (*it);
+  }
+  return sum / data.size();
+}
+
+double mean(vector<double> & data){
+
+  double sum = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    sum += (*it);
+  }
+  return sum / data.size();
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of doubles
+
+ Function does   : calculates the var
+
+ Function returns: double
+
+*/
+
+double var(vector<double> & data, double mu){
+  double variance = 0;
+
+  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
+    variance += pow((*it) - mu,2);
+  }
+
+  return variance / (data.size() - 1);
+}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -195,18 +283,29 @@ void getTree(node * n, vector<node *> & ns){
     edges.insert(edges.end(), n->eds.begin(), n->eds.end());
   }
   
-  //  seen[n->pos] = 1;
+  seen[n->pos] = 1;
 
-  //  ns.push_back(n);
+  ns.push_back(n);
 
   // if something is pushed to the back of the stack it changes the positions ! be warned.
 
   while(!edges.empty()){
     
+    //cerr << " getting graph: left pointer POS: " << edges.back()->L->pos << " right pointer POS: " <<  edges.back()->R->pos << endl;
+    
+
      uint hit = 0;
      
      if(seen.find(edges.back()->L->pos) != seen.end() && seen.find(edges.back()->R->pos) != seen.end() ){
        hit = 1;
+     }
+     else if(seen.find(edges.back()->L->pos) == seen.end() && seen.find(edges.back()->R->pos) == seen.end()){
+       seen[edges.back()->L->pos] = 1;
+       seen[edges.back()->R->pos] = 1;
+       ns.push_back(edges.back()->L);
+       ns.push_back(edges.back()->R);
+       edges.insert(edges.end(), edges.back()->L->eds.begin(), edges.back()->L->eds.end());       
+       edges.insert(edges.end(), edges.back()->R->eds.begin(), edges.back()->R->eds.end());
      }
      else if(seen.find(edges.back()->L->pos) == seen.end()){
        
@@ -216,9 +315,6 @@ void getTree(node * n, vector<node *> & ns){
        
        edges.insert(edges.end(), edges.back()->L->eds.begin(), edges.back()->L->eds.end());
        
-       
-
-
      }
      else{
        seen[edges.back()->R->pos] = 1;
@@ -251,6 +347,7 @@ void initEdge(edge * e){
   e->forwardSupport  = 0;
   e->reverseSupport  = 0;
 
+  e->support['R'] = 0;
   e->support['S'] = 0;
   e->support['I'] = 0;
   e->support['D'] = 0;
@@ -344,10 +441,14 @@ bool isPointIn(readPair * rp){
 
 bool isInGraph(int refID, int pos, graph & lc){
 
-if(lc.nodes[refID].find(pos) != lc.nodes[refID].end()){
-  return true;
- }
- return false;
+  if(lc.nodes.find(refID) == lc.nodes.end()){
+    return false;
+  }
+ 
+  if(lc.nodes[refID].find(pos) != lc.nodes[refID].end()){
+    return true;
+  }
+  return false;
 }
 
 
@@ -368,6 +469,8 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
   if( ! isInGraph(refID, l, globalGraph) &&  ! isInGraph(refID, r, globalGraph) ){
     
+    //cerr << "addIndelToGraph: neither node found" << endl;
+
     node * nodeL;
     node * nodeR;
     edge * ed   ;
@@ -397,6 +500,9 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
   }
  else if(isInGraph(refID, l, globalGraph) &&  ! isInGraph(refID, r, globalGraph)){
+
+   //cerr << "addIndelToGraph: left node found" << endl;
+
    node * nodeR;
    edge * ed;
 
@@ -419,6 +525,9 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
  }
  else if(! isInGraph(refID, l, globalGraph) &&  isInGraph(refID, r, globalGraph)){
+
+   //cerr << "addIndelToGraph: right node found" << endl;
+   
    node * nodeL;
    edge * ed;
 
@@ -429,8 +538,10 @@ void addIndelToGraph(int refID, int l, int r, char s){
    ed->support[s] +=1;
    nodeL->pos   = l;
    nodeL->seqid = refID;
-   ed->R =  globalGraph.nodes[refID][r];
+   ed->R = globalGraph.nodes[refID][r];
    ed->L = nodeL;
+
+   //   cerr << "LPD RP: " << ed->R->pos << endl;
    
    nodeL->eds.push_back(ed);
 
@@ -787,6 +898,69 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
   }
 }
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : pointer to readPair;
+
+ Function does   : adds high and low insert sizes to graph. both pairs are 
+                   treated as mapped
+
+ Function returns: NA
+
+*/
+
+void deviantInsertSize(readPair * rp){
+
+
+  //  cerr << "in deviantInsertSize" << endl;
+
+  if(IsLongClip(rp->al1.CigarData, 0) && IsLongClip(rp->al2.CigarData, 0)){
+    //    cerr << " both clipped " << endl;
+    return;
+  }
+  if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
+    //    cerr << " no long clip " << endl;
+    return;
+  }
+
+  //  cerr << "through filters" << endl;
+
+  if(rp->al1.CigarData.front().Type == 'S' || rp->al1.CigarData.back().Type == 'S'){
+    int start = rp->al1.Position;
+    int end   = rp->al2.Position;
+
+    if(rp->al1.CigarData.back().Type == 'S'){
+      start = rp->al1.GetEndPosition(false,true);
+    }
+    if(start > end){
+      int tmp = end;
+      end = start  ;
+      start = tmp  ;
+    }
+    
+    addIndelToGraph(rp->al1.RefID, start, end, 'R');       
+  }
+  else{
+    int start = rp->al2.Position;
+    int end   = rp->al1.Position;
+
+    if(rp->al2.CigarData.back().Type == 'S'){
+      start = rp->al2.GetEndPosition(false,true);
+    }    
+    if(start > end){
+      int tmp = end;
+      end = start  ;
+      start = tmp  ;
+    }
+
+
+    
+   addIndelToGraph(rp->al2.RefID, start, end, 'R');
+    
+  }
+
+}
+
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -798,7 +972,7 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
 
 */
 
-void processPair(readPair * rp, map<string, int> & il){
+void processPair(readPair * rp, map<string, int> & il, double * low, double * high){
   
   string sa1;
   string sa2;
@@ -811,11 +985,22 @@ void processPair(readPair * rp, map<string, int> & il){
     return;
   }
 
-  //if(rp->al1.IsMapped() && rp->al2.IsMapped()){
-  //  if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
-  //    return;
-  //  }
-  //}
+  //  cerr << joinCig(rp->al1.CigarData) << endl;
+  indelToGraph(rp->al1);
+  //  cerr << joinCig(rp->al2.CigarData) << endl;
+  indelToGraph(rp->al2);
+
+  if(rp->al1.IsMapped() && rp->al2.IsMapped()){
+
+    //    cerr <<  rp->al1.InsertSize <<  " " << rp->al2.InsertSize << endl;
+
+    if( rp->al1.InsertSize > (*high) || rp->al1.InsertSize < (*low) || rp->al2.InsertSize > (*high) || rp->al2.InsertSize < (*low)){
+      deviantInsertSize(rp); 
+    }    
+    if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
+      return;
+    }
+  }
 
   if(rp->al1.GetTag("SA", sa1)){
     vector<saTag> parsedSa1;
@@ -832,11 +1017,6 @@ void processPair(readPair * rp, map<string, int> & il){
     //    cerr << "s2 processed " << endl;
   }
   
-  //  cerr << joinCig(rp->al1.CigarData) << endl;
-  indelToGraph(rp->al1);
-  //  cerr << joinCig(rp->al2.CigarData) << endl;
-  indelToGraph(rp->al2);
-
 }
 
 
@@ -869,13 +1049,16 @@ bool runRegion(string filename,
       itt !=  seqInverseLookup.end(); itt++){    
     localInverseLookUp[itt->first] = itt->second;
   }
+  insertDat localDists  = insertDists;
   omp_unset_lock(&lock);
 
   // local graph;
   graph localGraph;
 
-
   // local read pair store
+  
+  double high = localDists.mus[filename] + (2.5 * localDists.sds[filename]);
+  double low  = localDists.mus[filename] - (2.5 * localDists.sds[filename]);
 
   map<string, readPair *>pairStore;
 
@@ -926,7 +1109,7 @@ bool runRegion(string filename,
       else{
 	pairStore[al.Name]->al2 = al;
       }
-      processPair(pairStore[al.Name], localInverseLookUp);
+      processPair(pairStore[al.Name], localInverseLookUp, &low, &high);
       delete pairStore[al.Name];
       pairStore.erase(al.Name);	 
     }
@@ -989,7 +1172,7 @@ bool runRegion(string filename,
 //	   << globalPairStore[rps->first]->al2.AlignmentFlag      << " "
 //	   << globalPairStore[rps->first]->al2.RefID     << " " 
 //	   << globalPairStore[rps->first]->al2.Position  << endl;
-      processPair(globalPairStore[rps->first], localInverseLookUp);
+      processPair(globalPairStore[rps->first], localInverseLookUp, &low, &high);
       delete globalPairStore[rps->first];
       delete pairStore[rps->first];
       globalPairStore.erase(rps->first);
@@ -1048,39 +1231,37 @@ void loadBam(string & bamFile){
   RefVector sequences = br.GetReferenceData();
 
   //chunking up the genome
-  int seqidIndex = 0;
+  
   vector< regionDat* > regions;
 
   // inverse lookup for split reads 
   map<string,int> seqIndexLookup;
   
+  int seqidIndex = 0;
+  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+      seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
+      seqidIndex += 1;
+  }
+
+  seqidIndex = 0;
 
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
 
 //    if(seqidIndex != 0){
+//      seqidIndex += 1;
 //      continue;
 //    }
     
-    seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
-    
-    //      regionDat * chunk = new regionDat;
-    
-
-
-//    chunk->seqidIndex = seqidIndex;
-//    chunk->start      = 2911196;
-//    chunk->end        = 2913196;
-//    regions.push_back(chunk);
-//    
-//    break;
-
+ 
     for(;start < (*sit).RefLength ; start += 1000000){
       regionDat * chunk = new regionDat;
       
       chunk->seqidIndex = seqidIndex;
       chunk->start      = start;
       chunk->end        = start + 1000000 ;
+
+
       regions.push_back(chunk);
     }
     regionDat * lastChunk = new regionDat;
@@ -1178,11 +1359,20 @@ string dotviz(vector<node *> ns){
 
   ss << "graph {\n";
 
-  for(vector<node *>::iterator it = ns.begin(); it != ns.end();
-      it++){
+  for(vector<node *>::iterator it = ns.begin(); 
+      it != ns.end(); it++){
     for(vector<edge *>:: iterator iz = (*it)->eds.begin(); 
 	iz != (*it)->eds.end(); iz++){
-
+      
+      
+      if((*iz)->support['R'] > 0){
+	if((*it)->pos != (*iz)->L->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['R'] << "];\n";
+	}
+        if((*it)->pos != (*iz)->R->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=brown,penwidth=" << (*iz)->support['R'] << "];\n";
+	}
+      }
       if((*iz)->support['S'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dotted,penwidth=" << (*iz)->support['S'] << "];\n";
@@ -1238,39 +1428,210 @@ void dump(){
       for(map<int, node*>::iterator itt = it->second.begin(); itt != it->second.end(); itt++){
 	
 	if(lookup[it->first].find(itt->first) != lookup[it->first].end() ){
+	  //	  cerr << "seen: " << it->first << " " << itt->first << endl;
 	}
 	else{
 	  lookup[it->first][itt->first] = 1;
 	  
 	  vector<node *> tree;
 	  
-
 	  getTree(globalGraph.nodes[it->first][itt->first], tree);
 	  
-	  if(tree.size() > 20 ){
-	    continue;
-	  }
-
-
 	  string dotvizg = dotviz(tree);
-	  cout << "Tree: " << endl;
-	  for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-	    cout << "NODE: " << (*ir)->pos << " " << (*ir)->seqid << endl;
-	    lookup[(*ir)->seqid][(*ir)->pos] = 1;
+	  stringstream altPrint;
+	  int flag = 0;
 
+
+	  altPrint << "Tree: " << endl;
+	  for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
+	    altPrint << "NODE: " << (*ir)->pos << " " << (*ir)->seqid << endl;
+	    lookup[(*ir)->seqid][(*ir)->pos] = 1;
+	    
 	    for(vector<edge *>::iterator iz = (*ir)->eds.begin(); iz != (*ir)->eds.end(); iz++){
-	      cout << " EDGE: L: " << (*iz)->L->pos << " R: " <<  (*iz)->R->pos << endl;
-	      cout << " SUPPORT: " << (*iz)->forwardSupport << " I:" << (*iz)->support['I'] << " D:" << (*iz)->support['D'] << " S:" << (*iz)->support['S'] << endl; 
+	      altPrint << " EDGE: L: " << (*iz)->L->pos << " R: " <<  (*iz)->R->pos << endl;
+	      altPrint << " SUPPORT: " << (*iz)->forwardSupport << " I:" << (*iz)->support['I'] << " D:" << (*iz)->support['D'] << " S:" << (*iz)->support['S'] << endl; 
+	      
+	      if((*iz)->support['I'] > 2 || (*iz)->support['D'] > 2 || (*iz)->support['S'] > 2 || (*iz)->support['R'] > 2 ){
+		flag = 1;
+	      }
 
 	    }
 	  }
-	  cout << endl;
-	  cout << endl << dotvizg << endl;
+	  if(flag == 1){
+	    cout << altPrint.str() << endl << endl << dotvizg << endl;
+	  }
 	}
       }
-    }
-	}
+  }
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : bam file
+
+ Function does   : dumps and shrinks graph
+
+ Function returns: NA
+*/
   
+void gatherBamStats(string & targetfile){
+
+
+  omp_set_lock(&lock);
+  int quals [126];
+  memcpy(quals, SangerLookup, 126*sizeof(int));
+  omp_unset_lock(&lock);
+
+  vector<double> alIns;
+  vector<double> nReads;
+
+  BamReader bamR;
+  if(!bamR.Open(targetfile)   ){
+  cerr << "FATAL: cannot find - or - read : " << targetfile << endl;
+    exit(1);
+  }
+
+  if(! bamR.LocateIndex()){
+  cerr << "FATAL: cannot find - or - open index for : " << targetfile << endl;
+    exit(1);
+  }
+
+  SamHeader SH = bamR.GetHeader();
+  if(!SH.HasSortOrder()){
+  cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header." << endl;
+    exit(1);
+  }
+
+  RefVector sequences = bamR.GetReferenceData();
+
+  int i = 0; // index for while loop
+  int n = 0; // number of reads
+
+  BamAlignment al;
+
+  int qsum = 0;
+  int qnum = 0;
+
+  int fail = 0;
+
+
+  while(i < 5 || n < 100000){
+
+    fail += 1;
+    if(fail > 1000000){
+      cerr << "FATAL: was not able to gather stats on bamfile: " << targetfile << endl;
+      exit(1);
+    }
+
+    unsigned int max = 20;
+
+    if(sequences.size() < max){
+      max = sequences.size() ;
+    }
+
+    int randomChr = rand() % (max -1);
+    int randomPos = rand() % (sequences[randomChr].RefLength -1);
+    int randomEnd = randomPos + 2000;
+
+    if(randomEnd > sequences[randomChr].RefLength){
+      continue;
+    }
+
+    if(! bamR.SetRegion(randomChr, randomPos, randomChr, randomEnd)){
+      cerr << "FATAL: Cannot set random region";
+      exit(1);
+    }
+
+    if(!bamR.GetNextAlignmentCore(al)){
+      continue;
+    }
+
+    i++;
+
+    long int cp = al.GetEndPosition(false,true);
+
+    readPileUp allPileUp;
+    while(bamR.GetNextAlignment(al)){
+      if(!al.IsMapped() || ! al.IsProperPair()){
+        continue;
+      }
+      string any;
+      if(al.GetTag("XA", any)){
+        continue;
+      }
+      if(al.GetTag("SA", any)){
+        continue;
+      }
+
+      string squals = al.Qualities;
+
+      // summing base qualities (quals is the lookup)
+
+      for(unsigned int q = 0 ; q < squals.size(); q++){
+        qsum += quals[ int(squals[q]) ];
+        qnum += 1;
+
+        if(quals[int(squals[q])] < 0){
+          omp_set_lock(&lock);
+          cerr << endl;
+          cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
+          cerr << "INFO : offending qual string   : " << squals << endl;
+          cerr << "INFO : offending qual char     : " << squals[q] << endl;
+          cerr << "INFO : -1 qual ; qual ; qual +1: " << quals[ int(squals[q]) -1 ] << " " << quals[ int(squals[q])  ] << " " << quals[ int(squals[q]) +1 ] << endl;
+          cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
+          cerr << endl;
+          omp_unset_lock(&lock);
+          exit(1);
+        }
+      }
+
+      if(al.Position > cp){
+        allPileUp.purgePast(&cp);
+        cp = al.GetEndPosition(false,true);
+        nReads.push_back(allPileUp.currentData.size());
+      }
+      if(al.IsMapped()
+         && al.IsMateMapped()
+         && abs(double(al.InsertSize)) < 10000
+         && al.RefID == al.MateRefID
+         ){
+        allPileUp.processAlignment(al);
+        alIns.push_back(abs(double(al.InsertSize)));
+        n++;
+      }
+    }
+  }
+  bamR.Close();
+
+ double mu       = mean(alIns        );
+ double mud      = mean(nReads       );
+ double variance = var(alIns, mu     );
+ double sd       = sqrt(variance     );
+ double sdd      = sqrt(var(nReads, mud ));
+
+ omp_set_lock(&lock);
+
+ insertDists.mus[  targetfile ] = mu;
+ insertDists.sds[  targetfile ] = sd;
+ insertDists.avgD[ targetfile ] = mud;
+
+
+ cerr << "INFO: for file:" << targetfile << endl
+      << "      " << targetfile << ": mean depth: ......... " << mud << endl
+      << "      " << targetfile << ": sd   depth: ......... " << sdd << endl
+      << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
+      << "      " << targetfile << ": sd   insert length: . " << insertDists.sds[targetfile] << endl
+      << "      " << targetfile << ": lower insert length:  " << insertDists.mus[targetfile] -(2.5*insertDists.sds[targetfile]) << endl
+      << "      " << targetfile << ": upper insert length:  " << insertDists.mus[targetfile] +(2.5*insertDists.sds[targetfile])   << endl
+      << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << " " << qsum << " " << qnum << endl
+      << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
+
+  omp_unset_lock(&lock);
+}
+
+
+
 
 //-------------------------------    MAIN     --------------------------------
 /*
@@ -1281,6 +1642,13 @@ int main( int argc, char** argv)
 {
 int parse = parseOpts(argc, argv);
 
+
+ for(vector<string>::iterator bam = globalOpts.targetBams.begin();
+     bam != globalOpts.targetBams.end(); bam++){
+   
+   gatherBamStats(*bam);
+   
+ }
 
  for(vector<string>::iterator bam = globalOpts.targetBams.begin();
      bam != globalOpts.targetBams.end(); bam++){
