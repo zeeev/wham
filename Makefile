@@ -46,6 +46,6 @@ buildWHAMDUMPER:
 buildWHAMBAMGENE:
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing-gene.cpp  $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-GENE $(RUNTIME)
 buildDumper:
-	$(CC) $(CFLAGS) -g src/lib/*cpp src/bin/graph-er.cpp $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-SUPRISE $(RUNTIME)
+	$(CC) $(CFLAGS) -g src/lib/*cpp src/bin/graph-er.cpp $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
 clean:
 	-@rm *.a
