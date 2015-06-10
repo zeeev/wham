@@ -1226,20 +1226,38 @@ bool burnCigar(string s, vector<cigar> & cigs){
 
 void endPos(vector<cigar> & cigs, int * pos){
   
+  // MXDN= all consume reference
+
   for(vector<cigar>::iterator it = cigs.begin(); 
       it != cigs.end(); it++){
     
     switch( (*it).type ){
-    case 'I':
-      {
-	*pos += (*it).length;
-	break;
-      }
     case 'M':
       {
-	*pos += (*it).length;
-	break;
+	*pos += (*it).Length;
+        break;
       }
+    case 'X':
+      {
+        *pos += (*it).Length;
+        break;
+      }
+    case 'D':
+      {
+	*pos += (*it).Length;
+        break;
+      }
+    case '=':
+      {
+	*pos += (*it).Length;
+        break;
+      }
+    case 'N':
+      {
+	*pos += (*it).Length;
+        break;
+      }
+            
     default:
       break;
     }
