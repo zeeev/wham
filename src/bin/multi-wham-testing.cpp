@@ -1234,27 +1234,27 @@ void endPos(vector<cigar> & cigs, int * pos){
     switch( (*it).type ){
     case 'M':
       {
-	*pos += (*it).Length;
+	*pos += (*it).length;
         break;
       }
     case 'X':
       {
-        *pos += (*it).Length;
+        *pos += (*it).length;
         break;
       }
     case 'D':
       {
-	*pos += (*it).Length;
+	*pos += (*it).length;
         break;
       }
     case '=':
       {
-	*pos += (*it).Length;
+	*pos += (*it).length;
         break;
       }
     case 'N':
       {
-	*pos += (*it).Length;
+	*pos += (*it).length;
         break;
       }
             
