@@ -347,7 +347,8 @@ void initEdge(edge * e){
   e->forwardSupport  = 0;
   e->reverseSupport  = 0;
 
-  e->support['R'] = 0;
+  e->support['L'] = 0;
+  e->support['H'] = 0;
   e->support['S'] = 0;
   e->support['I'] = 0;
   e->support['D'] = 0;
@@ -909,7 +910,7 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
 
 */
 
-void deviantInsertSize(readPair * rp){
+void deviantInsertSize(readPair * rp, char supportType){
 
 
   //  cerr << "in deviantInsertSize" << endl;
@@ -938,7 +939,7 @@ void deviantInsertSize(readPair * rp){
       start = tmp  ;
     }
     
-    addIndelToGraph(rp->al1.RefID, start, end, 'R');       
+    addIndelToGraph(rp->al1.RefID, start, end, supportType);       
   }
   else{
     int start = rp->al2.Position;
@@ -955,7 +956,7 @@ void deviantInsertSize(readPair * rp){
 
 
     
-   addIndelToGraph(rp->al2.RefID, start, end, 'R');
+   addIndelToGraph(rp->al2.RefID, start, end, supportType);
     
   }
 
@@ -976,31 +977,34 @@ void processPair(readPair * rp, map<string, int> & il, double * low, double * hi
   
   string sa1;
   string sa2;
-
+  
   if(pairFailed(rp)){
     return;
   }
-
+  
   if(rp->al1.RefID != rp->al2.RefID){
     return;
   }
-
+  
   //  cerr << joinCig(rp->al1.CigarData) << endl;
   indelToGraph(rp->al1);
   //  cerr << joinCig(rp->al2.CigarData) << endl;
   indelToGraph(rp->al2);
+  
+  if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
 
-  if(rp->al1.IsMapped() && rp->al2.IsMapped()){
-
-    //    cerr <<  rp->al1.InsertSize <<  " " << rp->al2.InsertSize << endl;
-
-    if( rp->al1.InsertSize > (*high) || rp->al1.InsertSize < (*low) || rp->al2.InsertSize > (*high) || rp->al2.InsertSize < (*low)){
-      deviantInsertSize(rp); 
-    }    
-    if(! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
+    if( ! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
       return;
     }
-  }
+    
+    if( abs(rp->al1.InsertSize) > *high){
+      deviantInsertSize(rp, 'H'); 
+    }    
+    if( abs(rp->al1.InsertSize) < *low ){
+      deviantInsertSize(rp, 'L');
+    }
+  }      
+      
 
   if(rp->al1.GetTag("SA", sa1)){
     vector<saTag> parsedSa1;
@@ -1365,14 +1369,23 @@ string dotviz(vector<node *> ns){
 	iz != (*it)->eds.end(); iz++){
       
       
-      if((*iz)->support['R'] > 0){
+      if((*iz)->support['L'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['R'] << "];\n";
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
 	}
         if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=brown,penwidth=" << (*iz)->support['R'] << "];\n";
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
 	}
       }
+      if((*iz)->support['H'] > 0){
+        if((*it)->pos != (*iz)->L->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
+        }
+        if((*it)->pos != (*iz)->R->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
+	}
+      }
+
       if((*iz)->support['S'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dotted,penwidth=" << (*iz)->support['S'] << "];\n";
@@ -1451,7 +1464,7 @@ void dump(){
 	      altPrint << " EDGE: L: " << (*iz)->L->pos << " R: " <<  (*iz)->R->pos << endl;
 	      altPrint << " SUPPORT: " << (*iz)->forwardSupport << " I:" << (*iz)->support['I'] << " D:" << (*iz)->support['D'] << " S:" << (*iz)->support['S'] << endl; 
 	      
-	      if((*iz)->support['I'] > 2 || (*iz)->support['D'] > 2 || (*iz)->support['S'] > 2 || (*iz)->support['R'] > 2 ){
+	      if((*iz)->support['I'] > 2 || (*iz)->support['D'] > 2 || (*iz)->support['S'] > 2 || (*iz)->support['L'] > 2 || (*iz)->support['R'] > 2 ){
 		flag = 1;
 	      }
 
@@ -1645,6 +1658,7 @@ int parse = parseOpts(argc, argv);
 
  for(vector<string>::iterator bam = globalOpts.targetBams.begin();
      bam != globalOpts.targetBams.end(); bam++){
+   
    
    gatherBamStats(*bam);
    
