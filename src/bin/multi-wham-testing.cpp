@@ -1,5 +1,3 @@
-
-
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -664,6 +662,9 @@ void grabInsertLengths(string & targetfile){
 	continue;
       }
       if(al.GetTag("SA", any)){
+	continue;
+      }
+      if(al.IsDuplicate()){
 	continue;
       }
 
