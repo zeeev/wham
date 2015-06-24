@@ -136,6 +136,7 @@ struct breakpoints{
   string seqid    ;
   int five        ;
   int three       ;
+  int svlen       ;
 };
 
 
@@ -254,8 +255,12 @@ void printCallsBedPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ((*c)->three + 5)
        << "\t"
-       << type << ":" << index << endl;
-  
+       << type << ":" << index;
+    if((*c)->type == 'D'){
+      ss << "\t" << "SVLEN=" << (*c)->svlen << ";" << endl; 
+    }
+    
+
     cout << ss.str();
   }
   
@@ -1888,7 +1893,7 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 
 void collapseTree(vector<node *> & tree){
 
-  cerr << "Collapsing" << endl;
+  //  cerr << "Collapsing" << endl;
 
   vector<node *> tmp;
 
@@ -1913,7 +1918,7 @@ void collapseTree(vector<node *> & tree){
 	
 	joinNodes((*tr), (*tt), tree);
 
-	cerr << "close: " << (*tr)->pos << " " << (*tt)->pos << " " << shared << endl;
+	//	cerr << "close: " << (*tr)->pos << " " << (*tt)->pos << " " << shared << endl;
       
       }
     }
@@ -1963,7 +1968,6 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 
 	//		cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
 	//	     << " " << tooFar << " " << splitR << endl;
-
       }
       if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
 	putative.push_back((*t));
@@ -2001,8 +2005,9 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->type        = 'D';
       bp->seqidIndexL = putative.front()->seqid;
       bp->seqidIndexR = putative.front()->seqid;
-      bp->five        = lPos;
-      bp->three       = rPos;
+      bp->five        = lPos                   ;
+      bp->three       = rPos                   ;
+      bp->svlen       = rPos - lPos            ;
       return true;
     }
     else{
@@ -2029,6 +2034,28 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   return false;
 }
 
+
+void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
+
+  collapseTree(tree);
+
+  breakpoints * bp;
+  bp = new breakpoints;
+
+  if(detectDeletion(tree, bp)){
+    omp_set_lock(&lock);
+    allBreakpoints.push_back(bp);
+    omp_unset_lock(&lock);
+    cerr << "n breakpoints: " << allBreakpoints.size() << endl;
+  }
+  else if(detectInsertion(tree, bp)){
+  }
+  else{
+    delete bp;
+  }
+}
+
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : processes trees
@@ -2039,8 +2066,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 
 */
 
-
-void callbreaks(vector <breakpoints *> & allBreakpoints){
+void gatherTrees(vector<vector<node *> > & globalTrees){
   
   map<int, map<int, int> > lookup;
   
@@ -2059,27 +2085,9 @@ void callbreaks(vector <breakpoints *> & allBreakpoints){
           lookup[(*ir)->seqid][(*ir)->pos] = 1;
         }
 
+	globalTrees.push_back(tree);
 
-	cerr << endl << endl;
-	cerr << "high support" << endl;
-	cerr << dotviz(tree) << endl;
 
-	collapseTree(tree);
-	cerr << "high support trimmed" << endl;
-	cerr << dotviz(tree) << endl;
-	cerr << endl << endl;
-	breakpoints * bp; 
-	bp = new breakpoints; 
-
-	if(detectDeletion(tree, bp)){
-	  allBreakpoints.push_back(bp);
-	  cerr << "n breakpoints: " << allBreakpoints.size() << endl;
-	}
-	else if(detectInsertion(tree, bp)){
-	}
-	else{
-	  delete bp;
-	}
       }
     }
   }
@@ -2096,52 +2104,17 @@ void callbreaks(vector <breakpoints *> & allBreakpoints){
 */
 
 
-void dump(){
+void dump(vector< vector< node *> > & allTrees){
   
   ofstream graphOutFile;
 
   graphOutFile.open(globalOpts.graphOut);
 
-  map<int, map<int, int> > lookup;
-  
-  for(map<int, map<int, node* > >::iterator it = globalGraph.nodes.begin();it != globalGraph.nodes.end(); it++){
-      for(map<int, node*>::iterator itt = it->second.begin(); itt != it->second.end(); itt++){
-	
-	if(lookup[it->first].find(itt->first) != lookup[it->first].end() ){
-	  //	  cerr << "seen: " << it->first << " " << itt->first << endl;
-	}
-	else{
-	  lookup[it->first][itt->first] = 1;
-	  
-	  vector<node *> tree;
-	  
-	  getTree(globalGraph.nodes[it->first][itt->first], tree);
-	  
-	  string dotvizg = dotviz(tree);
-	  stringstream altPrint;
-	  int flag = 0;
-
-
-	  altPrint << "Tree: " << endl;
-	  for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-	    altPrint << "NODE: " << (*ir)->pos << " " << (*ir)->seqid << endl;
-	    lookup[(*ir)->seqid][(*ir)->pos] = 1;
-	    
-	    for(vector<edge *>::iterator iz = (*ir)->eds.begin(); iz != (*ir)->eds.end(); iz++){
-	      altPrint << " EDGE: L: " << (*iz)->L->pos << " R: " <<  (*iz)->R->pos << endl;
-	      altPrint << " SUPPORT: " << (*iz)->forwardSupport << " I:" << (*iz)->support['I'] << " D:" << (*iz)->support['D'] << " S:" << (*iz)->support['S'] << endl; 
-	      
-	      //	      if((*iz)->support['I'] > 3 || (*iz)->support['D'] > 3 || (*iz)->support['S'] > 3 || (*iz)->support['L'] > 3 || (*iz)->support['R'] > 2 ){
-		flag = 1;
-		// }
-	    }
-	  }
-	  if(flag == 1){
-	    graphOutFile << endl << dotvizg << endl;
-	  }
-	}
-      }
+  for(vector< vector<node *> >::iterator it = allTrees.begin(); 
+      it != allTrees.end(); it++){
+    graphOutFile << dotviz(*it) << endl << endl;
   }
+
   graphOutFile.close();
 }
 
@@ -2326,11 +2299,13 @@ int main( int argc, char** argv)
     omp_set_num_threads(globalOpts.nthreads);
   }
 
-  //#pragma omp parallel for schedule(dynamic, 3)
-  for(vector<string>::iterator bam = globalOpts.targetBams.begin();
-      bam != globalOpts.targetBams.end(); bam++){
+#pragma omp parallel for schedule(dynamic, 3)
+  for(int i = 0; i < globalOpts.targetBams.size(); i++){
+
+    //      vector<string>::iterator bam = globalOpts.targetBams.begin();
+    //  bam != globalOpts.targetBams.end(); bam++){
     
-    gatherBamStats(*bam);
+    gatherBamStats(globalOpts.targetBams[i]);
     
   }
 
@@ -2361,7 +2336,6 @@ int main( int argc, char** argv)
    cerr << "INFO: thinning forest" << endl;
    //thin();
 
-
    for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
        seqid != globalGraph.nodes.end(); seqid++){
 
@@ -2370,18 +2344,23 @@ int main( int argc, char** argv)
    }
  }
 
- vector<breakpoints*> allBreakpoints;
+ vector<breakpoints*> allBreakpoints ;
+ vector<vector<node*> > globalTrees  ;
 
- callbreaks(allBreakpoints);
+ gatherTrees(globalTrees);
 
- cerr << "N before print" << allBreakpoints.size();
+ 
+#pragma omp parallel for schedule(dynamic, 3)
+ for(int i = 0 ; i < globalTrees.size(); i++){
+   callBreaks(globalTrees[i], allBreakpoints);   
+ }
 
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
 
  printCallsBedPE(allBreakpoints, sequences);
 
  if(!globalOpts.graphOut.empty()){
-   dump();
+   dump(globalTrees);
  }
 
  return 0;
