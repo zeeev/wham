@@ -43,7 +43,7 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <unistd.h>
 
-#include "normecdf.h"
+
 #include "split.h"
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
@@ -2289,9 +2289,9 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
   vector<int> refScores;
   vector<int> altScores;
 
-  double aal;
-  double abl;
-  double bbl;
+  double aal = 0;
+  double abl = 0;
+  double bbl = 0;
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
     aligner.Align((*it).QueryBases.c_str(), ref.c_str(), ref.size(), filter, &alignment);
@@ -2299,7 +2299,7 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
     aligner.Align((*it).QueryBases.c_str(), alt.c_str(), alt.size(), filter, &alignment);
     altScores.push_back(sqrt(double(alignment.sw_score)));
     
-    double mappingP = 0.05;
+    double mappingP = 0.00001;
 
     if( refScores.back() >= altScores.back() ){
       aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
@@ -2313,8 +2313,8 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
     }
   }
   
-  cerr << "refS: " << join(refScores, " " ) << aal << " " << abl << " " << bbl << endl;
-  cerr << "altS: " << join(altScores, " " ) << aal << " " << abl << " " << bbl << endl;
+  cerr << "refS: " << join(refScores, " " ) << " - " << aal << " " << abl << " " << bbl << endl;
+  cerr << "altS: " << join(altScores, " " ) << " - " << aal << " " << abl << " " << bbl << endl;
 
 }
 
@@ -2440,7 +2440,7 @@ void gatherBamStats(string & targetfile){
 //      int randomPos2 = rand() % (sequences[randomChr].RefLength -1);
 //      int randomEnd2 = randomPos + 10000;
 
-      int randomL = ( (rand() % al.Length) - al.Length ) + al.Position;
+      int randomL = ( (rand() % 200) - 200 ) + al.Position;
 
 //      while(randomEnd2 > sequences[randomChr].RefLength){
 //	randomChr2 = rand() % (max -1);
@@ -2448,7 +2448,7 @@ void gatherBamStats(string & targetfile){
 //	randomEnd2 = randomPos + 10000;
 //      }
 
-      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, al.Length);
+      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, 200);
 					      
       aligner.Align(al.QueryBases.c_str(), RefChunk.c_str(), RefChunk.size(), filter, &alignment);      
 
