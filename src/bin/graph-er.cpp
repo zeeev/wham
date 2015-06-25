@@ -3,7 +3,6 @@
 This program was created at:  Thu May  7 12:10:40 2015
 This program was created by:  Zev N. Kronenberg
 
-
 Contact: zev.kronenber@gmail.com
 
 Organization: Unviersity of Utah
@@ -33,7 +32,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-
 */
 
 #include <string>
@@ -45,6 +43,7 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <unistd.h>
 
+#include "normecdf.h"
 #include "split.h"
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
@@ -56,13 +55,16 @@ THE SOFTWARE.
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
+// gsl header
+#include "gauss.h"
 
 using namespace std;
 using namespace BamTools;
 
 struct options{
   std::vector<string> targetBams;
-  int nthreads;
+  int nthreads   ;
+  string fasta   ;
   string graphOut;
 }globalOpts;
 
@@ -101,7 +103,6 @@ struct edge{
   int forwardSupport;
   int reverseSupport;
   map<char,int> support;
-
 };
 
 struct node{
@@ -111,18 +112,18 @@ struct node{
   vector <edge *> eds  ;
 };
 
-
 struct graph{
   map< int, map<int, node *> > nodes;
   vector<edge *>   edges;
 }globalGraph;
 
-
 struct insertDat{
-  map<string, double> mus; // mean of insert length for each indvdual across 1e6 reads
-  map<string, double> sds;  // standard deviation
-  map<string, double> lq ;  // 25% of data
-  map<string, double> up ;  // 75% of the data
+  map<string, double> mus ; // mean of insert length for each indvdual across 1e6 reads
+  map<string, double> sds ;  // standard deviation
+  map<string, double> lq  ;  // 25% of data
+  map<string, double> up  ;  // 75% of the data
+  map<string, double> swm ;
+  map<string, double> sws ;
   map<string, double> avgD;
   double overallDepth;
 } insertDists;
@@ -130,6 +131,7 @@ struct insertDat{
 // options
 
 struct breakpoints{
+  bool two        ;
   char type       ;
   int seqidIndexL ;
   int seqidIndexR ;
@@ -137,11 +139,11 @@ struct breakpoints{
   int five        ;
   int three       ;
   int svlen       ;
+  vector<vector<double> > genotypeLikelhoods;
 };
 
 
-static const char *optString = "g:x:f:h";
-
+static const char *optString = "a:g:x:f:h";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -180,6 +182,24 @@ omp_lock_t glock;
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  : nothing
+
+ Function does   : prints help
+
+ Function returns: NA
+
+*/
+
+void printHelp(){
+  
+  cerr << " Usage:  " << endl;
+  cerr <<         "WHAM-GRAPHENING -f my.bam -a my.fasta";
+  cerr <<         " -g my.graph.out.txt 2> wham.err > wham.out" << endl;
+
+}
+
+
+/*
  Function input  : vector of breakpoint calls
 
  Function does   : return true if the left is less than the right
@@ -200,7 +220,6 @@ bool sortBreak(breakpoints * L, breakpoints * R){
       return true;
     }
   }
-  
   return false;
 }
 
@@ -457,6 +476,48 @@ void initEdge(edge * e){
 
 }
 
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of doubles and a seperator
+
+ Function does   : joins vector with separator
+
+ Function returns: string
+
+*/
+
+string join(vector<double> & ints, string sep){
+
+  stringstream ss;
+
+  for(vector<double>::iterator sit = ints.begin(); sit != ints.end(); sit++){
+    ss << *sit << sep;
+  }
+  return ss.str();
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of ints and separator
+
+ Function does   : joins vector with separator
+
+ Function returns: string
+
+*/
+
+string join(vector<int> & ints, string sep){
+
+  stringstream ss;
+
+  for(vector<int>::iterator sit = ints.begin(); sit != ints.end(); sit++){
+    ss << *sit << sep;
+  }
+  return ss.str();
+}
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of strings and separator
@@ -467,7 +528,7 @@ void initEdge(edge * e){
 
 */
 
-string join(vector<string> strings, string sep){
+string join(vector<string> & strings, string sep){
 
   string joined = "";
 
@@ -1444,6 +1505,12 @@ int parseOpts(int argc, char** argv)
 	  cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut << endl;
 	  break;
 	}
+      case 'a':
+	{
+	  globalOpts.fasta = optarg;
+	  cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
+	  break;
+	}
       case 'f':
 	{
 	  globalOpts.targetBams     = split(optarg, ",");
@@ -1452,7 +1519,8 @@ int parseOpts(int argc, char** argv)
 	}
       case 'h':
 	{
-	  cerr << "nada" << endl;
+	  printHelp();
+	  exit(1);
 	  break;
 	}
       case '?':
@@ -2002,7 +2070,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       rPos = tmp ;
     }
     if(lhit == 1 && rhit == 1){
-      bp->type        = 'D';
+      bp->two         = true                   ;
+      bp->type        = 'D'                    ;
       bp->seqidIndexL = putative.front()->seqid;
       bp->seqidIndexR = putative.front()->seqid;
       bp->five        = lPos                   ;
@@ -2018,14 +2087,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-    
     cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
-
-
-    for(vector<node *>::iterator ns = putative.begin() ; ns != putative.end(); ns++){
-      cerr << "HNS: " << (*ns)->pos << endl;
-    }
-
   }
   else{
     // leaf node
@@ -2034,19 +2096,19 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   return false;
 }
 
-
 void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
 
   collapseTree(tree);
 
   breakpoints * bp;
   bp = new breakpoints;
+  bp->two = false;
 
   if(detectDeletion(tree, bp)){
     omp_set_lock(&lock);
     allBreakpoints.push_back(bp);
     omp_unset_lock(&lock);
-    cerr << "n breakpoints: " << allBreakpoints.size() << endl;
+    // cerr << "n breakpoints: " << allBreakpoints.size() << endl;
   }
   else if(detectInsertion(tree, bp)){
   }
@@ -2121,6 +2183,122 @@ void dump(vector< vector< node *> > & allTrees){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  : bam file name and breakpoint
+
+ Function does   : aligns reads to breakpoints
+
+ Function returns: NA
+*/
+
+void genotype(string & bamF, breakpoints * br, string & ref, string & alt, double mu, double sd){
+
+  BamReader bamR;
+  if(!bamR.Open(bamF)){
+    cerr << "FATAL: count not open bamfile: " << bamF;
+  }
+  if(! bamR.LocateIndex()){
+    vector<string> fileName = split(bamF, ".");
+    fileName.back() = "bai";
+    string indexName = join(fileName, ".");
+    if(! bamR.OpenIndex(indexName) ){
+      cerr << "FATAL: cannot find bam index." << endl;
+    }
+  }
+
+  if(!bamR.SetRegion(br->seqidIndexL, br->five - 1, br->seqidIndexL, br->five + 1)){
+    cerr << "FATAL: cannot set region for genotyping." << endl;
+  }
+
+  vector<BamAlignment> reads;
+
+  BamAlignment al;
+
+  while(bamR.GetNextAlignment(al)){
+    if((al.AlignmentFlag & 0x0800) != 0 ){
+      continue;
+    }
+    if(! al.IsPaired()){
+      continue;
+    }
+    if(! al.IsMapped() && ! al.IsMateMapped()){
+      continue;
+    }
+    if(al.IsDuplicate()){
+      continue;
+    }
+    if(! al.IsPrimaryAlignment()){
+      continue;
+    }
+    reads.push_back(al);
+  }
+  if(br->two){
+    if(!bamR.SetRegion(br->seqidIndexL, br->three -1, br->seqidIndexL, br->three +1)){
+      cerr << "FATAL: cannot set region for genotyping." << endl;
+      exit(1);
+    }
+    while(bamR.GetNextAlignment(al)){
+      if((al.AlignmentFlag & 0x0800) != 0 ){
+	continue;
+      }
+      if(! al.IsPaired()){
+	continue;
+      }
+      if(! al.IsMapped() && ! al.IsMateMapped()){
+	continue;
+      }
+      if(al.IsDuplicate()){
+	continue;
+      }
+      if(! al.IsPrimaryAlignment()){
+	continue;
+      }
+      reads.push_back(al);
+    }
+  }
+
+  // Declares a default Aligner
+  StripedSmithWaterman::Aligner aligner;
+  // Declares a default filter
+  StripedSmithWaterman::Filter filter;
+  // Declares an alignment that stores the result
+  StripedSmithWaterman::Alignment alignment;
+  // Aligns the query to the ref
+
+  vector<int> refScores;
+  vector<int> altScores;
+
+  double aal;
+  double abl;
+  double bbl;
+
+  for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
+    aligner.Align((*it).QueryBases.c_str(), ref.c_str(), ref.size(), filter, &alignment);
+    refScores.push_back(sqrt(double(alignment.sw_score)));
+    aligner.Align((*it).QueryBases.c_str(), alt.c_str(), alt.size(), filter, &alignment);
+    altScores.push_back(sqrt(double(alignment.sw_score)));
+    
+    double mappingP = 0.05;
+
+    if( refScores.back() >= altScores.back() ){
+      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
+      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
+      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+    }
+    else{
+      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
+      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
+      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+    }
+  }
+  
+  cerr << "refS: " << join(refScores, " " ) << aal << " " << abl << " " << bbl << endl;
+  cerr << "altS: " << join(altScores, " " ) << aal << " " << abl << " " << bbl << endl;
+
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
  Function input  : bam file
 
  Function does   : dumps and shrinks graph
@@ -2130,14 +2308,20 @@ void dump(vector< vector< node *> > & allTrees){
   
 void gatherBamStats(string & targetfile){
 
-
   omp_set_lock(&lock);
   int quals [126];
   memcpy(quals, SangerLookup, 126*sizeof(int));
+
+  FastaReference RefSeq;
+  RefSeq.open(globalOpts.fasta);
+
+  cerr << "INFO: gathering stats (may take some time) for bam: " << targetfile << endl;
+  
   omp_unset_lock(&lock);
 
-  vector<double> alIns;
-  vector<double> nReads;
+  vector<double> alIns        ;
+  vector<double> nReads       ;
+  vector<double> randomSWScore;
 
   BamReader bamR;
   if(!bamR.Open(targetfile)   ){
@@ -2156,6 +2340,14 @@ void gatherBamStats(string & targetfile){
     exit(1);
   }
 
+  // Declares a default Aligner
+  StripedSmithWaterman::Aligner aligner;
+  // Declares a default filter
+  StripedSmithWaterman::Filter filter;
+  // Declares an alignment that stores the result
+  StripedSmithWaterman::Alignment alignment;
+  // Aligns the query to the ref
+
   RefVector sequences = bamR.GetReferenceData();
 
   int i = 0; // index for while loop
@@ -2168,8 +2360,13 @@ void gatherBamStats(string & targetfile){
 
   int fail = 0;
 
-
   while(i < 5 || n < 100000){
+
+    if((n % 100) == 0){
+      omp_set_lock(&lock);
+      cerr << "INFO: processed " << n << " reads for: " << targetfile << endl;
+      omp_unset_lock(&lock);
+    }
 
     fail += 1;
     if(fail > 1000000){
@@ -2216,15 +2413,35 @@ void gatherBamStats(string & targetfile){
       if(al.GetTag("SA", any)){
         continue;
       }
+      
+//      int randomChr2 = rand() % (max -1);
+//      int randomPos2 = rand() % (sequences[randomChr].RefLength -1);
+//      int randomEnd2 = randomPos + 10000;
+
+      int randomL = ( (rand() % al.Length) - al.Length ) + al.Position;
+
+//      while(randomEnd2 > sequences[randomChr].RefLength){
+//	randomChr2 = rand() % (max -1);
+//	randomPos2 = rand() % (sequences[randomChr].RefLength -1);
+//	randomEnd2 = randomPos + 10000;
+//      }
+
+      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, al.Length);
+					      
+      aligner.Align(al.QueryBases.c_str(), RefChunk.c_str(), RefChunk.size(), filter, &alignment);      
+
+      if(alignment.sw_score > 0){
+	randomSWScore.push_back(double(alignment.sw_score));
+      }      
 
       string squals = al.Qualities;
-
+      
       // summing base qualities (quals is the lookup)
-
+      
       for(unsigned int q = 0 ; q < squals.size(); q++){
         qsum += quals[ int(squals[q]) ];
         qnum += 1;
-
+	
         if(quals[int(squals[q])] < 0){
           omp_set_lock(&lock);
           cerr << endl;
@@ -2256,23 +2473,47 @@ void gatherBamStats(string & targetfile){
     }
   }
   bamR.Close();
+  
+  sort(alIns.begin(), alIns.end()     );
 
- double mu       = mean(alIns        );
- double mud      = mean(nReads       );
- double variance = var(alIns, mu     );
- double sd       = sqrt(variance     );
- double sdd      = sqrt(var(nReads, mud ));
+  int index = 0;
 
+  if((alIns.size() % 2) != 0 ){
+    index = ((alIns.size()+1)/2)-1;
+  }
+  else{
+    index = (alIns.size()/2)-1;
+  }
+
+  double median   = alIns[index];
+  double mu       = mean(alIns        );
+  double mud      = mean(nReads       );
+  double variance = var(alIns, mu     );
+  double sd       = sqrt(variance     );
+  double sdd      = sqrt(var(nReads, mud ));
+  
+  double sw_mu    = mean(randomSWScore);
+  double sw_sd    = sqrt(var(randomSWScore, sw_mu));
+ 
+ 
  omp_set_lock(&lock);
 
  insertDists.mus[  targetfile ] = mu;
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
+ insertDists.swm[ targetfile ] = sw_mu;
+ insertDists.sws[ targetfile ] = sw_sd;
+ 
+
+ cerr << "dist: " << join(randomSWScore, ",") << endl;
 
  cerr << "INFO: for file:" << targetfile << endl
       << "      " << targetfile << ": mean depth: ......... " << mud << endl
       << "      " << targetfile << ": sd   depth: ......... " << sdd << endl
+      << "      " << targetfile << ": mean SW alignments .. " << sw_mu << endl
+      << "      " << targetfile << ": sd SW alignments .... " << sw_sd << endl
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
+      << "      " << targetfile << ": median insert length  " << median                      << endl
       << "      " << targetfile << ": sd   insert length: . " << insertDists.sds[targetfile] << endl
       << "      " << targetfile << ": lower insert length:  " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": upper insert length:  " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
@@ -2299,9 +2540,17 @@ int main( int argc, char** argv)
     omp_set_num_threads(globalOpts.nthreads);
   }
 
+  FastaReference RefSeq;
+  if(globalOpts.fasta.empty()){
+    cerr << "FATAL: no reference fasta provided" << endl;
+    exit(1);
+  }
+
+  RefSeq.open(globalOpts.fasta);
+
 #pragma omp parallel for schedule(dynamic, 3)
   for(int i = 0; i < globalOpts.targetBams.size(); i++){
-
+    
     //      vector<string>::iterator bam = globalOpts.targetBams.begin();
     //  bam != globalOpts.targetBams.end(); bam++){
     
@@ -2348,7 +2597,6 @@ int main( int argc, char** argv)
  vector<vector<node*> > globalTrees  ;
 
  gatherTrees(globalTrees);
-
  
 #pragma omp parallel for schedule(dynamic, 3)
  for(int i = 0 ; i < globalTrees.size(); i++){
@@ -2356,13 +2604,42 @@ int main( int argc, char** argv)
  }
 
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
+ 
+ for(vector<breakpoints*>::iterator br = allBreakpoints.begin();
+     br != allBreakpoints.end(); br++){
+   
+   string RefChunk;
+   string AltChunk;
 
+   if((*br)->two = true){
+     RefChunk = RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->five - 200, 
+				      abs((*br)->three - (*br)->five) + 200 );
+     AltChunk = RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->five - 200, 200) +
+       RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->three, 200);
+   }
+   
+
+   
+   cerr << "refC: " << abs((*br)->five - (*br)->three) << " "  << RefChunk.size() << endl        ;
+   cerr << "altC: " << AltChunk.size() << endl << endl;
+
+   //#pragma omp parallel for schedule(dynamic, 3)
+   for(int i = 0 ; i < globalOpts.targetBams.size(); i++){
+     genotype(globalOpts.targetBams[i], *br, RefChunk, AltChunk, 
+	      insertDists.swm[globalOpts.targetBams[i]],
+	      insertDists.sws[globalOpts.targetBams[i]]);
+   }
+ }
+ 
  printCallsBedPE(allBreakpoints, sequences);
+ 
+ 
+ 
 
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
  }
-
+ 
  return 0;
-
+ 
 }
