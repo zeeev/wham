@@ -207,6 +207,7 @@ void printHelp(){
   cerr << " Optional:  " << endl;
   cerr << "            -s - <FLAG>   - Exits the program after the stats are gathered." << endl;
   cerr << "            -g - <STRING> - File to write graph to (very large output).    " << endl;
+  cerr << "            -x - <INT>    - Number of CPUs to use.                         " << endl;
   cerr << endl;
   cerr << endl;
   cerr << " Output:  " << endl;
@@ -1520,6 +1521,7 @@ int parseOpts(int argc, char** argv)
       case 's':
 	{
 	  globalOpts.statsOnly = true;
+	  break;
 	}
       case 'g':
 	{
