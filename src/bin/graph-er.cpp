@@ -63,6 +63,7 @@ using namespace BamTools;
 
 struct options{
   std::vector<string> targetBams;
+  bool statsOnly ; 
   int nthreads   ;
   string fasta   ;
   string graphOut;
@@ -143,7 +144,7 @@ struct breakpoints{
 };
 
 
-static const char *optString = "a:g:x:f:h";
+static const char *optString = "a:g:x:f:hs";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -193,9 +194,26 @@ omp_lock_t glock;
 void printHelp(){
   
   cerr << " Usage:  " << endl;
-  cerr <<         "WHAM-GRAPHENING -f my.bam -a my.fasta";
+  cerr << "         WHAM-GRAPHENING -f my.bam -a my.fasta";
   cerr <<         " -g my.graph.out.txt 2> wham.err > wham.out" << endl;
-
+  cerr << endl;
+  cerr << endl;
+  cerr << " Required:  " << endl;
+  cerr << "            -f - <STRING> - A sorted and indexed bam file or a comma sep list of bams:" << endl;
+  cerr << "                          - a.bam,b.bam,c.bam ...                            " << endl;
+  cerr << "            -a - <STRING> - The reference sequence the reads were aligned to." << endl;
+  cerr << endl;
+  cerr << endl;
+  cerr << " Optional:  " << endl;
+  cerr << "            -s - <FLAG>   - Exits the program after the stats are gathered." << endl;
+  cerr << "            -g - <STRING> - File to write graph to (very large output).    " << endl;
+  cerr << endl;
+  cerr << endl;
+  cerr << " Output:  " << endl;
+  cerr << "          A BEDPE file is written to STOUT." << endl;
+  cerr << "          General BAM stats and the programs progress is written to STERR." << endl;
+  
+  
 }
 
 
@@ -1499,6 +1517,10 @@ int parseOpts(int argc, char** argv)
     opt = getopt(argc, argv, optString);
     while(opt != -1){
       switch(opt){
+      case 's':
+	{
+	  globalOpts.statsOnly = true;
+	}
       case 'g':
 	{
 	  globalOpts.graphOut = optarg;
@@ -2531,7 +2553,8 @@ void gatherBamStats(string & targetfile){
 int main( int argc, char** argv)
 {
   globalOpts.nthreads = -1;
-  
+  globalOpts.statsOnly = false;
+
   int parse = parseOpts(argc, argv);
  
   if(globalOpts.nthreads == -1){
@@ -2557,6 +2580,12 @@ int main( int argc, char** argv)
     gatherBamStats(globalOpts.targetBams[i]);
     
   }
+
+  if(globalOpts.statsOnly){
+    cerr << "INFO: gathered stats only" << endl;
+    return 0;
+  }
+
 
  RefVector sequences;
 
@@ -2618,7 +2647,6 @@ int main( int argc, char** argv)
        RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->three, 200);
    }
    
-
    
    cerr << "refC: " << abs((*br)->five - (*br)->three) << " "  << RefChunk.size() << endl        ;
    cerr << "altC: " << AltChunk.size() << endl << endl;
