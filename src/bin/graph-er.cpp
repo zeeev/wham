@@ -63,10 +63,12 @@ using namespace BamTools;
 
 struct options{
   std::vector<string> targetBams;
-  bool statsOnly ; 
-  int nthreads   ;
-  string fasta   ;
-  string graphOut;
+  bool statsOnly    ; 
+  int nthreads      ;
+  string fasta      ;
+  string graphOut   ;
+  map<string, int> toSkip;
+
 }globalOpts;
 
 struct regionDat{
@@ -144,7 +146,7 @@ struct breakpoints{
   vector<int>             genotypeIndex      ;
 };
 
-static const char *optString = "a:g:x:f:hs";
+static const char *optString = "a:g:x:f:e:hs";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -202,8 +204,8 @@ void printVersion(void){
 void printHelp(void){
 //------------------------------- XXXXXXXXXX --------------------------------  
   cerr << " Usage:  " << endl;
-  cerr << "       WHAM-GRAPHENING -f my.bam -a my.fasta";
-  cerr << " -g my.graph.out.txt 2> wham.err > wham.out" << endl;
+  cerr << "       WHAM-GRAPHENING -f my.bam -a my.fasta \\ " << endl;
+  cerr << "       -g my.graph.out.txt -e M,GL000207.1 2> wham.err > wham.out" << endl;
   cerr << endl;
   cerr << " Required:  " << endl;
 //------------------------------- XXXXXXXXXX --------------------------------  
@@ -217,6 +219,7 @@ void printHelp(void){
   cerr << "                          gathered." << endl;
   cerr << "          -g - <STRING> - File to write graph to (very large output)." << endl;
   cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
+  cerr << "          -e - <STRING> - Comma sep. list of seqids to skip.         " << endl;
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
@@ -1471,49 +1474,44 @@ void loadBam(string & bamFile){
 
   for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
     int start = 0;
-
-//    if(seqidIndex != 0){
-//      seqidIndex += 1;
-//      continue;
-//    }
     
- 
-    for(;start < (*sit).RefLength ; start += 1000000){
-      regionDat * chunk = new regionDat;
-      
-      chunk->seqidIndex = seqidIndex;
-      chunk->start      = start;
-      chunk->end        = start + 1000000 ;
-      regions.push_back(chunk);
+    if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() ){
+      for(;start < (*sit).RefLength ; start += 1000000){
+	regionDat * chunk = new regionDat;
+	
+	chunk->seqidIndex = seqidIndex;
+	chunk->start      = start;
+	chunk->end        = start + 1000000 ;
+	regions.push_back(chunk);
+      }
+      regionDat * lastChunk = new regionDat;
+      lastChunk->seqidIndex = seqidIndex;
+      lastChunk->start = start;
+      lastChunk->end   = (*sit).RefLength;
+      seqidIndex += 1;
+      if(start < (*sit).RefLength){
+	regions.push_back(lastChunk);
+      }
     }
-    regionDat * lastChunk = new regionDat;
-    lastChunk->seqidIndex = seqidIndex;
-    lastChunk->start = start;
-    lastChunk->end   = (*sit).RefLength;
-    seqidIndex += 1;
-    if(start < (*sit).RefLength){
-      regions.push_back(lastChunk);
+    else{
+      seqidIndex += 1;
     }
   }
   // closing the bam reader before running regions
   br.Close();
-
+  
   // global read pair store
 
   map<string, readPair*> pairStore;
 
 
+
+  int Mb = 0;
+
   // running the regions with openMP
 #pragma omp parallel for schedule(dynamic, 3)
-  
+ 
   for(unsigned int re = 0; re < regions.size(); re++){
-    if((re % 10) == 0 ){
-      omp_set_lock(&lock);
-      cerr << "INFO: " << bamFile 
-	   << ": processed " 
-	   << re << "Mb of the genome." << endl;  
-      omp_unset_lock(&lock);
-    }
     if(! runRegion(bamFile, 
 		   regions[re]->seqidIndex, 
 		   regions[re]->start, 
@@ -1529,9 +1527,17 @@ void loadBam(string & bamFile){
            <<  endl;
       omp_unset_lock(&lock);
     }
+    else{
+      omp_set_lock(&lock);
+      Mb += 1;
+      if((Mb % 10) == 0 ){
+	cerr << "INFO: " << bamFile
+	     << ": processed "
+	     << Mb << "Mb of the genome." << endl;	
+      }
+      omp_unset_lock(&lock);
+    }
   }
-
-
   cerr << "INFO: " << bamFile << " had " << pairStore.size() << " reads that were not processed" << endl; 
 }
 //-------------------------------   OPTIONS   --------------------------------
@@ -1556,6 +1562,15 @@ int parseOpts(int argc, char** argv)
 	{
 	  globalOpts.fasta = optarg;
 	  cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
+	  break;
+	}
+      case 'e':
+	{
+	  vector<string> seqidsToSkip = split(optarg, ",");
+	  for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
+	    globalOpts.toSkip[seqidsToSkip[i]] = 1;
+	    cerr << "INFO: WHAM will skip seqid: " << seqidsToSkip[i] << endl;
+	  }
 	  break;
 	}
       case 'f':
@@ -2703,7 +2718,7 @@ int main( int argc, char** argv)
    
    if((i % 100) == 0){
      omp_set_lock(&glock);     
-     cerr << "INFO: Processes " << i << "/" << globalTrees.size() << " trees" << endl;
+     cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
      omp_unset_lock(&glock);
    }
 
@@ -2723,13 +2738,10 @@ int main( int argc, char** argv)
 
  cerr << "INFO: Genotyping SVs." << endl;
 
+ int NGeno = 0;
+
 #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
-   if((z % 100) == 0 && z != 0){
-     omp_set_lock(&glock);
-     cerr << "Genotyped: " << z  << "/" << allBreakpoints.size() << " SVs." << endl;
-     omp_unset_lock(&glock);
-   }
 
    string RefChunk;
    string AltChunk;
@@ -2745,6 +2757,12 @@ int main( int argc, char** argv)
    for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
      genotype(globalOpts.targetBams[i], allBreakpoints[z], RefChunk, AltChunk);
    }
+   omp_set_lock(&glock);
+   NGeno += 1;
+   if((NGeno % 100) == 0 && z != 0){
+     cerr << "Genotyped: " << NGeno  << "/" << allBreakpoints.size() << " SVs." << endl;
+   }
+   omp_unset_lock(&glock);
  }
  
  printBEDPE(allBreakpoints, sequences);
