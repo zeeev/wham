@@ -141,8 +141,8 @@ struct breakpoints{
   int three       ;
   int svlen       ;
   vector<vector<double> > genotypeLikelhoods;
+  vector<int>             genotypeIndex     ;
 };
-
 
 static const char *optString = "a:g:x:f:hs";
 
@@ -191,30 +191,38 @@ omp_lock_t glock;
 
 */
 
-void printHelp(){
-  
-  cerr << " Usage:  " << endl;
-  cerr << "         WHAM-GRAPHENING -f my.bam -a my.fasta";
-  cerr <<         " -g my.graph.out.txt 2> wham.err > wham.out" << endl;
+void printVersion(void){
+  cerr << "Version: " << VERSION << endl;
+  cerr << "Contact: zev.kronenberg [at] gmail.com " << endl;
+  cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
   cerr << endl;
+}
+
+
+void printHelp(void){
+//------------------------------- XXXXXXXXXX --------------------------------  
+  cerr << " Usage:  " << endl;
+  cerr << "       WHAM-GRAPHENING -f my.bam -a my.fasta";
+  cerr << " -g my.graph.out.txt 2> wham.err > wham.out" << endl;
   cerr << endl;
   cerr << " Required:  " << endl;
-  cerr << "            -f - <STRING> - A sorted and indexed bam file or a comma sep list of bams:" << endl;
-  cerr << "                          - a.bam,b.bam,c.bam ...                            " << endl;
-  cerr << "            -a - <STRING> - The reference sequence the reads were aligned to." << endl;
-  cerr << endl;
+//------------------------------- XXXXXXXXXX --------------------------------  
+
+  cerr << "          -f - <STRING> - A sorted and indexed bam file or a list" << endl;
+  cerr << "                          of bams: a.bam,b.bam,..." << endl;
+  cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
   cerr << endl;
   cerr << " Optional:  " << endl;
-  cerr << "            -s - <FLAG>   - Exits the program after the stats are gathered." << endl;
-  cerr << "            -g - <STRING> - File to write graph to (very large output).    " << endl;
-  cerr << "            -x - <INT>    - Number of CPUs to use.                         " << endl;
-  cerr << endl;
+  cerr << "          -s - <FLAG>   - Exits the program after the stats are  " << endl;
+  cerr << "                          gathered." << endl;
+  cerr << "          -g - <STRING> - File to write graph to (very large output)." << endl;
+  cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
   cerr << endl;
   cerr << " Output:  " << endl;
-  cerr << "          A BEDPE file is written to STOUT." << endl;
-  cerr << "          General BAM stats and the programs progress is written to STERR." << endl;
-  
-  
+  cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
+  cerr << "        STOUT : SV calls in BEDPE format (VCF soon)                 " << endl;  
+  cerr << endl;
+  cerr << printVersion();
 }
 
 
@@ -295,10 +303,24 @@ void printCallsBedPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << type << ":" << index;
     if((*c)->type == 'D'){
-      ss << "\t" << "SVLEN=" << (*c)->svlen << ";" << endl; 
+      ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
     
 
+    for(int i = 0; i < (*c)->genotypeIndex.size(); i++){
+
+      if((*c)->genotypeIndex[i] == 0){
+	ss << "\t" << "0/0";
+      }
+      if((*c)->genotypeIndex[i] == 1){
+	ss << "\t" << "0/1";
+      }
+      else{
+	ss << "\t" << "1/1";
+      }
+    }
+
+    ss << endl;
     cout << ss.str();
   }
   
@@ -2288,35 +2310,76 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
   StripedSmithWaterman::Alignment alignment;
   // Aligns the query to the ref
 
-  vector<int> refScores;
-  vector<int> altScores;
+  vector<double> refScores;
+  vector<double> altScores;
 
   double aal = 0;
   double abl = 0;
   double bbl = 0;
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
-    aligner.Align((*it).QueryBases.c_str(), ref.c_str(), ref.size(), filter, &alignment);
-    refScores.push_back(sqrt(double(alignment.sw_score)));
-    aligner.Align((*it).QueryBases.c_str(), alt.c_str(), alt.size(), filter, &alignment);
-    altScores.push_back(sqrt(double(alignment.sw_score)));
-    
-    double mappingP = 0.00001;
 
-    if( refScores.back() >= altScores.back() ){
-      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
-      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
-      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+    aligner.Align((*it).QueryBases.c_str(), ref.c_str(), ref.size(), filter, &alignment);
+    refScores.push_back(double(alignment.sw_score));
+    aligner.Align((*it).QueryBases.c_str(), alt.c_str(), alt.size(), filter, &alignment);
+    altScores.push_back(double(alignment.sw_score));
+    
+    double mappingP = -1;
+
+    if( altScores.back() >= refScores.back() ){
+      
+      mappingP = 1 - (altScores.back() /   (altScores.back() + refScores.back())) ;
+
+      if(mappingP == 1 ){
+	mappingP = 0.9999;
+      }
+      if(mappingP == 0 ){
+	mappingP = 0.0001;
+      }
+
+      // alt
+      aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
+      abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
+      bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
     }
     else{
+      mappingP = 1 - (refScores.back() / (altScores.back() + refScores.back()));
+
+      if(mappingP == 1 ){
+        mappingP = 0.9999;
+      }
+      if(mappingP == 0 ){
+        mappingP = 0.0001;
+      }
+      //ref
       aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
       abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
       bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
     }
   }
+
+  aal = aal - log(pow(2,reads.size())); // the normalization of the genotype likelihood
+  abl = abl - log(pow(2,reads.size())); // this is causing underflow for really high depth.
+  bbl = bbl - log(pow(2,reads.size()));
+
+  vector<double> gl;
+  gl.push_back(aal);
+  gl.push_back(abl);
+  gl.push_back(bbl);
+ 
+  br->genotypeLikelhoods.push_back(gl);
   
-  cerr << "refS: " << join(refScores, " " ) << " - " << aal << " " << abl << " " << bbl << endl;
-  cerr << "altS: " << join(altScores, " " ) << " - " << aal << " " << abl << " " << bbl << endl;
+  int index = 0;
+  if(abl > aal && abl > bbl){
+    index = 1;
+  }
+  if(bbl > aal && bbl > abl){
+    index = 2;
+  }
+
+  br->genotypeIndex.push_back(index);
+
+  bamR.Close();
 
 }
 
@@ -2384,7 +2447,7 @@ void gatherBamStats(string & targetfile){
 
   int fail = 0;
 
-  while(i < 5 || n < 100000){
+  while(i < 8 || n < 100000){
 
     if((n % 100) == 0){
       omp_set_lock(&lock);
@@ -2529,16 +2592,16 @@ void gatherBamStats(string & targetfile){
  insertDists.sws[ targetfile ] = sw_sd;
  
 
- cerr << "dist: " << join(randomSWScore, ",") << endl;
+ // cerr << "dist: " << join(randomSWScore, ",") << endl;
 
  cerr << "INFO: for file:" << targetfile << endl
       << "      " << targetfile << ": mean depth: ......... " << mud << endl
-      << "      " << targetfile << ": sd   depth: ......... " << sdd << endl
+      << "      " << targetfile << ": sd depth: ........... " << sdd << endl
       << "      " << targetfile << ": mean SW alignments .. " << sw_mu << endl
       << "      " << targetfile << ": sd SW alignments .... " << sw_sd << endl
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
-      << "      " << targetfile << ": median insert length  " << median                      << endl
-      << "      " << targetfile << ": sd   insert length: . " << insertDists.sds[targetfile] << endl
+      << "      " << targetfile << ": median insert length. " << median                      << endl
+      << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
       << "      " << targetfile << ": lower insert length:  " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": upper insert length:  " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << " " << qsum << " " << qnum << endl
@@ -2567,7 +2630,8 @@ int main( int argc, char** argv)
 
   FastaReference RefSeq;
   if(globalOpts.fasta.empty()){
-    cerr << "FATAL: no reference fasta provided" << endl;
+    cerr << "FATAL: no reference fasta provided" << endl << endl;
+    printHelp();
     exit(1);
   }
 
@@ -2650,10 +2714,10 @@ int main( int argc, char** argv)
    }
    
    
-   cerr << "refC: " << abs((*br)->five - (*br)->three) << " "  << RefChunk.size() << endl        ;
-   cerr << "altC: " << AltChunk.size() << endl << endl;
+   //   cerr << "refC: " << abs((*br)->five - (*br)->three) << " "  << RefChunk.size() << endl        ;
+   //cerr << "altC: " << AltChunk.size() << endl << endl;
 
-   //#pragma omp parallel for schedule(dynamic, 3)
+   #pragma omp parallel for schedule(dynamic, 3)
    for(int i = 0 ; i < globalOpts.targetBams.size(); i++){
      genotype(globalOpts.targetBams[i], *br, RefChunk, AltChunk, 
 	      insertDists.swm[globalOpts.targetBams[i]],
