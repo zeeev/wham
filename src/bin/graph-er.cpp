@@ -222,7 +222,7 @@ void printHelp(void){
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
   cerr << "        STOUT : SV calls in BEDPE format (VCF soon)                 " << endl;  
   cerr << endl;
-  cerr << printVersion();
+  printVersion();
 }
 
 
