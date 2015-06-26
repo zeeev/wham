@@ -140,8 +140,8 @@ struct breakpoints{
   int five        ;
   int three       ;
   int svlen       ;
-  vector<vector<double> > genotypeLikelhoods;
-  vector<int>             genotypeIndex     ;
+  vector<vector<double> > genotypeLikelhoods ;
+  vector<int>             genotypeIndex      ;
 };
 
 static const char *optString = "a:g:x:f:hs";
@@ -262,12 +262,16 @@ bool sortBreak(breakpoints * L, breakpoints * R){
 */
 
 
-void printCallsBedPE(vector<breakpoints *> & calls, RefVector & seqs){
+void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
   int index = 0;
 
   for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
     
+    if((*c)->genotypeIndex.size() > 1){
+      cout << "above STUFF: " << (*c)->genotypeIndex.size() << " " << (*c)->genotypeLikelhoods.size() << endl;
+    }
+
     index += 1;
    
     stringstream ss;
@@ -301,29 +305,35 @@ void printCallsBedPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ((*c)->three + 5)
        << "\t"
-       << type << ":" << index;
+       << type << ":" << index
+       << "\t"
+       << "."
+       << "\t"
+       << "."
+       << "\t"
+       << ".";
     if((*c)->type == 'D'){
       ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
-    
-
-    for(int i = 0; i < (*c)->genotypeIndex.size(); i++){
-
+    for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
+      
       if((*c)->genotypeIndex[i] == 0){
 	ss << "\t" << "0/0";
       }
-      if((*c)->genotypeIndex[i] == 1){
+      else if((*c)->genotypeIndex[i] == 1){
 	ss << "\t" << "0/1";
       }
-      else{
+      else if((*c)->genotypeIndex[i] == 2){
 	ss << "\t" << "1/1";
+      }     
+      else{
+	cerr << "FATAL: printBEDPE: unknown genotype." << endl;
+	exit(1);
       }
     }
-
     ss << endl;
     cout << ss.str();
   }
-  
 }
 
 
@@ -914,7 +924,7 @@ bool areBothClipped(vector<CigarOp> & ci){
 
 */
 
-bool IsLongClip(vector<CigarOp> & ci, int len){
+bool IsLongClip(vector<CigarOp> & ci, unsigned int len){
 
   if(ci.front().Type == 'S' && ci.front().Length >= len){
     return true;
@@ -969,7 +979,7 @@ bool pairFailed(readPair * rp){
        rp->al2.Length == rp->al2.CigarData[0].Length && rp->al2.CigarData[0].Type == 'M' ){
       return true;
     }
-    if(rp->al1.MapQuality < 20 && rp->al2.MapQuality < 20){
+    if(rp->al1.MapQuality < 30 && rp->al2.MapQuality < 30){
       return true;
     }
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
@@ -1191,36 +1201,28 @@ void processPair(readPair * rp, map<string, int> & il, double * low, double * hi
   string sa2;
   
   if(pairFailed(rp)){
-    if(rp->al1.Position == 8980942 || rp->al2.Position == 8980942){
-      cerr << rp->al1.Name << " pair failed" << endl;
-    }
     return;
   }
   
   if(rp->al1.RefID != rp->al2.RefID){
     return;
   }
-  
   //  cerr << joinCig(rp->al1.CigarData) << endl;
   indelToGraph(rp->al1);
   //  cerr << joinCig(rp->al2.CigarData) << endl;
   indelToGraph(rp->al2);
   
   if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
-
-    if( ! IsLongClip(rp->al1.CigarData, 5) && ! IsLongClip(rp->al2.CigarData, 5)){
+    if( ! IsLongClip(rp->al1.CigarData, 10) && ! IsLongClip(rp->al2.CigarData, 10)){
       return;
     }
-    
     if( abs(rp->al1.InsertSize) > *high){
       deviantInsertSize(rp, 'H'); 
     }    
     if( abs(rp->al1.InsertSize) < *low ){
       deviantInsertSize(rp, 'L');
     }
-  }      
-      
-
+  }           
   if(rp->al1.GetTag("SA", sa1)){
     vector<saTag> parsedSa1;
     parseSA(parsedSa1, sa1, il);
@@ -1505,14 +1507,13 @@ void loadBam(string & bamFile){
 #pragma omp parallel for schedule(dynamic, 3)
   
   for(unsigned int re = 0; re < regions.size(); re++){
-    
-    omp_set_lock(&lock);
-    cerr << "INFO: running region: " 
-	 << sequences[regions[re]->seqidIndex].RefName 
-	 << ":" << regions[re]->start 
-	 << "-" << regions[re]->end << endl;
-    omp_unset_lock(&lock);
-    
+    if((re % 10) == 0 ){
+      omp_set_lock(&lock);
+      cerr << "INFO: " << bamFile 
+	   << ": processed " 
+	   << re << "Mb of the genome." << endl;  
+      omp_unset_lock(&lock);
+    }
     if(! runRegion(bamFile, 
 		   regions[re]->seqidIndex, 
 		   regions[re]->start, 
@@ -1734,7 +1735,6 @@ void thin(){
 
 bool detectInsertion(vector<node *> tree, breakpoints * bp){
 
-  int pair = 0;
   vector <node *> putative;
   
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
@@ -2028,7 +2028,7 @@ void collapseTree(vector<node *> & tree){
       //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
       if(abs( (*tr)->pos - (*tt)->pos ) < 10){
-	bool shared = neighborNode((*tr)->eds, (*tt)->eds);
+	//neighborNode((*tr)->eds, (*tt)->eds);
 	
 	joinNodes((*tr), (*tt), tree);
 
@@ -2065,7 +2065,7 @@ void collapseTree(vector<node *> & tree){
 
 bool detectDeletion(vector<node *> tree, breakpoints * bp){
   
-  int pair = 0;
+
   vector <node *> putative;
 
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
@@ -2133,7 +2133,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+    //    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
   }
   else{
     // leaf node
@@ -2236,7 +2236,7 @@ void dump(vector< vector< node *> > & allTrees){
  Function returns: NA
 */
 
-void genotype(string & bamF, breakpoints * br, string & ref, string & alt, double mu, double sd){
+void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
 
   BamReader bamR;
   if(!bamR.Open(bamF)){
@@ -2367,8 +2367,6 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
   gl.push_back(abl);
   gl.push_back(bbl);
  
-  br->genotypeLikelhoods.push_back(gl);
-  
   int index = 0;
   if(abl > aal && abl > bbl){
     index = 1;
@@ -2377,12 +2375,12 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt, doubl
     index = 2;
   }
 
+  br->genotypeLikelhoods.push_back(gl);
   br->genotypeIndex.push_back(index);
 
   bamR.Close();
 
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -2500,12 +2498,15 @@ void gatherBamStats(string & targetfile){
       if(al.GetTag("SA", any)){
         continue;
       }
+      if(al.IsDuplicate()){
+	continue;
+      }
       
 //      int randomChr2 = rand() % (max -1);
 //      int randomPos2 = rand() % (sequences[randomChr].RefLength -1);
 //      int randomEnd2 = randomPos + 10000;
 
-      int randomL = ( (rand() % 200) - 200 ) + al.Position;
+//      int randomL = ( (rand() % 200) - 200 ) + al.Position;
 
 //      while(randomEnd2 > sequences[randomChr].RefLength){
 //	randomChr2 = rand() % (max -1);
@@ -2513,13 +2514,13 @@ void gatherBamStats(string & targetfile){
 //	randomEnd2 = randomPos + 10000;
 //      }
 
-      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, 200);
+//      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, 200);
 					      
-      aligner.Align(al.QueryBases.c_str(), RefChunk.c_str(), RefChunk.size(), filter, &alignment);      
+//      aligner.Align(al.QueryBases.c_str(), RefChunk.c_str(), RefChunk.size(), filter, &alignment);      
 
-      if(alignment.sw_score > 0){
-	randomSWScore.push_back(double(alignment.sw_score));
-      }      
+//      if(alignment.sw_score > 0){
+//	randomSWScore.push_back(double(alignment.sw_score));
+//      }      
 
       string squals = al.Qualities;
       
@@ -2621,7 +2622,14 @@ int main( int argc, char** argv)
   globalOpts.statsOnly = false;
 
   int parse = parseOpts(argc, argv);
- 
+  if(parse != 1){
+    cerr << "FATAL: unable to parse command line correctly. Double check commands." << endl;
+    cerr << endl;
+    printHelp();
+    exit(1);
+  }
+
+
   if(globalOpts.nthreads == -1){
   }
   else{
@@ -2637,21 +2645,17 @@ int main( int argc, char** argv)
 
   RefSeq.open(globalOpts.fasta);
 
+  // gather the insert length and other stats
+
 #pragma omp parallel for schedule(dynamic, 3)
-  for(int i = 0; i < globalOpts.targetBams.size(); i++){
-    
-    //      vector<string>::iterator bam = globalOpts.targetBams.begin();
-    //  bam != globalOpts.targetBams.end(); bam++){
-    
-    gatherBamStats(globalOpts.targetBams[i]);
-    
+  for(unsigned int i = 0; i < globalOpts.targetBams.size(); i++){     
+    gatherBamStats(globalOpts.targetBams[i]);    
   }
 
   if(globalOpts.statsOnly){
-    cerr << "INFO: gathered stats only" << endl;
+    cerr << "INFO: Exiting as -s flag is set." << endl;
     return 0;
   }
-
 
  RefVector sequences;
 
@@ -2665,75 +2669,89 @@ int main( int argc, char** argv)
    mr.Close();
  }
 
+ // load bam has openMP inside for running regions quickly
+
+ cerr << "INFO: Loading discordant reads into graph." << endl;
+
  for(vector<string>::iterator bam = globalOpts.targetBams.begin();
      bam != globalOpts.targetBams.end(); bam++){
+   
+   cerr << "INFO: Reading: " << *bam << endl;
 
    loadBam(*bam);
-
+   
    for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
        seqid != globalGraph.nodes.end(); seqid++){
 	 
-   cerr << "INFO: Before thinning: " << globalGraph.nodes[seqid->first].size() << " nodes." << endl;
-   cerr << "INFO: Before thinning: " << globalGraph.edges.size() << " edges." << endl;
-   }
-
-   cerr << "INFO: thinning forest" << endl;
-   //thin();
-
-   for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
-       seqid != globalGraph.nodes.end(); seqid++){
-
-     cerr << "INFO: After thinning: " << globalGraph.nodes[seqid->first].size() << " nodes." << endl;
-     cerr << "INFO: After thinning: " << globalGraph.edges.size() << " edges." << endl;
+     cerr << "INFO: Number of putative breakpoints for: " << sequences[seqid->first].RefName << ": " 
+	  << globalGraph.nodes[seqid->first].size() << endl;
    }
  }
 
+ cerr << "INFO: Finished loading reads." << endl;
+ 
  vector<breakpoints*> allBreakpoints ;
  vector<vector<node*> > globalTrees  ;
+ 
+ cerr << "INFO: Finding trees within forest." << endl;
 
  gatherTrees(globalTrees);
  
+ cerr << "INFO: Finding breakpoints in trees." << endl; 
 #pragma omp parallel for schedule(dynamic, 3)
- for(int i = 0 ; i < globalTrees.size(); i++){
+ for(unsigned int i = 0 ; i < globalTrees.size(); i++){
+   
+   if((i % 100) == 0){
+     omp_set_lock(&glock);     
+     cerr << "INFO: Processes " << i << "/" << globalTrees.size() << " trees" << endl;
+     omp_unset_lock(&glock);
+   }
+
+   if(globalTrees[i].size() > 200){
+     omp_set_lock(&glock);
+     cerr << "WARNING: Skipping tree, too many putative breaks." << endl;
+     omp_unset_lock(&glock);
+     continue;
+   }
+
    callBreaks(globalTrees[i], allBreakpoints);   
  }
 
+ cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
+
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
- 
- for(vector<breakpoints*>::iterator br = allBreakpoints.begin();
-     br != allBreakpoints.end(); br++){
-   
+
+ cerr << "INFO: Genotyping SVs." << endl;
+
+#pragma omp parallel for
+ for(unsigned int z = 0; z < allBreakpoints.size(); z++){
+   if((z % 100) == 0 && z != 0){
+     omp_set_lock(&glock);
+     cerr << "Genotyped: " << z  << "/" << allBreakpoints.size() << " SVs." << endl;
+     omp_unset_lock(&glock);
+   }
+
    string RefChunk;
    string AltChunk;
 
-   if((*br)->two = true){
-     RefChunk = RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->five - 200, 
-				      abs((*br)->three - (*br)->five) + 200 );
-     AltChunk = RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->five - 200, 200) +
-       RefSeq.getSubSequence(sequences[(*br)->seqidIndexL].RefName, (*br)->three, 200);
+   if(allBreakpoints[z]->two == true){
+     RefChunk = RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->five - 200, 
+				      abs(allBreakpoints[z]->three - allBreakpoints[z]->five) + 200 );
+     AltChunk = RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->five - 200, 200) +
+       RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->three, 200);
    }
-   
-   
-   //   cerr << "refC: " << abs((*br)->five - (*br)->three) << " "  << RefChunk.size() << endl        ;
-   //cerr << "altC: " << AltChunk.size() << endl << endl;
 
-   #pragma omp parallel for schedule(dynamic, 3)
-   for(int i = 0 ; i < globalOpts.targetBams.size(); i++){
-     genotype(globalOpts.targetBams[i], *br, RefChunk, AltChunk, 
-	      insertDists.swm[globalOpts.targetBams[i]],
-	      insertDists.sws[globalOpts.targetBams[i]]);
+   //#pragma omp parallel for schedule(dynamic, 3)   
+   for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
+     genotype(globalOpts.targetBams[i], allBreakpoints[z], RefChunk, AltChunk);
    }
  }
  
- printCallsBedPE(allBreakpoints, sequences);
- 
- 
- 
-
+ printBEDPE(allBreakpoints, sequences);
+  
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
  }
- 
+ cerr << "WHAM finished normally, goodbye! " << endl;
  return 0;
- 
 }
