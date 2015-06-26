@@ -2602,8 +2602,8 @@ void gatherBamStats(string & targetfile){
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
       << "      " << targetfile << ": median insert length. " << median                      << endl
       << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
-      << "      " << targetfile << ": lower insert length:  " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
-      << "      " << targetfile << ": upper insert length:  " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
+      << "      " << targetfile << ": lower insert length . " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
+      << "      " << targetfile << ": upper insert length . " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << " " << qsum << " " << qnum << endl
       << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
 
