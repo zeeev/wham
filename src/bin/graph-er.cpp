@@ -598,12 +598,31 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
   string alt;
 
   if(bp->type == 'D'){   
+
+    if((bp->five - 500) < 0){
+      return false;
+    }
+    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      return false;
+    }
+
     bp->seqid = rv[bp->seqidIndexL].RefName;
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, 200) +
       rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
   }
   if(bp->type == 'V'){
+
+
+    if((bp->five - 500) < 0){
+      return false;
+    }
+    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      return false;
+    }
+
+
+
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );    
     string inv = ref.substr(200, bp->svlen );
     string rev = revComp(inv);
@@ -1646,7 +1665,7 @@ void loadBam(string & bamFile){
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
       int start = 0;
       
-      if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() ){
+      if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
 	for(;start < (*sit).RefLength ; start += 1000000){
 	  regionDat * chunk = new regionDat;
 	  
@@ -1665,6 +1684,7 @@ void loadBam(string & bamFile){
 	}
       }
       else{
+	cerr << "INFO: skipping: " << (*sit).RefName << endl;
 	seqidIndex += 1;
       }
     }
