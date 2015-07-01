@@ -9,7 +9,6 @@ Organization: Unviersity of Utah
     School of Medicine
     Salt Lake City, Utah
 
-
 The MIT License (MIT)
 
 Copyright (c) <2015> <Zev N. Kronenberg>
@@ -43,7 +42,6 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <unistd.h>
 
-
 #include "split.h"
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
@@ -63,11 +61,15 @@ using namespace BamTools;
 
 struct options{
   std::vector<string> targetBams;
-  bool statsOnly    ; 
-  int nthreads      ;
-  string fasta      ;
-  string graphOut   ;
+  bool statsOnly         ;  
+  bool skipGeno          ;
+  int nthreads           ;
+  string fasta           ;
+  string graphOut        ;
   map<string, int> toSkip;
+  string seqid           ;
+  vector<int> region     ;
+  
 
 }globalOpts;
 
@@ -93,7 +95,7 @@ struct cigDat{
 struct saTag{
   int seqid;
   int pos;
-  string strand;
+  bool strand;
   vector<cigDat> cig;
 };
 
@@ -134,19 +136,21 @@ struct insertDat{
 // options
 
 struct breakpoints{
-  bool two        ;
-  char type       ;
-  int seqidIndexL ;
-  int seqidIndexR ;
-  string seqid    ;
-  int five        ;
-  int three       ;
-  int svlen       ;
+  bool two              ;
+  char type             ;
+  int seqidIndexL       ;
+  int seqidIndexR       ;
+  string seqid          ;
+  int five              ;
+  int three             ;
+  int svlen             ;
+  vector<string> alleles;
+  
   vector<vector<double> > genotypeLikelhoods ;
   vector<int>             genotypeIndex      ;
 };
 
-static const char *optString = "a:g:x:f:e:hs";
+static const char *optString = "r:a:g:x:f:e:hsk";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -176,11 +180,77 @@ int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                              -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
                              -1,-1,-1,-1,-1, -1,-1        }; // 120-119 121-130
 
-
 // omp lock
 
 omp_lock_t lock;
 omp_lock_t glock;
+
+
+static void PrintAlignment(const StripedSmithWaterman::Alignment& alignment){
+  cerr << "===== SSW result =====" << endl;
+  cerr << "Best Smith-Waterman score:\t" << alignment.sw_score << endl
+       << "Next-best Smith-Waterman score:\t" << alignment.sw_score_next_best << endl
+       << "Reference start:\t" << alignment.ref_begin << endl
+       << "Reference end:\t" << alignment.ref_end << endl
+       << "Query start:\t" << alignment.query_begin << endl
+       << "Query end:\t" << alignment.query_end << endl
+       << "Next-best reference end:\t" << alignment.ref_end_next_best << endl
+       << "Number of mismatches:\t" << alignment.mismatches << endl
+       << "Cigar: " << alignment.cigar_string << endl;
+  cerr << "======================" << endl;
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : string reference
+
+ Function does   : revcomp
+
+ Function returns: string
+
+*/
+
+string revComp(string & seq){
+  
+    string revSeq;
+
+  for(string::reverse_iterator it = seq.rbegin(); it != seq.rend(); it++){
+    
+    std::locale loc;
+
+    switch(toupper(*it, loc)){
+    case 'A':
+      {
+	revSeq  += "T";
+	break;
+      } 
+    case 'T':
+      {
+        revSeq  += "A";
+        break;
+      }
+    case 'G':
+      {
+        revSeq  += "C";
+        break;
+      }
+
+    case 'C':
+      {
+        revSeq  += "G";
+        break;
+      }
+   
+    default:
+      cerr << "FATAL: unknown base detected in reference sequence" << endl;
+      exit(1);
+    }
+    
+  }
+  return revSeq; 
+}
+
 
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -215,11 +285,13 @@ void printHelp(void){
   cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
   cerr << endl;
   cerr << " Optional:  " << endl;
-  cerr << "          -s - <FLAG>   - Exits the program after the stats are  " << endl;
-  cerr << "                          gathered." << endl;
+  cerr << "          -s - <FLAG>   - Exits the program after the stats are      " << endl;
+  cerr << "                          gathered.                                  " << endl;
+  cerr << "          -k - <FLAG>   - Skip genotyping (much faster).             " << endl;
   cerr << "          -g - <STRING> - File to write graph to (very large output)." << endl;
-  cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
   cerr << "          -e - <STRING> - Comma sep. list of seqids to skip.         " << endl;
+  cerr << "          -r - <STRING> - Region in format: seqid:start-end          " << endl;
+  cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
@@ -228,7 +300,7 @@ void printHelp(void){
   printVersion();
 }
 
-
+//------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of breakpoint calls
 
@@ -287,10 +359,10 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     case 'U':
       type = "DUP";
       break;
-    case 'R':
+    case 'I':
       type = "INR";
       break;
-    case 'I':
+    case 'V':
       type = "INV";
       break;
     default:
@@ -315,19 +387,19 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "."
        << "\t"
        << ".";
-    if((*c)->type == 'D'){
+    if((*c)->type == 'D' || (*c)->type == 'V'){
       ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       
       if((*c)->genotypeIndex[i] == 0){
-	ss << "\t" << "0/0";
+	ss << "\t" << "0/0;" << (*c)->genotypeLikelhoods[i][0] << "," << (*c)->genotypeLikelhoods[i][1] << "," << (*c)->genotypeLikelhoods[i][2] ;
       }
       else if((*c)->genotypeIndex[i] == 1){
-	ss << "\t" << "0/1";
+	ss << "\t" << "0/1;" << (*c)->genotypeLikelhoods[i][0] << "," << (*c)->genotypeLikelhoods[i][1] << "," << (*c)->genotypeLikelhoods[i][2] ;
       }
       else if((*c)->genotypeIndex[i] == 2){
-	ss << "\t" << "1/1";
+	ss << "\t" << "1/1;" << (*c)->genotypeLikelhoods[i][0] << "," << (*c)->genotypeLikelhoods[i][1] << "," << (*c)->genotypeLikelhoods[i][2] ;
       }     
       else{
 	cerr << "FATAL: printBEDPE: unknown genotype." << endl;
@@ -505,6 +577,48 @@ void getTree(node * n, vector<node *> & ns){
 }
 
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : breakpoints *, RefSeq
+
+ Function does   : provides ref and alt
+
+ Function returns: bool
+
+*/
+
+bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
+    
+  string ref;
+  string alt;
+
+  if(bp->type == 'D'){   
+    bp->seqid = rv[bp->seqidIndexL].RefName;
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, 200) +
+      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
+  }
+  if(bp->type == 'V'){
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );    
+    string inv = ref.substr(200, bp->svlen );
+    string rev = revComp(inv);
+    alt = ref.substr(0,200) + rev + ref.substr(ref.size() - 200, 200);
+  }
+    
+  if(ref.size() > 800){
+    ref = ref.substr(0,400) + ref.substr(ref.size()-400,  400);
+  }
+  if(alt.size() > 800){
+    alt = alt.substr(0,400) + alt.substr(alt.size() -400, 400);
+  }
+
+
+  bp->alleles.push_back(ref);
+  bp->alleles.push_back(alt);
+
+  return true;
+}
+
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -527,9 +641,11 @@ void initEdge(edge * e){
   e->support['S'] = 0;
   e->support['I'] = 0;
   e->support['D'] = 0;
+  e->support['V'] = 0;
+  e->support['M'] = 0;
+  e->support['R'] = 0;
 
 }
-
 
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -586,7 +702,8 @@ string join(vector<string> & strings, string sep){
 
   string joined = "";
 
-  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
+  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); 
+      sit++){
     joined = joined + sep + (*sit) ;
   }
   return joined;
@@ -606,7 +723,8 @@ string joinReturn(vector<string> strings){
 
   string joined = "";
 
-  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); sit++){
+  for(vector<string>::iterator sit = strings.begin(); sit != strings.end(); 
+      sit++){
     joined = joined + " " + (*sit) + "\n";
   }
   return joined;
@@ -634,12 +752,14 @@ bool isPointIn(readPair * rp){
   }
   if(rp->al1.Position <= rp->al2.Position){
     
-    if(rp->al1.CigarData.back().Type == 'S' && rp->al2.CigarData.front().Type == 'S'){
+    if(rp->al1.CigarData.back().Type == 'S' && 
+       rp->al2.CigarData.front().Type == 'S'){
       return true;
     }
   }
   else{
-    if(rp->al1.CigarData.front().Type == 'S' && rp->al2.CigarData.back().Type == 'S'){
+    if(rp->al1.CigarData.front().Type == 'S' && 
+       rp->al2.CigarData.back().Type == 'S'){
       return true;
     }
   }
@@ -685,7 +805,8 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
   omp_set_lock(&glock);
 
-  if( ! isInGraph(refID, l, globalGraph) &&  ! isInGraph(refID, r, globalGraph) ){
+  if( ! isInGraph(refID, l, globalGraph) 
+      &&  ! isInGraph(refID, r, globalGraph) ){
     
     //cerr << "addIndelToGraph: neither node found" << endl;
 
@@ -720,7 +841,8 @@ void addIndelToGraph(int refID, int l, int r, char s){
     globalGraph.nodes[refID][r] = nodeR;
 
   }
- else if(isInGraph(refID, l, globalGraph) &&  ! isInGraph(refID, r, globalGraph)){
+ else if(isInGraph(refID, l, globalGraph) 
+	 &&  ! isInGraph(refID, r, globalGraph)){
 
    //cerr << "addIndelToGraph: left node found" << endl;
 
@@ -747,7 +869,8 @@ void addIndelToGraph(int refID, int l, int r, char s){
    globalGraph.nodes[refID][r] = nodeR;
 
  }
- else if(! isInGraph(refID, l, globalGraph) &&  isInGraph(refID, r, globalGraph)){
+ else if(! isInGraph(refID, l, globalGraph) 
+	 &&  isInGraph(refID, r, globalGraph)){
 
    //cerr << "addIndelToGraph: right node found" << endl;
    
@@ -776,12 +899,12 @@ void addIndelToGraph(int refID, int l, int r, char s){
  else{
    uint hit = 0;
 
-   for(vector<edge *>::iterator ite = globalGraph.nodes[refID][l]->eds.begin();
+   for(vector<edge *>::iterator ite 
+	 = globalGraph.nodes[refID][l]->eds.begin();
        ite != globalGraph.nodes[refID][l]->eds.end(); ite++){
      if((*ite)->L->pos == l && (*ite)->R->pos == r){
-
+       
        (*ite)->support[s] += 1;
-
        (*ite)->forwardSupport += 1;
        hit = 1;
      }
@@ -797,9 +920,7 @@ void addIndelToGraph(int refID, int l, int r, char s){
      globalGraph.nodes[refID][r]->eds.push_back(ne);
    }
  }
-
   omp_unset_lock(&glock);
-
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -853,15 +974,12 @@ bool indelToGraph(BamAlignment & ba){
     case 'I':
       {
 	hit = true;
-
 	addIndelToGraph(ba.RefID, p, p + ci->Length, 'I');
-	
 	break;
       }
     case 'D':
       {
 	hit = true;
-	//	cerr << "adding indel to graph " << p << " " << ci->Length << endl; 
 	addIndelToGraph(ba.RefID, p , (p + ci->Length ), 'D');
 	p += ci->Length;
 	break;
@@ -872,9 +990,7 @@ bool indelToGraph(BamAlignment & ba){
       }
     }
   }
-
   return hit;
-
 }
 
 
@@ -892,7 +1008,8 @@ string joinCig(vector<CigarOp> strings){
 
   stringstream joined ;
 
-  for(vector<CigarOp>::iterator sit = strings.begin(); sit != strings.end(); sit++){
+  for(vector<CigarOp>::iterator sit = strings.begin(); 
+      sit != strings.end(); sit++){
     joined  << (*sit).Length << (*sit).Type; 
   }
   return joined.str();
@@ -978,11 +1095,13 @@ int match(vector<CigarOp> co){
 bool pairFailed(readPair * rp){
   
   if(rp->al1.IsMapped() && rp->al2.IsMapped()){
-    if(rp->al1.Length == rp->al1.CigarData[0].Length && rp->al1.CigarData[0].Type == 'M' &&
-       rp->al2.Length == rp->al2.CigarData[0].Length && rp->al2.CigarData[0].Type == 'M' ){
+    if(rp->al1.Length == rp->al1.CigarData[0].Length 
+       && rp->al1.CigarData[0].Type == 'M' &&
+       rp->al2.Length == rp->al2.CigarData[0].Length 
+       && rp->al2.CigarData[0].Type == 'M' ){
       return true;
     }
-    if(rp->al1.MapQuality < 30 && rp->al2.MapQuality < 30){
+    if(rp->al1.MapQuality < 20 && rp->al2.MapQuality < 20){
       return true;
     }
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
@@ -1042,9 +1161,15 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
       exit(1);
     }
 
+    if(sat[2].compare("-") == 0){
+      sDat.strand = true;
+    }
+    else{
+      sDat.strand = false;
+    }
+
     sDat.seqid = il[sat[0]];
     sDat.pos   = atoi(sat[1].c_str()) - 1;
-    sDat.strand = sat[2];
     parseCigar(sDat.cig, sat[3]);
     parsed.push_back(sDat);
 
@@ -1063,31 +1188,36 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
 
 */
 
-void splitToGraph(BamAlignment al, vector<saTag> & sa){
+void splitToGraph(BamAlignment & al, vector<saTag> & sa){
 
   if(!al.IsMapped()){
-    //    cerr << "fail: not mapped" << endl;
     return;
   }
 
   if(sa.size() > 1){
-    //    cerr << "fail: too many fragments in split" << endl;
     return;
   }
 
   if(sa[0].seqid != al.RefID){
-    //    cerr << "fail: split to different chr" << endl;
     return;
   }
 
-  if(sa.front().cig.front().Type == 'S' && sa.front().cig.back().Type == 'S'){
+  char support = 'S';
+
+  if((sa[0].strand && ! al.IsReverseStrand()) || (! sa[0].strand && al.IsReverseStrand() )){
+    support = 'V';
+  }
+
+  if(sa.front().cig.front().Type == 'S' 
+     && sa.front().cig.back().Type == 'S'){
     return;
   }
 
-  if(al.CigarData.front().Type == 'S' && al.CigarData.back().Type == 'S'){
+  if(al.CigarData.front().Type == 'S' 
+     && al.CigarData.back().Type == 'S'){
     return;
   }
-  
+
   if(al.CigarData.front().Type == 'S'){
 
     int start = al.Position; 
@@ -1096,28 +1226,24 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
     if(sa.front().cig.back().Type == 'S'){
       endPos(sa[0].cig, &end) ;
     }
-    
     if(start > end){
       int tmp = start;
       start = end;
       end   = tmp;
     }
-    //    cerr << "name: " << al.Name << " pos: " << al.Position << " cig: " << joinCig(al.CigarData) << " start: " << start << " end: " << end  << " al refID " << al.RefID << " split seq index: " << sa[0].seqid << endl;
-    addIndelToGraph(al.RefID, start, end, 'S');
+    addIndelToGraph(al.RefID, start, end, support);
   }
   else{
-    int start =  al.GetEndPosition(false,true);
-    int end   = sa.front().pos                  ;
+    int start = al.GetEndPosition(false,true);
+    int end   = sa.front().pos                ;
     if(sa[0].cig.back().Type == 'S'){
       endPos(sa.front().cig, &end);
     }
-    //    cerr << "name: " << al.Name << " pos: " << al.Position << " cig: " << joinCig(al.CigarData) << " start: " << start << " end: " << end  << " al refID " << al.RefID << " split seq index: " << sa[0].seqid << endl;
-
     if(start > end){      
       start = sa[0].pos;
       end   = al.GetEndPosition(false,true);
     }
-    addIndelToGraph(al.RefID, start, end, 'S');
+    addIndelToGraph(al.RefID, start, end, support);
   }
 }
 
@@ -1134,21 +1260,12 @@ void splitToGraph(BamAlignment al, vector<saTag> & sa){
 
 void deviantInsertSize(readPair * rp, char supportType){
 
-
-  //  cerr << "in deviantInsertSize" << endl;
-
-//  if(IsLongClip(rp->al1.CigarData, 0) && IsLongClip(rp->al2.CigarData, 0)){
-//    //    cerr << " both clipped " << endl;
-//    return;
-//  }
-  if(! IsLongClip(rp->al1.CigarData, 1) && ! IsLongClip(rp->al2.CigarData, 1)){
-    //    cerr << " no long clip " << endl;
+  if(! IsLongClip(rp->al1.CigarData, 1) 
+     && ! IsLongClip(rp->al2.CigarData, 1)){
     return;
   }
-
-  //  cerr << "through filters" << endl;
-
-  if(rp->al1.CigarData.front().Type == 'S' || rp->al1.CigarData.back().Type == 'S'){
+  if(rp->al1.CigarData.front().Type == 'S' 
+     || rp->al1.CigarData.back().Type == 'S'){
     int start = rp->al1.Position;
     int end   = rp->al2.Position;
     if(rp->al2.CigarData.back().Type == 'S'){
@@ -1198,11 +1315,14 @@ void deviantInsertSize(readPair * rp, char supportType){
 
 */
 
-void processPair(readPair * rp, map<string, int> & il, double * low, double * high){
+void processPair(readPair * rp, map<string, int> & il, 
+		 double * low, double * high){
   
   string sa1;
   string sa2;
   
+  bool sameStrand = false;
+
   if(pairFailed(rp)){
     return;
   }
@@ -1216,14 +1336,34 @@ void processPair(readPair * rp, map<string, int> & il, double * low, double * hi
   indelToGraph(rp->al2);
   
   if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
-    if( ! IsLongClip(rp->al1.CigarData, 10) && ! IsLongClip(rp->al2.CigarData, 10)){
+    if( ! IsLongClip(rp->al1.CigarData, 10) 
+	&& ! IsLongClip(rp->al2.CigarData, 10)){
       return;
     }
+    
+    if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
+       || (! rp->al1.IsReverseStrand() && ! rp->al2.IsReverseStrand()) ){
+      sameStrand = true;
+    }
+    
+    
     if( abs(rp->al1.InsertSize) > *high){
-      deviantInsertSize(rp, 'H'); 
+      //      cerr << rp->al1.Name << " H " << rp->al1.InsertSize << endl;
+      if(sameStrand){
+	deviantInsertSize(rp, 'M'); 
+      }
+      else{
+	deviantInsertSize(rp, 'H'); 
+      }
     }    
     if( abs(rp->al1.InsertSize) < *low ){
-      deviantInsertSize(rp, 'L');
+      //      cerr << rp->al1.Name << " L " << rp->al1.InsertSize << endl;
+      if(sameStrand){
+	deviantInsertSize(rp, 'R');
+      }
+      else{
+	deviantInsertSize(rp, 'L');
+      }
     }
   }           
   if(rp->al1.GetTag("SA", sa1)){
@@ -1424,7 +1564,23 @@ bool runRegion(string filename,
 */
 
 void loadBam(string & bamFile){
+
+  bool region    = false;
+  int start      = 0;
+  int end        = 0;
+  string regionSID;
+
+  omp_set_lock(&lock);
   
+  if(!globalOpts.seqid.empty()){
+    region = true;
+    regionSID = globalOpts.seqid;
+    start = globalOpts.region.front();
+    end   = globalOpts.region.back();
+  }
+
+  omp_unset_lock(&lock);
+
   cerr << "INFO: reading bam file: " << bamFile << endl;
 
   BamReader br;
@@ -1469,32 +1625,43 @@ void loadBam(string & bamFile){
       seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
       seqidIndex += 1;
   }
-
-  seqidIndex = 0;
-
-  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
-    int start = 0;
+  if(region){
+    regionDat * regionInfo = new regionDat;
+    regionInfo->seqidIndex = seqIndexLookup[regionSID];
+    regionInfo->start      = start;
+    regionInfo->end        = end  ; 
     
-    if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() ){
-      for(;start < (*sit).RefLength ; start += 1000000){
-	regionDat * chunk = new regionDat;
-	
-	chunk->seqidIndex = seqidIndex;
-	chunk->start      = start;
-	chunk->end        = start + 1000000 ;
-	regions.push_back(chunk);
+    regions.push_back(regionInfo);
+
+  }
+  else{
+    
+    seqidIndex = 0;
+    
+    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+      int start = 0;
+      
+      if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() ){
+	for(;start < (*sit).RefLength ; start += 1000000){
+	  regionDat * chunk = new regionDat;
+	  
+	  chunk->seqidIndex = seqidIndex;
+	  chunk->start      = start;
+	  chunk->end        = start + 1000000 ;
+	  regions.push_back(chunk);
+	}
+	regionDat * lastChunk = new regionDat;
+	lastChunk->seqidIndex = seqidIndex;
+	lastChunk->start = start;
+	lastChunk->end   = (*sit).RefLength;
+	seqidIndex += 1;
+	if(start < (*sit).RefLength){
+	  regions.push_back(lastChunk);
+	}
       }
-      regionDat * lastChunk = new regionDat;
-      lastChunk->seqidIndex = seqidIndex;
-      lastChunk->start = start;
-      lastChunk->end   = (*sit).RefLength;
-      seqidIndex += 1;
-      if(start < (*sit).RefLength){
-	regions.push_back(lastChunk);
+      else{
+	seqidIndex += 1;
       }
-    }
-    else{
-      seqidIndex += 1;
     }
   }
   // closing the bam reader before running regions
@@ -1538,7 +1705,10 @@ void loadBam(string & bamFile){
       omp_unset_lock(&lock);
     }
   }
-  cerr << "INFO: " << bamFile << " had " << pairStore.size() << " reads that were not processed" << endl; 
+  cerr << "INFO: " << bamFile << " had " 
+       << pairStore.size() 
+       << " reads that were not processed" 
+       << endl; 
 }
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
@@ -1547,6 +1717,11 @@ int parseOpts(int argc, char** argv)
     opt = getopt(argc, argv, optString);
     while(opt != -1){
       switch(opt){
+      case 'k':
+	{
+	  globalOpts.skipGeno = true;
+	  break;
+	}
       case 's':
 	{
 	  globalOpts.statsOnly = true;
@@ -1555,7 +1730,8 @@ int parseOpts(int argc, char** argv)
       case 'g':
 	{
 	  globalOpts.graphOut = optarg;
-	  cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut << endl;
+	  cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut 
+	       << endl;
 	  break;
 	}
       case 'a':
@@ -1593,9 +1769,39 @@ int parseOpts(int argc, char** argv)
       case 'x':
 	{
 	  globalOpts.nthreads = atoi(((string)optarg).c_str());
-	  cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads << " threads" << endl;
+	  cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads 
+	       << " threads" << endl;
 	  break;
 	}
+      case 'r':
+	{
+	  vector<string> tmp_region = split(optarg, ":");
+	  if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
+	    cerr << "FATAL: region was not set correctly" << endl;
+	    cerr << "INFO:  region format: seqid:start-end" << endl;
+	    exit(1);
+	  }
+	  
+	  vector<string> start_end = split(tmp_region[1], "-");
+	  globalOpts.seqid = tmp_region[0];
+	  globalOpts.region.push_back(atoi(start_end[0].c_str()));
+	  globalOpts.region.push_back(atoi(start_end[1].c_str()));
+
+	  if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
+	    cerr << "FATAL: region was not set correctly" << endl;
+	    cerr << "INFO:  region format: seqid:start-end" << endl;
+	    exit(1);
+	  }
+	  cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
+
+	  if(globalOpts.region.size() != 2){
+	    cerr << "FATAL: incorrectly formatted region." << endl;
+	    cerr << "FATAL: wham is now exiting."          << endl;
+	    exit(1);
+	  }
+	  break;
+	}
+
       }
       opt = getopt( argc, argv, optString ); 
     }
@@ -1622,8 +1828,39 @@ string dotviz(vector<node *> & ns){
       it != ns.end(); it++){
     for(vector<edge *>:: iterator iz = (*it)->eds.begin(); 
 	iz != (*it)->eds.end(); iz++){
+
       
+      if((*iz)->support['R'] > 0){
+	if((*it)->pos != (*iz)->L->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=yellow,penwidth=" << (*iz)->support['R'] << "];\n";
+	}
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=yellow,penwidth=" << (*iz)->support['R'] << "];\n";
+	}
+      }      
       
+      if((*iz)->support['M'] > 0){
+        if((*it)->pos != (*iz)->L->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
+        }
+        if((*it)->pos != (*iz)->R->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
+        }
+      }
+
+
+
+      if((*iz)->support['V'] > 0){
+        if((*it)->pos != (*iz)->L->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [colo\
+r=green,penwidth=" << (*iz)->support['V'] << "];\n";
+        }
+        if((*it)->pos != (*iz)->R->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [colo\
+r=green,penwidth=" << (*iz)->support['V'] << "];\n";
+        }
+      }      
+
       if((*iz)->support['L'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
           ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
@@ -1685,7 +1922,7 @@ string dotviz(vector<node *> & ns){
 
 */
 
-void thin(){
+    void thin(){
   
   map<int, map<int, int> > lookup;
   
@@ -1708,7 +1945,8 @@ void thin(){
 	
 	for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
 	  lookup[(*ir)->seqid][(*ir)->pos] = 1;
-	  for(vector<edge *>::iterator iz = (*ir)->eds.begin(); iz != (*ir)->eds.end(); iz++){
+	  for(vector<edge *>::iterator iz = (*ir)->eds.begin(); 
+	      iz != (*ir)->eds.end(); iz++){
 	    if((*iz)->support['I'] > 2 || (*iz)->support['D'] > 2 || (*iz)->support['S'] > 2 || (*iz)->support['L'] > 2 || (*iz)->support['R'] > 2 ){
 	      flag = 1;
 	    }
@@ -1954,7 +2192,9 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 	e->support['S'] += (*lc)->support['S'];
 	e->support['H'] += (*lc)->support['H'];
 	e->support['L'] += (*lc)->support['L'];
-	cerr << "mark1" << endl;
+	e->support['R'] += (*lc)->support['R'];
+	e->support['M'] += (*lc)->support['M'];
+	e->support['V'] += (*lc)->support['V'];
       }
       else{
 	if((*lc)->L->pos == otherP){
@@ -2072,6 +2312,88 @@ void collapseTree(vector<node *> & tree){
 /*
  Function input  : vector of node pointers
 
+ Function does   : tries to resolve an inversion
+
+ Function returns: NA
+
+*/
+
+bool detectInversion(vector<node *> & tree, breakpoints * bp){
+
+  vector <node *> putative;
+
+  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
+
+    int tooFar  = 0;
+    int splitR  = 0;
+    int del     = 0;
+
+    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
+
+      tooFar += (*es)->support['M'];
+      splitR += (*es)->support['V'];
+      del    += (*es)->support['D'];
+
+      //                      cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
+      //                   << " " << tooFar << " " << splitR << endl;
+    }
+    if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
+      putative.push_back((*t));
+    }
+  }
+
+
+  if(putative.size() == 2){
+
+    int lPos = putative.front()->pos;
+    int rPos = putative.back()->pos ;
+
+    int lhit = 0 ; int rhit = 0;
+
+    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
+        ed != putative.front()->eds.end(); ed++){
+      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
+        lhit = 1;
+        break;
+      }
+    }
+
+    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
+        ed != putative.back()->eds.end(); ed++){
+      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
+        rhit = 1;
+        break;
+      }
+    }
+
+    
+    if(lPos > rPos){
+      int tmp = lPos;
+      lPos = rPos;
+      rPos = tmp ;
+    }
+    if(lhit == 1 && rhit == 1){
+      bp->two         = true                   ;
+      bp->type        = 'V'                    ;
+      bp->seqidIndexL = putative.front()->seqid;
+      bp->seqidIndexR = putative.front()->seqid;
+      bp->five        = lPos                   ;
+      bp->three       = rPos                   ;
+      bp->svlen       = rPos - lPos            ;
+      return true;
+    }
+    else{
+      cerr << "no linked putative breakpoints" << endl;
+    }
+  }
+  return false;
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of node pointers
+
  Function does   : tries to resolve a deletion
 
  Function returns: NA
@@ -2080,7 +2402,6 @@ void collapseTree(vector<node *> & tree){
 
 bool detectDeletion(vector<node *> tree, breakpoints * bp){
   
-
   vector <node *> putative;
 
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
@@ -2095,8 +2416,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 	splitR += (*es)->support['S'];
 	del    += (*es)->support['D'];
 
-	//		cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
-	//	     << " " << tooFar << " " << splitR << endl;
+	//       		cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
+	//		     << " " << tooFar << " " << splitR << endl;
       }
       if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
 	putative.push_back((*t));
@@ -2148,7 +2469,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-    //    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+       cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
   }
   else{
     // leaf node
@@ -2169,9 +2490,11 @@ void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
     omp_set_lock(&lock);
     allBreakpoints.push_back(bp);
     omp_unset_lock(&lock);
-    // cerr << "n breakpoints: " << allBreakpoints.size() << endl;
   }
-  else if(detectInsertion(tree, bp)){
+  else if(detectInversion(tree, bp)){
+    omp_set_lock(&lock);
+    allBreakpoints.push_back(bp);
+    omp_unset_lock(&lock);
   }
   else{
     delete bp;
@@ -2251,7 +2574,7 @@ void dump(vector< vector< node *> > & allTrees){
  Function returns: NA
 */
 
-void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
+void genotype(string & bamF, breakpoints * br){
 
   BamReader bamR;
   if(!bamR.Open(bamF)){
@@ -2274,6 +2597,8 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
 
   BamAlignment al;
 
+  int nr = 0;
+
   while(bamR.GetNextAlignment(al)){
     if((al.AlignmentFlag & 0x0800) != 0 ){
       continue;
@@ -2290,6 +2615,11 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
     if(! al.IsPrimaryAlignment()){
       continue;
     }
+    nr += 1;
+    if(nr > 100){
+      break;
+    }
+
     reads.push_back(al);
   }
   if(br->two){
@@ -2297,6 +2627,9 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
       cerr << "FATAL: cannot set region for genotyping." << endl;
       exit(1);
     }
+
+    nr = 0;
+
     while(bamR.GetNextAlignment(al)){
       if((al.AlignmentFlag & 0x0800) != 0 ){
 	continue;
@@ -2312,6 +2645,9 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
       }
       if(! al.IsPrimaryAlignment()){
 	continue;
+      }
+      if(nr > 100){
+	break;
       }
       reads.push_back(al);
     }
@@ -2332,13 +2668,38 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
   double abl = 0;
   double bbl = 0;
 
+//  cerr << "refS: " << br->type << " " << br->alleles.front() << endl;
+//  cerr << "altS: " << br->type << " " << br->alleles.back()  << endl;
+//  cerr << "about to align"     << endl;
+//  cerr << br->seqid << " " << br->five << " "      << br->three << endl;
+
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
-    aligner.Align((*it).QueryBases.c_str(), ref.c_str(), ref.size(), filter, &alignment);
+    aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(), 
+		  br->alleles.front().size(), filter, &alignment);
+
+//    omp_set_lock(&lock);
+//    
+//    cerr << "REFA: " << endl;
+//    cerr << "Q   : " << (*it).QueryBases << endl   ;
+//    cerr << "R   : " << br->alleles.front() << endl;
+//    cerr << "A   : " << br->alleles.back() << endl;
+//
+//    PrintAlignment(alignment);
+//
     refScores.push_back(double(alignment.sw_score));
-    aligner.Align((*it).QueryBases.c_str(), alt.c_str(), alt.size(), filter, &alignment);
+    aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
+		  br->alleles.back().size(),  filter, &alignment);
+//
+//
+//    cerr << "ALTA: " << endl;
+//    PrintAlignment(alignment);
+//
+//    omp_unset_lock(&lock);
+
     altScores.push_back(double(alignment.sw_score));
     
+
     double mappingP = -1;
 
     if( altScores.back() >= refScores.back() ){
@@ -2389,6 +2750,8 @@ void genotype(string & bamF, breakpoints * br, string & ref, string & alt){
   if(bbl > aal && bbl > abl){
     index = 2;
   }
+
+  //  cerr << aal << " " << abl << " " << bbl << endl;
 
   br->genotypeLikelhoods.push_back(gl);
   br->genotypeIndex.push_back(index);
@@ -2595,17 +2958,16 @@ void gatherBamStats(string & targetfile){
   double sd       = sqrt(variance     );
   double sdd      = sqrt(var(nReads, mud ));
   
-  double sw_mu    = mean(randomSWScore);
-  double sw_sd    = sqrt(var(randomSWScore, sw_mu));
- 
+  //  double sw_mu    = mean(randomSWScore);
+  //  double sw_sd    = sqrt(var(randomSWScore, sw_mu));
  
  omp_set_lock(&lock);
 
  insertDists.mus[  targetfile ] = mu;
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
- insertDists.swm[ targetfile ] = sw_mu;
- insertDists.sws[ targetfile ] = sw_sd;
+ // insertDists.swm[ targetfile ] = sw_mu;
+ // insertDists.sws[ targetfile ] = sw_sd;
  
 
  // cerr << "dist: " << join(randomSWScore, ",") << endl;
@@ -2613,8 +2975,8 @@ void gatherBamStats(string & targetfile){
  cerr << "INFO: for file:" << targetfile << endl
       << "      " << targetfile << ": mean depth: ......... " << mud << endl
       << "      " << targetfile << ": sd depth: ........... " << sdd << endl
-      << "      " << targetfile << ": mean SW alignments .. " << sw_mu << endl
-      << "      " << targetfile << ": sd SW alignments .... " << sw_sd << endl
+   //      << "      " << targetfile << ": mean SW alignments .. " << sw_mu << endl
+   //      << "      " << targetfile << ": sd SW alignments .... " << sw_sd << endl
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
       << "      " << targetfile << ": median insert length. " << median                      << endl
       << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
@@ -2635,6 +2997,7 @@ int main( int argc, char** argv)
 {
   globalOpts.nthreads = -1;
   globalOpts.statsOnly = false;
+  globalOpts.skipGeno  = false;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -2669,6 +3032,7 @@ int main( int argc, char** argv)
 
   if(globalOpts.statsOnly){
     cerr << "INFO: Exiting as -s flag is set." << endl;
+    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
     return 0;
   }
 
@@ -2736,26 +3100,29 @@ int main( int argc, char** argv)
 
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
 
+ cerr << "INFO: Gathering alleles." << endl;
+
+ for(unsigned int z = 0; z < allBreakpoints.size(); z++){
+   genAlleles(allBreakpoints[z], RefSeq, sequences);
+ }
+
  cerr << "INFO: Genotyping SVs." << endl;
 
  int NGeno = 0;
 
+ if(globalOpts.skipGeno){
+   printBEDPE(allBreakpoints, sequences);
+   cerr << "INFO: WHAM finished normally, goodbye! " << endl;
+   return 0;
+ }
+
+
 #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
 
-   string RefChunk;
-   string AltChunk;
-
-   if(allBreakpoints[z]->two == true){
-     RefChunk = RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->five - 200, 
-				      abs(allBreakpoints[z]->three - allBreakpoints[z]->five) + 200 );
-     AltChunk = RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->five - 200, 200) +
-       RefSeq.getSubSequence(sequences[allBreakpoints[z]->seqidIndexL].RefName, allBreakpoints[z]->three, 200);
-   }
-
    //#pragma omp parallel for schedule(dynamic, 3)   
    for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
-     genotype(globalOpts.targetBams[i], allBreakpoints[z], RefChunk, AltChunk);
+     genotype(globalOpts.targetBams[i], allBreakpoints[z]        );
    }
    omp_set_lock(&glock);
    NGeno += 1;
@@ -2770,6 +3137,7 @@ int main( int argc, char** argv)
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
  }
- cerr << "WHAM finished normally, goodbye! " << endl;
+
+ cerr << "INFO: WHAM finished normally, goodbye! " << endl;
  return 0;
 }
