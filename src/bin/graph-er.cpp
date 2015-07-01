@@ -241,7 +241,12 @@ string revComp(string & seq){
         revSeq  += "G";
         break;
       }
-   
+    case 'N':
+      {
+	revSeq  += "N";
+	break;
+      }
+
     default:
       revSeq += "N";
       cerr  << "WARNING: unknown base detected in reference sequence: " << *it << " changed to: N" << endl;
