@@ -243,8 +243,8 @@ string revComp(string & seq){
       }
    
     default:
-      cerr << "FATAL: unknown base detected in reference sequence" << endl;
-      exit(1);
+      revSeq += "N";
+      cerr  << "WARNING: unknown base detected in reference sequence: " << *it << " changed to: N" << endl;
     }
     
   }
