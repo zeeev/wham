@@ -1675,13 +1675,15 @@ void loadBam(string & bamFile){
       seqidIndex += 1;
   }
   if(region){
-    regionDat * regionInfo = new regionDat;
-    regionInfo->seqidIndex = seqIndexLookup[regionSID];
-    regionInfo->start      = start;
-    regionInfo->end        = end  ; 
     
-    regions.push_back(regionInfo);
-
+    for(int s = 0; s <= (end - 1000000) ; s += 1000000 ){
+      
+      regionDat * regionInfo = new regionDat;
+      regionInfo->seqidIndex = seqIndexLookup[regionSID];
+      regionInfo->start      = s            ;
+      regionInfo->end        = s + 1000000  ; 
+      regions.push_back(regionInfo);   
+    }
   }
   else{
     
@@ -2127,15 +2129,7 @@ bool neighborNode(vector<edge *> left, vector<edge *> right){
       if((*l)->L->pos == (*r)->L->pos || (*l)->R->pos == (*r)->R->pos 
 	 || (*l)->R->pos == (*r)->L->pos || (*l)->L->pos == (*r)->R->pos
 	 ){
-        if((*l)->support['S'] > 0 && (*r)->support['S'] > 0){
-          return true;
-        }
-        if((*l)->support['D'] > 0 && (*r)->support['D'] > 0){
-          return true;
-        }
-        if((*l)->support['I'] > 0 && (*r)->support['I'] > 0){
-          return true;
-	}
+	return true;
       }
     }
   }
@@ -2350,11 +2344,11 @@ void collapseTree(vector<node *> & tree){
       }
       //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
-      if(abs( (*tr)->pos - (*tt)->pos ) < 10){
+      if(abs( (*tr)->pos - (*tt)->pos ) < 10 && ! neighborNode((*tr)->eds, (*tt)->eds)){
 	//neighborNode((*tr)->eds, (*tt)->eds);
 	
 	joinNodes((*tr), (*tt), tree);
-
+	
 	//	cerr << "close: " << (*tr)->pos << " " << (*tt)->pos << " " << shared << endl;
       
       }
@@ -3355,7 +3349,7 @@ int main( int argc, char** argv)
  cerr << "INFO: Finding trees within forest." << endl;
 
  gatherTrees(globalTrees);
- 
+
  cerr << "INFO: Finding breakpoints in trees." << endl; 
 #pragma omp parallel for schedule(dynamic, 3)
  for(unsigned int i = 0 ; i < globalTrees.size(); i++){
@@ -3372,7 +3366,6 @@ int main( int argc, char** argv)
      omp_unset_lock(&glock);
      continue;
    }
-
    callBreaks(globalTrees[i], allBreakpoints);   
  }
 
