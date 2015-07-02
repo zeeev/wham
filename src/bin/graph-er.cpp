@@ -105,14 +105,14 @@ struct edge;
 struct edge{
   node * L;
   node * R;
-  int forwardSupport;
-  int reverseSupport;
   map<char,int> support;
 };
 
 struct node{
   int   seqid          ;
   int    pos           ;
+  int   endSupport     ;
+  int   beginSupport   ; 
   bool  collapsed      ;
   vector <edge *> eds  ;
 };
@@ -144,6 +144,7 @@ struct breakpoints{
   int five              ;
   int three             ;
   int svlen             ;
+  int totalSupport      ; 
   vector<string> alleles;
   
   vector<vector<double> > genotypeLikelhoods ;
@@ -185,7 +186,6 @@ int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
 omp_lock_t lock;
 omp_lock_t glock;
 
-
 static void PrintAlignment(const StripedSmithWaterman::Alignment& alignment){
   cerr << "===== SSW result =====" << endl;
   cerr << "Best Smith-Waterman score:\t" << alignment.sw_score << endl
@@ -210,50 +210,41 @@ static void PrintAlignment(const StripedSmithWaterman::Alignment& alignment){
  Function returns: string
 
 */
-
-string revComp(string & seq){
+void Comp(string & seq){
   
-    string revSeq;
+  locale loc;
 
-  for(string::reverse_iterator it = seq.rbegin(); it != seq.rend(); it++){
-    
-    std::locale loc;
-
-    switch(toupper(*it, loc)){
-    case 'A':
-      {
-	revSeq  += "T";
-	break;
-      } 
-    case 'T':
-      {
-        revSeq  += "A";
-        break;
-      }
-    case 'G':
-      {
-        revSeq  += "C";
-        break;
-      }
-
-    case 'C':
-      {
-        revSeq  += "G";
-        break;
-      }
-    case 'N':
-      {
-	revSeq  += "N";
-	break;
-      }
-
-    default:
-      revSeq += "N";
-      cerr  << "WARNING: unknown base detected in reference sequence: " << *it << " changed to: N" << endl;
-    }
-    
-  }
-  return revSeq; 
+  for (size_t i = 0; i < seq.size(); ++i)
+    {
+      switch (toupper(seq[i], loc))
+	{
+	case 'A':
+	  {
+	    seq[i] = 'T';
+	    break;
+	  }
+	case 'T':
+	  {
+	    seq[i] = 'A';
+	    break;
+	  }
+	case 'G':
+	  {
+	    seq[i] = 'C';
+	    break;
+	  }
+	case 'C':
+	  {
+	    seq[i] = 'G';
+	    break;
+	  }
+	default:
+	  {
+	    seq[i] = 'N';
+	    break;
+	  }
+	}
+    } 
 }
 
 
@@ -392,9 +383,12 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "."
        << "\t"
        << ".";
-    if((*c)->type == 'D' || (*c)->type == 'V'){
+    if((*c)->type == 'D' || (*c)->type == 'V' || (*c)->type == 'U' ){
       ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
+    
+    ss << "\tSUPPORT=" << (*c)->totalSupport << ";" ;
+    
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       
       if((*c)->genotypeIndex[i] == 0){
@@ -594,8 +588,8 @@ void getTree(node * n, vector<node *> & ns){
 
 bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     
-  string ref;
-  string alt;
+  string ref ;
+  string alt ;
 
   if(bp->type == 'D'){   
 
@@ -610,9 +604,23 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, 200) +
       rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
+
+    //duplication;
+
+  }
+  if(bp->type == 'U'){
+    if((bp->five - 500) < 0){
+      return false;
+    }
+    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      return false;
+    }
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, + bp->svlen +200)
+      +rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five + 1, bp->svlen)
+      +rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three  +1, 200);
   }
   if(bp->type == 'V'){
-
 
     if((bp->five - 500) < 0){
       return false;
@@ -620,13 +628,11 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
       return false;
     }
-
-
-
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );    
     string inv = ref.substr(200, bp->svlen );
-    string rev = revComp(inv);
-    alt = ref.substr(0,200) + rev + ref.substr(ref.size() - 200, 200);
+    inv = string(inv.rbegin(), inv.rend());
+    Comp(inv);
+    alt = ref.substr(0,200) + inv + ref.substr(ref.size() - 200, 200);
   }
     
   if(ref.size() > 800){
@@ -636,9 +642,8 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     alt = alt.substr(0,400) + alt.substr(alt.size() -400, 400);
   }
 
-
-  bp->alleles.push_back(ref);
-  bp->alleles.push_back(alt);
+  bp->alleles.push_back(ref) ;
+  bp->alleles.push_back(alt) ;
 
   return true;
 }
@@ -657,8 +662,7 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
 void initEdge(edge * e){
   e->L = NULL;
   e->R = NULL;
-  e->forwardSupport  = 0;
-  e->reverseSupport  = 0;
+
 
   e->support['L'] = 0;
   e->support['H'] = 0;
@@ -668,6 +672,7 @@ void initEdge(edge * e){
   e->support['V'] = 0;
   e->support['M'] = 0;
   e->support['R'] = 0;
+  e->support['X'] = 0;
 
 }
 
@@ -844,12 +849,17 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
     nodeL->collapsed = false;
     nodeR->collapsed = false;
+    nodeL->beginSupport = 0;
+    nodeL->endSupport   = 0;
+
+    nodeR->beginSupport = 0;
+    nodeR->endSupport   = 0;
 
     initEdge(ed);
 
     ed->support[s] +=1;
 
-    ed->forwardSupport += 1;
+
     ed->L = nodeL;
     ed->R = nodeR;
 
@@ -878,6 +888,9 @@ void addIndelToGraph(int refID, int l, int r, char s){
 
    nodeR->collapsed = false;
    
+   nodeR->beginSupport = 0;
+   nodeR->endSupport = 0;
+
    initEdge(ed);
    ed->support[s] += 1;
 
@@ -886,7 +899,6 @@ void addIndelToGraph(int refID, int l, int r, char s){
    ed->L = globalGraph.nodes[refID][l];
    ed->R = nodeR;
    
-
    nodeR->eds.push_back(ed);
 
    globalGraph.nodes[refID][l]->eds.push_back(ed);
@@ -905,6 +917,9 @@ void addIndelToGraph(int refID, int l, int r, char s){
    ed    = new edge;
 
    nodeL->collapsed = false;
+   nodeL->beginSupport = 0;
+   nodeL->endSupport   = 0;
+
 
    initEdge(ed);
    ed->support[s] +=1;
@@ -929,7 +944,7 @@ void addIndelToGraph(int refID, int l, int r, char s){
      if((*ite)->L->pos == l && (*ite)->R->pos == r){
        
        (*ite)->support[s] += 1;
-       (*ite)->forwardSupport += 1;
+
        hit = 1;
      }
    }
@@ -1243,13 +1258,18 @@ void splitToGraph(BamAlignment & al, vector<saTag> & sa){
   }
 
   if(al.CigarData.front().Type == 'S'){
-
+    
     int start = al.Position; 
     int end   = sa.front().pos  ;
 
     if(sa.front().cig.back().Type == 'S'){
       endPos(sa[0].cig, &end) ;
+    
+      if(end > start ){
+	support = 'X';
+      }
     }
+    
     if(start > end){
       int tmp = start;
       start = end;
@@ -1261,7 +1281,12 @@ void splitToGraph(BamAlignment & al, vector<saTag> & sa){
     int start = al.GetEndPosition(false,true);
     int end   = sa.front().pos                ;
     if(sa[0].cig.back().Type == 'S'){
-      endPos(sa.front().cig, &end);
+      endPos(sa.front().cig, &end);      
+    }
+    else{
+      if(start > end){
+	support = 'X';
+      }
     }
     if(start > end){      
       start = sa[0].pos;
@@ -1854,6 +1879,20 @@ string dotviz(vector<node *> & ns){
     for(vector<edge *>:: iterator iz = (*it)->eds.begin(); 
 	iz != (*it)->eds.end(); iz++){
 
+
+
+      if((*iz)->support['X'] > 0){
+        if((*it)->pos != (*iz)->L->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
+        }
+        if((*it)->pos != (*iz)->R->pos){
+          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
+        }
+      }
+
+
+
+
       
       if((*iz)->support['R'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
@@ -2220,6 +2259,7 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 	e->support['R'] += (*lc)->support['R'];
 	e->support['M'] += (*lc)->support['M'];
 	e->support['V'] += (*lc)->support['V'];
+	e->support['X'] += (*lc)->support['X'];
       }
       else{
 	if((*lc)->L->pos == otherP){
@@ -2256,6 +2296,9 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
         e->support['S'] += (*lc)->support['S'];
 	e->support['H'] += (*lc)->support['H'];
 	e->support['L'] += (*lc)->support['L'];
+	e->support['M'] += (*lc)->support['M'];
+	e->support['X'] += (*lc)->support['X'];
+	e->support['V'] += (*lc)->support['V'];
       }
       else{
         if((*lc)->L->pos == otherP){
@@ -2349,6 +2392,7 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
 
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
 
+
     int tooFar  = 0;
     int splitR  = 0;
     int del     = 0;
@@ -2359,30 +2403,42 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
       splitR += (*es)->support['V'];
       del    += (*es)->support['D'];
 
+
       //                      cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
       //                   << " " << tooFar << " " << splitR << endl;
     }
+
     if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
       putative.push_back((*t));
     }
   }
 
-
   if(putative.size() == 2){
-
+    
     int lPos = putative.front()->pos;
     int rPos = putative.back()->pos ;
-
+    
     int lhit = 0 ; int rhit = 0;
+    
+    int totalS = 0;
 
     for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
         ed != putative.front()->eds.end(); ed++){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
         lhit = 1;
+	totalS += (*ed)->support['L'];
+	totalS += (*ed)->support['H'];
+	totalS += (*ed)->support['S'];
+	totalS += (*ed)->support['I'];
+	totalS += (*ed)->support['D'];
+	totalS += (*ed)->support['V'];
+	totalS += (*ed)->support['M'];
+	totalS += (*ed)->support['R'];
+	totalS += (*ed)->support['X'];
         break;
       }
     }
-
+    
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
         ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
@@ -2397,14 +2453,22 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
       lPos = rPos;
       rPos = tmp ;
     }
+
+    if((rPos - lPos) > 1500000 ){
+      if(totalS < 5){
+	return  false;
+      }
+    }
+
     if(lhit == 1 && rhit == 1){
-      bp->two         = true                   ;
-      bp->type        = 'V'                    ;
-      bp->seqidIndexL = putative.front()->seqid;
-      bp->seqidIndexR = putative.front()->seqid;
-      bp->five        = lPos                   ;
-      bp->three       = rPos                   ;
-      bp->svlen       = rPos - lPos            ;
+      bp->two           = true                   ;
+      bp->type          = 'V'                    ;
+      bp->seqidIndexL   = putative.front()->seqid;
+      bp->seqidIndexR   = putative.front()->seqid;
+      bp->five          = lPos                   ;
+      bp->three         = rPos                   ;
+      bp->svlen         = rPos - lPos            ;
+      bp->totalSupport  = totalS                 ;
       return true;
     }
     else{
@@ -2413,6 +2477,116 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
   }
   return false;
 }
+
+
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of node pointers
+
+ Function does   : tries to resolve a duplication
+
+ Function returns: NA
+
+*/
+
+bool detectDuplication(vector<node *> tree, breakpoints * bp){
+
+  vector <node *> putative;
+
+  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
+
+    int tooFar   = 0;
+    int tooClose = 0;
+    int FlippedS = 0;
+
+    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
+
+      tooFar   += (*es)->support['H'];
+      tooClose += (*es)->support['L'];
+      FlippedS += (*es)->support['X'];
+
+
+    }
+    if( (tooFar > 0 && FlippedS  > 1) || FlippedS  > 1 || (tooClose  > 0 && FlippedS  > 1) ){
+      putative.push_back((*t));
+    }
+  }
+  if(putative.size() == 2){
+
+    int lPos = putative.front()->pos;
+    int rPos = putative.back()->pos ;
+
+    int lhit = 0 ; int rhit = 0;
+
+    int totalS = 0;
+
+    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
+        ed != putative.front()->eds.end(); ed++){
+      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
+        lhit = 1;
+	totalS += (*ed)->support['L'];
+        totalS += (*ed)->support['H'];
+        totalS += (*ed)->support['S'];
+        totalS += (*ed)->support['I'];
+        totalS += (*ed)->support['D'];
+        totalS += (*ed)->support['V'];
+        totalS += (*ed)->support['M'];
+        totalS += (*ed)->support['R'];
+        totalS += (*ed)->support['X'];
+
+        break;
+      }
+    }
+
+    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
+        ed != putative.back()->eds.end(); ed++){
+      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
+        rhit = 1;
+        break;
+      }
+    }
+    
+    if(lPos > rPos){
+      int tmp = lPos;
+      lPos    = rPos;
+      rPos    = tmp ;
+    }
+    if((rPos - lPos) > 1500000 ){
+      if(totalS < 5){
+	return  false;
+      }
+    }
+
+    if(lhit == 1 && rhit == 1){
+      bp->two         = true                   ;
+      bp->type        = 'U'                    ;
+      bp->seqidIndexL = putative.front()->seqid;
+      bp->seqidIndexR = putative.front()->seqid;
+      bp->five        = lPos                   ;
+      bp->three       = rPos                   ;
+      bp->svlen       = rPos - lPos            ;
+      bp->totalSupport  = totalS               ;
+      return true;
+    }
+    else{
+      cerr << "no linked putative breakpoints" << endl;
+    }
+    
+  }
+  else if(putative.size() > 2){
+
+    vector <node *> putativeTwo;
+    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+  }
+  else{
+    // leaf node
+  }
+  
+  return false;
+}
+
 
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -2441,8 +2615,6 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 	splitR += (*es)->support['S'];
 	del    += (*es)->support['D'];
 
-	//       		cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
-	//		     << " " << tooFar << " " << splitR << endl;
       }
       if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
 	putative.push_back((*t));
@@ -2456,10 +2628,23 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
     
     int lhit = 0 ; int rhit = 0;
     
+    int totalS = 0;
+
     for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
 	ed != putative.front()->eds.end(); ed++){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
 	lhit = 1; 
+	totalS += (*ed)->support['L'];
+        totalS += (*ed)->support['H'];
+        totalS += (*ed)->support['S'];
+        totalS += (*ed)->support['I'];
+        totalS += (*ed)->support['D'];
+        totalS += (*ed)->support['V'];
+        totalS += (*ed)->support['M'];
+        totalS += (*ed)->support['R'];
+        totalS += (*ed)->support['X'];
+
+
 	break;
       }
     }
@@ -2473,9 +2658,17 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
     }  
     if(lPos > rPos){
       int tmp = lPos;
-      lPos = rPos;
-      rPos = tmp ;
+      lPos    = rPos;
+      rPos    = tmp ;
     }
+
+    if((rPos - lPos) > 1500000 ){
+      if(totalS < 5){
+	return  false;
+      }
+    }
+
+
     if(lhit == 1 && rhit == 1){
       bp->two         = true                   ;
       bp->type        = 'D'                    ;
@@ -2484,6 +2677,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->five        = lPos                   ;
       bp->three       = rPos                   ;
       bp->svlen       = rPos - lPos            ;
+      bp->totalSupport = totalS                ;
       return true;
     }
     else{
@@ -2512,6 +2706,11 @@ void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
   bp->two = false;
 
   if(detectDeletion(tree, bp)){
+    omp_set_lock(&lock);
+    allBreakpoints.push_back(bp);
+    omp_unset_lock(&lock);
+  }
+  else if(detectDuplication(tree, bp)){
     omp_set_lock(&lock);
     allBreakpoints.push_back(bp);
     omp_unset_lock(&lock);
@@ -2644,7 +2843,6 @@ void genotype(string & bamF, breakpoints * br){
     if(nr > 100){
       break;
     }
-
     reads.push_back(al);
   }
   if(br->two){
@@ -2686,50 +2884,30 @@ void genotype(string & bamF, breakpoints * br){
   StripedSmithWaterman::Alignment alignment;
   // Aligns the query to the ref
 
-  vector<double> refScores;
-  vector<double> altScores;
+  vector<double> refScores ;
+  vector<double> altScores ;
+  vector<double> alt2Scores;
 
   double aal = 0;
   double abl = 0;
   double bbl = 0;
-
-//  cerr << "refS: " << br->type << " " << br->alleles.front() << endl;
-//  cerr << "altS: " << br->type << " " << br->alleles.back()  << endl;
-//  cerr << "about to align"     << endl;
-//  cerr << br->seqid << " " << br->five << " "      << br->three << endl;
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
     aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(), 
 		  br->alleles.front().size(), filter, &alignment);
 
-//    omp_set_lock(&lock);
-//    
-//    cerr << "REFA: " << endl;
-//    cerr << "Q   : " << (*it).QueryBases << endl   ;
-//    cerr << "R   : " << br->alleles.front() << endl;
-//    cerr << "A   : " << br->alleles.back() << endl;
-//
-//    PrintAlignment(alignment);
-//
     refScores.push_back(double(alignment.sw_score));
     aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
 		  br->alleles.back().size(),  filter, &alignment);
-//
-//
-//    cerr << "ALTA: " << endl;
-//    PrintAlignment(alignment);
-//
-//    omp_unset_lock(&lock);
 
     altScores.push_back(double(alignment.sw_score));
     
-
     double mappingP = -1;
 
     if( altScores.back() >= refScores.back() ){
       
-      mappingP = 1 - (altScores.back() /   (altScores.back() + refScores.back())) ;
+      mappingP = 1 - (altScores.back() / (altScores.back() + refScores.back())) ;
 
       if(mappingP == 1 ){
 	mappingP = 0.9999;
@@ -2759,8 +2937,8 @@ void genotype(string & bamF, breakpoints * br){
     }
   }
 
-  aal = aal - log(pow(2,reads.size())); // the normalization of the genotype likelihood
-  abl = abl - log(pow(2,reads.size())); // this is causing underflow for really high depth.
+  aal = aal - log(pow(2,reads.size())); 
+  abl = abl - log(pow(2,reads.size())); 
   bbl = bbl - log(pow(2,reads.size()));
 
   vector<double> gl;
@@ -2776,7 +2954,84 @@ void genotype(string & bamF, breakpoints * br){
     index = 2;
   }
 
-  //  cerr << aal << " " << abl << " " << bbl << endl;
+
+  double aal2 = 0;
+  double abl2 = 0;
+  double bbl2 = 0;
+
+  if(br->alleles.size() > 2){
+
+    for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
+
+      aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(),
+		    br->alleles.front().size(), filter, &alignment);
+
+      aligner.Align((*it).QueryBases.c_str(), br->alleles[1].c_str(),
+		    br->alleles[1].size(),  filter, &alignment);
+
+      alt2Scores.push_back(double(alignment.sw_score));
+
+      double mappingP = -1;
+
+      if( altScores.back() >= refScores.back() ){
+	
+	mappingP = 1 - (altScores.back() / (altScores.back() + refScores.back())) ;
+	
+	if(mappingP == 1 ){
+	  mappingP = 0.9999;
+	}
+	if(mappingP == 0 ){
+	  mappingP = 0.0001;
+	}
+	// alt
+	aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
+	abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
+	bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
+      }
+      else{
+	mappingP = 1 - (refScores.back() / (altScores.back() + refScores.back()));
+	
+	if(mappingP == 1 ){
+	  mappingP = 0.9999;
+	}
+	if(mappingP == 0 ){
+	  mappingP = 0.0001;
+	}
+	//ref
+	aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
+	abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
+	bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
+      }
+    }
+
+    aal2 = aal2 - log(pow(2,reads.size()));
+    abl2 = abl2 - log(pow(2,reads.size()));
+    bbl2 = bbl2 - log(pow(2,reads.size()));
+
+  }
+
+  vector<double> gl2;
+  gl2.push_back(aal2);
+  gl2.push_back(abl2);
+  gl2.push_back(bbl2);
+
+//  int index2 = 0;
+//  if(abl2 > aal2 && abl2 > bbl2){
+//    index2 = 1;
+//  }
+//  if(bbl2 > aal2 && bbl2 > abl2){
+//    index2 = 2;
+//  }
+//  
+//  if(gl[index] < gl2[index2]){
+//    gl.clear();
+//    gl.push_back(aal2);
+//    gl.push_back(abl2);
+//    gl.push_back(bbl2);
+//    index = index2;
+//    br->type = 'U';
+//  }
+
 
   br->genotypeLikelhoods.push_back(gl);
   br->genotypeIndex.push_back(index);
@@ -3105,7 +3360,7 @@ int main( int argc, char** argv)
 #pragma omp parallel for schedule(dynamic, 3)
  for(unsigned int i = 0 ; i < globalTrees.size(); i++){
    
-   if((i % 100) == 0){
+   if((i % 1000) == 0){
      omp_set_lock(&glock);     
      cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
      omp_unset_lock(&glock);
@@ -3129,19 +3384,23 @@ int main( int argc, char** argv)
 
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
    genAlleles(allBreakpoints[z], RefSeq, sequences);
- }
-
- cerr << "INFO: Genotyping SVs." << endl;
+   
+   if((z % 100) == 0){
+     cerr << "INFO: generated " << z << " alleles" << endl;
+   }
+   
+}
 
  int NGeno = 0;
 
  if(globalOpts.skipGeno){
    printBEDPE(allBreakpoints, sequences);
+   cerr << "INFO: Skipping genotyping: -k " << endl;
    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
    return 0;
  }
 
-
+ cerr << "INFO: Genotyping SVs." << endl;
 #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
 
@@ -3156,7 +3415,7 @@ int main( int argc, char** argv)
    }
    omp_unset_lock(&glock);
  }
- 
+
  printBEDPE(allBreakpoints, sequences);
   
  if(!globalOpts.graphOut.empty()){
