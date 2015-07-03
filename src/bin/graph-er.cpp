@@ -339,9 +339,6 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
   for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
     
-    if((*c)->genotypeIndex.size() > 1){
-      cout << "above STUFF: " << (*c)->genotypeIndex.size() << " " << (*c)->genotypeLikelhoods.size() << endl;
-    }
 
     index += 1;
    
@@ -366,15 +363,15 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     }
     ss << seqs[(*c)->seqidIndexL].RefName 
        << "\t"
-       << ((*c)->five - 5)
+       << ((*c)->five - 10)
        << "\t"
-       << ((*c)->five + 5)
+       << ((*c)->five + 10)
        << "\t"
        << seqs[(*c)->seqidIndexL].RefName
        << "\t"
-       << ((*c)->three - 5)
+       << ((*c)->three - 10)
        << "\t"
-       << ((*c)->three + 5)
+       << ((*c)->three + 10)
        << "\t"
        << type << ":" << index
        << "\t"
@@ -1366,6 +1363,11 @@ void deviantInsertSize(readPair * rp, char supportType){
 
 void processPair(readPair * rp, map<string, int> & il, 
 		 double * low, double * high){
+
+#ifdef DEBUG
+  cerr << "processing pair" << endl;
+#endif 
+
   
   string sa1;
   string sa2;
@@ -1373,6 +1375,10 @@ void processPair(readPair * rp, map<string, int> & il,
   bool sameStrand = false;
 
   if(pairFailed(rp)){
+
+#ifdef DEBUG
+    cerr << "pair failed filter: " << rp->al1.Name  << endl;
+#endif 
     return;
   }
   
@@ -1454,8 +1460,12 @@ bool runRegion(string filename,
 	       map<string, int> & seqInverseLookup){
 
 
-  map<string, int> localInverseLookUp;
 
+#ifdef DEBUG
+  cerr << "running region: " << seqidIndex << ":" << start << "-" << end << endl;
+#endif 
+
+  map<string, int> localInverseLookUp;
 
   omp_set_lock(&lock);
   for(map<string, int>::iterator itt = seqInverseLookup.begin();
@@ -1676,14 +1686,13 @@ void loadBam(string & bamFile){
   }
   if(region){
     
-    for(int s = 0; s <= (end - 1000000) ; s += 1000000 ){
       
-      regionDat * regionInfo = new regionDat;
-      regionInfo->seqidIndex = seqIndexLookup[regionSID];
-      regionInfo->start      = s            ;
-      regionInfo->end        = s + 1000000  ; 
-      regions.push_back(regionInfo);   
-    }
+    regionDat * regionInfo = new regionDat;
+    regionInfo->seqidIndex = seqIndexLookup[regionSID];
+    regionInfo->start      = start            ;
+    regionInfo->end        = end              ; 
+    regions.push_back(regionInfo);   
+
   }
   else{
     
@@ -2114,23 +2123,20 @@ bool detectInsertion(vector<node *> tree, breakpoints * bp){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : two vectors of edge pointers
+ Function input  : two node pointer
 
- Function does   : finds if nodes share a neighboring node
+ Function does   : finds if nodes are directly connected
 
  Function returns: bool
 
 */
 
-bool neighborNode(vector<edge *> left, vector<edge *> right){
+bool connectedNode(node * left, node * right){
 
-  for(vector<edge *>::iterator l = left.begin(); l != left.end(); l++){
-    for(vector<edge *>::iterator r = left.begin(); r != left.end(); r++){
-      if((*l)->L->pos == (*r)->L->pos || (*l)->R->pos == (*r)->R->pos 
-	 || (*l)->R->pos == (*r)->L->pos || (*l)->L->pos == (*r)->R->pos
-	 ){
-	return true;
-      }
+  for(vector<edge *>::iterator l = left->eds.begin(); l != left->eds.end(); l++){
+    
+    if((*l)->L->pos == right->pos || (*l)->R->pos == right->pos){
+      return true;
     }
   }
   return false;
@@ -2344,7 +2350,7 @@ void collapseTree(vector<node *> & tree){
       }
       //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
-      if(abs( (*tr)->pos - (*tt)->pos ) < 10 && ! neighborNode((*tr)->eds, (*tt)->eds)){
+      if(abs( (*tr)->pos - (*tt)->pos ) < 10 && ! connectedNode((*tr), (*tt))){
 	//neighborNode((*tr)->eds, (*tt)->eds);
 	
 	joinNodes((*tr), (*tt), tree);
@@ -3349,6 +3355,10 @@ int main( int argc, char** argv)
  cerr << "INFO: Finding trees within forest." << endl;
 
  gatherTrees(globalTrees);
+ 
+#ifdef DEBUG
+ dump(globalTrees);
+#endif
 
  cerr << "INFO: Finding breakpoints in trees." << endl; 
 #pragma omp parallel for schedule(dynamic, 3)
