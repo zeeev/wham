@@ -2356,7 +2356,7 @@ void collapseTree(vector<node *> & tree){
       }
       //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
-      if(abs( (*tr)->pos - (*tt)->pos ) < 10 && ! connectedNode((*tr), (*tt))){
+      if(abs( (*tr)->pos - (*tt)->pos ) < 20 && ! connectedNode((*tr), (*tt))){
 	//neighborNode((*tr)->eds, (*tt)->eds);
 	
 	joinNodes((*tr), (*tt), tree);
