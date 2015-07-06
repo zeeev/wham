@@ -110,7 +110,7 @@ struct edge{
 
 struct node{
   int   seqid          ;
-  int    pos           ;
+  int   pos            ;
   int   endSupport     ;
   int   beginSupport   ; 
   bool  collapsed      ;
@@ -141,6 +141,7 @@ struct breakpoints{
   int seqidIndexL       ;
   int seqidIndexR       ;
   string seqid          ;
+  int merged            ;
   int five              ;
   int three             ;
   int svlen             ;
@@ -384,7 +385,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
       ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
     
-    ss << "\tSUPPORT=" << (*c)->totalSupport << ";" ;
+    ss << "\tSUPPORT=" << (*c)->totalSupport << ";" << "MERGED=" << (*c)->merged << ";";
     
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       
@@ -629,6 +630,11 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     string inv = ref.substr(200, bp->svlen );
     inv = string(inv.rbegin(), inv.rend());
     Comp(inv);
+    
+    //    cerr << "INV allele: " << rv[bp->seqidIndexL].RefName << " " << bp->five << " " << bp->three << " " << bp->svlen << endl;
+    //    cerr << inv << endl ;
+    //    cerr << ref << endl << endl;
+
     alt = ref.substr(0,200) + inv + ref.substr(ref.size() - 200, 200);
   }
     
@@ -2463,6 +2469,7 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     if(lhit == 1 && rhit == 1){
       bp->two           = true                   ;
       bp->type          = 'V'                    ;
+      bp->merged        =  0                     ; 
       bp->seqidIndexL   = putative.front()->seqid;
       bp->seqidIndexR   = putative.front()->seqid;
       bp->five          = lPos                   ;
@@ -2562,6 +2569,7 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
     if(lhit == 1 && rhit == 1){
       bp->two         = true                   ;
       bp->type        = 'U'                    ;
+      bp->merged      = 0                      ;
       bp->seqidIndexL = putative.front()->seqid;
       bp->seqidIndexR = putative.front()->seqid;
       bp->five        = lPos                   ;
@@ -2593,11 +2601,52 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
 /*
  Function input  : vector of node pointers
 
+ Function does   : tries to resolve a deletion with no links
+
+ Function returns: NA
+
+*/
+
+bool detectHalfDeletion(vector<node *> tree, breakpoints * bp, node ** n){
+  
+  vector <node *> putative;
+
+  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
+
+    int tooFar  = 0;
+    int splitR  = 0;
+    int del     = 0;
+
+    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
+      tooFar += (*es)->support['H'];
+      splitR += (*es)->support['S'];
+      del    += (*es)->support['D'];
+    }
+    if( tooFar > 2){
+      putative.push_back((*t));
+    }
+  }
+  if(putative.size() == 1){
+    bp->seqidIndexL = putative.front()->seqid;
+    bp->five        = putative.front()->pos  ;
+    *n = putative.front();
+
+    return true;
+  }
+
+  return false;
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of node pointers
+
  Function does   : tries to resolve a deletion
 
  Function returns: NA
 
 */
+
 
 bool detectDeletion(vector<node *> tree, breakpoints * bp){
   
@@ -2674,6 +2723,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->type        = 'D'                    ;
       bp->seqidIndexL = putative.front()->seqid;
       bp->seqidIndexR = putative.front()->seqid;
+      bp->merged      = 0                      ;
       bp->five        = lPos                   ;
       bp->three       = rPos                   ;
       bp->svlen       = rPos - lPos            ;
@@ -2697,11 +2747,17 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   return false;
 }
 
-void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
+void callBreaks(vector<node *> & tree, 
+		vector<breakpoints *> & allBreakpoints, 
+		map < int , map <int, node *> > & hb){
 
   collapseTree(tree);
 
   breakpoints * bp;
+
+  node * nr; 
+
+
   bp = new breakpoints;
   bp->two = false;
 
@@ -2720,8 +2776,15 @@ void callBreaks(vector<node *> & tree, vector<breakpoints *> & allBreakpoints){
     allBreakpoints.push_back(bp);
     omp_unset_lock(&lock);
   }
+  else if(detectHalfDeletion(tree, bp, &nr)){
+    omp_set_lock(&lock);
+    hb[bp->seqidIndexL][bp->five] = nr;
+    delete bp;
+    omp_unset_lock(&lock);
+  }
   else{
     delete bp;
+
   }
 }
 
@@ -3268,6 +3331,103 @@ void gatherBamStats(string & targetfile){
   omp_unset_lock(&lock);
 }
 
+
+int avgP(node * n){
+  
+  double pi  = 0;
+  double ni  = 0;
+
+  for(vector<edge *>::iterator it = n->eds.begin(); it != n->eds.end(); it++){
+    
+    if((*it)->L->pos == n->pos){  
+      pi += double((*it)->R->pos) * double((*it)->support['H']);
+      ni += double((*it)->support['H'])                        ;  
+    }
+    else{
+      pi += double((*it)->L->pos) * double((*it)->support['H']);
+      ni += double((*it)->support['H'])                        ;  
+    }
+    
+  }
+
+  return int(double(pi) / double(ni));
+
+}
+
+void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br){
+
+  map<int, map<int, int> > seen;
+
+  for(map <int, map <int, node * > >::iterator hfs = hf.begin(); 
+      hfs != hf.end(); hfs++){
+
+    for(map<int, node*>::iterator hpos = hfs->second.begin(); 
+	hpos != hfs->second.end(); hpos++){
+    
+      if(seen[hpos->second->seqid].find(hpos->second->pos) != seen[hpos->second->seqid].end()){
+	continue;
+      }
+
+      int otherPos = avgP(hpos->second);
+    
+      for(map<int, node*>::iterator spos = hfs->second.begin(); spos != hfs->second.end(); spos++){
+
+	if(hpos->second->pos == spos->second->pos ){
+	  continue;
+	}
+	
+	if(seen[spos->second->seqid].find(spos->second->pos) != seen[spos->second->seqid].end()){
+	  continue;
+	}
+
+	int otherPosSecond = avgP(spos->second);
+	
+	cerr << "INFO p: " << hpos->second->pos <<  " " << otherPos        << endl;
+	cerr << "INFO p: " << spos->second->pos <<  " " << otherPosSecond  << endl;
+	cerr << " "  << endl;
+	
+	if(abs(otherPos - spos->second->pos) < 500 && abs(hpos->second->pos - otherPosSecond) < 500 ){
+
+	  seen[spos->second->seqid][spos->second->pos] = 1; 
+	  seen[spos->second->seqid][hpos->second->pos] = 1; 
+
+
+	  int lPos = hpos->second->pos;
+	  int rPos = spos->second->pos;
+	  
+	  if(lPos > rPos){
+	    int tmp = lPos;
+	    lPos = rPos;
+	    rPos = tmp;
+	  }
+
+
+	  cerr << "INFO: joining deletion breakpoints: " <<  lPos << " " << rPos << endl;
+	  
+	  breakpoints * bp = new breakpoints;
+
+	  bp->two          = true                   ;
+	  bp->type         = 'D'                    ;
+	  bp->seqidIndexL  = hpos->second->seqid    ;
+	  bp->seqidIndexR  = hpos->second->seqid    ;
+	  bp->merged       = 1                      ;
+	  bp->five         = lPos                   ;
+	  bp->three        = rPos                   ;
+	  bp->svlen        = rPos - lPos            ;
+	  bp->totalSupport = 0                      ;
+
+	  br.push_back(bp);
+	}		
+      }
+    }
+
+    cerr << "INFO n half:" << hfs->second.size() << endl;
+    
+  }
+
+}
+
+
 //-------------------------------    MAIN     --------------------------------
 /*
  Comments:
@@ -3360,6 +3520,8 @@ int main( int argc, char** argv)
  dump(globalTrees);
 #endif
 
+ map<int, map <int, node*> > delBreak;
+
  cerr << "INFO: Finding breakpoints in trees." << endl; 
 #pragma omp parallel for schedule(dynamic, 3)
  for(unsigned int i = 0 ; i < globalTrees.size(); i++){
@@ -3376,22 +3538,23 @@ int main( int argc, char** argv)
      omp_unset_lock(&glock);
      continue;
    }
-   callBreaks(globalTrees[i], allBreakpoints);   
+   callBreaks(globalTrees[i], allBreakpoints, delBreak);   
  }
+
+ mergeDels(delBreak, allBreakpoints);
 
  cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
 
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
-
+ 
  cerr << "INFO: Gathering alleles." << endl;
-
+ 
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
    genAlleles(allBreakpoints[z], RefSeq, sequences);
    
    if((z % 100) == 0){
      cerr << "INFO: generated " << z << " alleles" << endl;
    }
-   
 }
 
  int NGeno = 0;
