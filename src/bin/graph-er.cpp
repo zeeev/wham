@@ -3096,18 +3096,11 @@ void genotype(string & bamF, breakpoints * br){
 	aligner.Align(revcomp.c_str(), br->alleles.front().c_str(),
 		      br->alleles.front().size(),  filter, &alignment);
 
-	double pR = pBases(alignment.cigar, revqual);
+	pR = pBases(alignment.cigar, revqual);
 
       }
 
     }
-
-
-
-
-
-
-
   
     aal += log(exp(pR - 2) + exp(pR -2));
     abl += log(exp(pR - 2) + exp(pA -2));
