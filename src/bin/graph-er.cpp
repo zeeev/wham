@@ -56,6 +56,9 @@ THE SOFTWARE.
 // gsl header
 #include "gauss.h"
 
+#define BAM_CIGAR_SHIFT 4
+#define BAM_CIGAR_MASK  ((1 << BAM_CIGAR_SHIFT) - 1)
+
 using namespace std;
 using namespace BamTools;
 
@@ -246,6 +249,26 @@ void Comp(string & seq){
 	  }
 	}
     } 
+}
+
+
+int phred(double v){
+
+  double s = (-10 * log10(v) ); 
+  
+  if(int(s) == 0){
+    return 1;
+  }
+  else{
+    return int(s);
+  }
+
+}
+
+double unPhred(int v){
+  
+  return pow(10.0,(-1*double(v)/10));
+
 }
 
 
@@ -603,9 +626,8 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, 200) +
       rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
 
-    //duplication;
-
   }
+    //duplication;
   if(bp->type == 'U'){
     if((bp->five - 500) < 0){
       return false;
@@ -613,10 +635,11 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
       return false;
     }
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, + bp->svlen +200)
-      +rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five + 1, bp->svlen)
-      +rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three  +1, 200);
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200 , bp->svlen + 400);
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 , bp->svlen + 200)
+      + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five , bp->svlen)
+      + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three , 200);
+
   }
   if(bp->type == 'V'){
 
@@ -626,24 +649,38 @@ bool genAlleles(breakpoints * bp, FastaReference & rs, RefVector & rv){
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
       return false;
     }
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );    
-    string inv = ref.substr(200, bp->svlen );
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five, (bp->svlen) );    
+    string inv = ref;
     inv = string(inv.rbegin(), inv.rend());
     Comp(inv);
     
-    //    cerr << "INV allele: " << rv[bp->seqidIndexL].RefName << " " << bp->five << " " << bp->three << " " << bp->svlen << endl;
-    //    cerr << inv << endl ;
-    //    cerr << ref << endl << endl;
+    //cerr << "INV allele: " << rv[bp->seqidIndexL].RefName << " " << bp->five << " " << bp->three << " " << bp->svlen << endl;
+    //cerr << inv << endl ;
+    //cerr << ref << endl ;
+    //cerr << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -5, 10) << endl;
 
-    alt = ref.substr(0,200) + inv + ref.substr(ref.size() - 200, 200);
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five-200, 200) + inv + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five + bp->svlen, 200);
+    //cerr << alt << endl;
+
   }
     
-  if(ref.size() > 800){
+  if(ref.size() > 800 && bp->type != 'U'){
     ref = ref.substr(0,400) + ref.substr(ref.size()-400,  400);
   }
-  if(alt.size() > 800){
+  if(alt.size() > 800 && bp->type != 'U'){
     alt = alt.substr(0,400) + alt.substr(alt.size() -400, 400);
   }
+  
+  if(ref.size() > 1200 && bp->type == 'U'){
+    ref = ref.substr(0,400) + ref.substr(ref.size()-400,  400);
+    
+  }
+  if(alt.size() > 1200 && bp->type == 'U'){
+  
+    alt = alt.substr(0,400) + alt.substr(bp->svlen, 400) +  alt.substr(alt.size() -400, 400); 
+
+  }
+
 
   bp->alleles.push_back(ref) ;
   bp->alleles.push_back(alt) ;
@@ -1367,8 +1404,8 @@ void deviantInsertSize(readPair * rp, char supportType){
 
 */
 
-void processPair(readPair * rp, map<string, int> & il, 
-		 double * low, double * high){
+void processPair(readPair * rp,  map<string, int> & il, 
+		 double   * low, double * high){
 
 #ifdef DEBUG
   cerr << "processing pair" << endl;
@@ -1387,13 +1424,14 @@ void processPair(readPair * rp, map<string, int> & il,
 #endif 
     return;
   }
-  
+ 
+  // not doing translocations 
+ 
   if(rp->al1.RefID != rp->al2.RefID){
     return;
   }
-  //  cerr << joinCig(rp->al1.CigarData) << endl;
+
   indelToGraph(rp->al1);
-  //  cerr << joinCig(rp->al2.CigarData) << endl;
   indelToGraph(rp->al2);
   
   if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
@@ -1401,13 +1439,10 @@ void processPair(readPair * rp, map<string, int> & il,
 	&& ! IsLongClip(rp->al2.CigarData, 10)){
       return;
     }
-    
     if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
        || (! rp->al1.IsReverseStrand() && ! rp->al2.IsReverseStrand()) ){
       sameStrand = true;
     }
-    
-    
     if( abs(rp->al1.InsertSize) > *high){
       //      cerr << rp->al1.Name << " H " << rp->al1.InsertSize << endl;
       if(sameStrand){
@@ -1426,7 +1461,12 @@ void processPair(readPair * rp, map<string, int> & il,
 	deviantInsertSize(rp, 'L');
       }
     }
-  }           
+  }
+  // one is not mapped
+  else{
+    //   mateNotMapped(rp, 'K');
+  }
+          
   if(rp->al1.GetTag("SA", sa1)){
     vector<saTag> parsedSa1;
     parseSA(parsedSa1, sa1, il);
@@ -2222,29 +2262,29 @@ void removeEdges(vector<node *> & tree, int pos){
 
 void joinNodes(node * L, node * R, vector<node *> & tree){
 
+
+  // quantifying which node has more support
+
   int lSupport = 0;
   int rSupport = 0;
   
   for(vector<edge *>::iterator le = L->eds.begin(); le != L->eds.end(); le++){
     lSupport += (*le)->support['D'] + (*le)->support['S'] + (*le)->support['I']
-      +  (*le)->support['H'] +  (*le)->support['L'];
+      +  (*le)->support['H'] +  (*le)->support['L'] + (*le)->support['X'] 
+      + (*le)->support['M'] + (*le)->support['R'] + (*le)->support['V'] ;
   }
   for(vector<edge *>::iterator re = R->eds.begin(); re != R->eds.end(); re++){
     lSupport += (*re)->support['D'] + (*re)->support['S'] + (*re)->support['I']
-      +  (*re)->support['H'] +  (*re)->support['L'];
+      +  (*re)->support['H'] +  (*re)->support['L'] +  (*re)->support['X'] 
+      +  (*re)->support['M'] +  (*re)->support['R'] +  (*re)->support['V'] ;
   }
   
-  //  cerr << "Joining nodes: " << L->pos << " " << R->pos << endl;
-
   if(lSupport <= rSupport){
-
-    //cerr << "Joining left" << endl;
 
     L->collapsed = true;
 
     for(vector<edge *>::iterator lc =  L->eds.begin(); lc != L->eds.end(); lc++){
 
-      //cerr << "edge: " <<  (*lc)->L->pos << " " << (*lc)->R->pos << endl;
 
       edge * e; 
 
@@ -2254,8 +2294,6 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 	otherP = (*lc)->R->pos;
       }
       if(findEdge(R->eds, &e,  otherP)){
-
-	//cerr << "P: " <<  e->L->pos << endl;
 
 	e->support['I'] += (*lc)->support['I'];
 	e->support['D'] += (*lc)->support['D'];
@@ -2357,12 +2395,9 @@ void collapseTree(vector<node *> & tree){
       //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
       if(abs( (*tr)->pos - (*tt)->pos ) < 20 && ! connectedNode((*tr), (*tt))){
-	//neighborNode((*tr)->eds, (*tt)->eds);
 	
 	joinNodes((*tr), (*tt), tree);
-	
-	//	cerr << "close: " << (*tr)->pos << " " << (*tt)->pos << " " << shared << endl;
-      
+	      
       }
     }
   }
@@ -2861,6 +2896,80 @@ void dump(vector< vector< node *> > & allTrees){
  Function returns: NA
 */
 
+double pBases(vector<unsigned int> & cigar, string & baseQs){
+  
+
+  double phredSum   = 0;
+  int runningPos = 0; 
+
+  for(unsigned int i = 0; i < cigar.size(); i++){
+    
+    int op = cigar[i]&BAM_CIGAR_MASK  ;
+    int l  = cigar[i]>>BAM_CIGAR_SHIFT  ;
+
+    for(unsigned int j = 0; j < l; j++){      
+
+      // match M
+      if(op == 0 ){
+	phredSum += log( 1 - unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+	runningPos += 1;
+	continue;
+      }
+      // insertion I
+      if(op == 1 ){
+	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+	runningPos += 1;
+	continue;
+      }
+      // deletion D
+      if(op == 2 ){
+	phredSum += -4.60517;
+
+	continue;
+      }
+      // skip N
+      if(op == 3 ){
+	runningPos += 1;
+	continue;
+      }
+      // softclip S
+      if(op == 4 ){
+	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+	runningPos += 1;
+	continue;
+      }
+      // hardclip H
+      if(op == 5 ){
+	cerr << "FATAL: hard clip made it into genotyping." << endl;
+	cerr << "INFO : report bug to author.             " << endl;
+	exit(1);
+      }    
+      // padding P
+      if(op == 6 ){
+        cerr << "FATAL: padded seq made it into genotyping." << endl;
+        cerr << "INFO : report bug to author.             " << endl;
+        exit(1);
+      }
+      // match =
+      if(op == 7 ){
+
+	phredSum += log( 1 - unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+
+	runningPos += 1;
+	continue;
+      }
+      // mismatch X
+      if(op == 8 ){
+	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+	runningPos += 1;
+	continue;
+      }
+    }
+  }
+
+  return phredSum;
+}
+
 void genotype(string & bamF, breakpoints * br){
 
   BamReader bamR;
@@ -2876,7 +2985,7 @@ void genotype(string & bamF, breakpoints * br){
     }
   }
 
-  if(!bamR.SetRegion(br->seqidIndexL, br->five - 1, br->seqidIndexL, br->five + 1)){
+  if(!bamR.SetRegion(br->seqidIndexL, br->five, br->seqidIndexL, br->five)){
     cerr << "FATAL: cannot set region for genotyping." << endl;
   }
 
@@ -2909,7 +3018,7 @@ void genotype(string & bamF, breakpoints * br){
     reads.push_back(al);
   }
   if(br->two){
-    if(!bamR.SetRegion(br->seqidIndexL, br->three -1, br->seqidIndexL, br->three +1)){
+    if(!bamR.SetRegion(br->seqidIndexL, br->three, br->seqidIndexL, br->three)){
       cerr << "FATAL: cannot set region for genotyping." << endl;
       exit(1);
     }
@@ -2947,62 +3056,64 @@ void genotype(string & bamF, breakpoints * br){
   StripedSmithWaterman::Alignment alignment;
   // Aligns the query to the ref
 
-  vector<double> refScores ;
-  vector<double> altScores ;
-  vector<double> alt2Scores;
 
   double aal = 0;
   double abl = 0;
   double bbl = 0;
 
+  int nref   = 0;
+  int nalt   = 0;
+
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
     aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(), 
 		  br->alleles.front().size(), filter, &alignment);
+   
+    double pR = pBases(alignment.cigar, (*it).Qualities);
 
-    refScores.push_back(double(alignment.sw_score));
+
     aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
 		  br->alleles.back().size(),  filter, &alignment);
 
-    altScores.push_back(double(alignment.sw_score));
-    
-    double mappingP = -1;
+    double pA = pBases(alignment.cigar, (*it).Qualities);
 
-    if( altScores.back() >= refScores.back() ){
+
+    // checking for flipped reads
+
+    if(br->type == 'V'){
+
+      string revcomp = string((*it).QueryBases.rbegin(), (*it).QueryBases.rend());
+      Comp(revcomp);
+      string revqual = string((*it).Qualities.rbegin(), (*it).Qualities.rend()); 
+
+      aligner.Align(revcomp.c_str(), br->alleles.back().c_str(),
+		    br->alleles.back().size(),  filter, &alignment);
       
-      mappingP = 1 - (altScores.back() / (altScores.back() + refScores.back())) ;
+      double pA1 = pBases(alignment.cigar, revqual);
+      
+      if(pA1 > pA){
+	pA = pA1;
+	aligner.Align(revcomp.c_str(), br->alleles.front().c_str(),
+		      br->alleles.front().size(),  filter, &alignment);
 
-      if(mappingP == 1 ){
-	mappingP = 0.9999;
-      }
-      if(mappingP == 0 ){
-	mappingP = 0.0001;
+	double pR = pBases(alignment.cigar, revqual);
+
       }
 
-      // alt
-      aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
-      abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
-      bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
     }
-    else{
-      mappingP = 1 - (refScores.back() / (altScores.back() + refScores.back()));
 
-      if(mappingP == 1 ){
-        mappingP = 0.9999;
-      }
-      if(mappingP == 0 ){
-        mappingP = 0.0001;
-      }
-      //ref
-      aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
-      abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
-      bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
-    }
+
+
+
+
+
+
+  
+    aal += log(exp(pR - 2) + exp(pR -2));
+    abl += log(exp(pR - 2) + exp(pA -2));
+    bbl += log(exp(pA - 2) + exp(pA -2));
+  
   }
-
-  aal = aal - log(pow(2,reads.size())); 
-  abl = abl - log(pow(2,reads.size())); 
-  bbl = bbl - log(pow(2,reads.size()));
 
   vector<double> gl;
   gl.push_back(aal);
@@ -3017,83 +3128,6 @@ void genotype(string & bamF, breakpoints * br){
     index = 2;
   }
 
-
-  double aal2 = 0;
-  double abl2 = 0;
-  double bbl2 = 0;
-
-  if(br->alleles.size() > 2){
-
-    for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
-
-      aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(),
-		    br->alleles.front().size(), filter, &alignment);
-
-      aligner.Align((*it).QueryBases.c_str(), br->alleles[1].c_str(),
-		    br->alleles[1].size(),  filter, &alignment);
-
-      alt2Scores.push_back(double(alignment.sw_score));
-
-      double mappingP = -1;
-
-      if( altScores.back() >= refScores.back() ){
-	
-	mappingP = 1 - (altScores.back() / (altScores.back() + refScores.back())) ;
-	
-	if(mappingP == 1 ){
-	  mappingP = 0.9999;
-	}
-	if(mappingP == 0 ){
-	  mappingP = 0.0001;
-	}
-	// alt
-	aal += log((2-2) * (1-mappingP) + (2*mappingP)) ;
-	abl += log((2-1) * (1-mappingP) + (1*mappingP)) ;
-	bbl += log((2-0) * (1-mappingP) + (0*mappingP)) ;
-      }
-      else{
-	mappingP = 1 - (refScores.back() / (altScores.back() + refScores.back()));
-	
-	if(mappingP == 1 ){
-	  mappingP = 0.9999;
-	}
-	if(mappingP == 0 ){
-	  mappingP = 0.0001;
-	}
-	//ref
-	aal += log((2 - 2)*mappingP + (2*(1-mappingP)));
-	abl += log((2 - 1)*mappingP + (1*(1-mappingP)));
-	bbl += log((2 - 0)*mappingP + (0*(1-mappingP)));
-      }
-    }
-
-    aal2 = aal2 - log(pow(2,reads.size()));
-    abl2 = abl2 - log(pow(2,reads.size()));
-    bbl2 = bbl2 - log(pow(2,reads.size()));
-
-  }
-
-  vector<double> gl2;
-  gl2.push_back(aal2);
-  gl2.push_back(abl2);
-  gl2.push_back(bbl2);
-
-//  int index2 = 0;
-//  if(abl2 > aal2 && abl2 > bbl2){
-//    index2 = 1;
-//  }
-//  if(bbl2 > aal2 && bbl2 > abl2){
-//    index2 = 2;
-//  }
-//  
-//  if(gl[index] < gl2[index2]){
-//    gl.clear();
-//    gl.push_back(aal2);
-//    gl.push_back(abl2);
-//    gl.push_back(bbl2);
-//    index = index2;
-//    br->type = 'U';
-//  }
 
 
   br->genotypeLikelhoods.push_back(gl);
@@ -3312,7 +3346,6 @@ void gatherBamStats(string & targetfile){
  // insertDists.swm[ targetfile ] = sw_mu;
  // insertDists.sws[ targetfile ] = sw_sd;
  
-
  // cerr << "dist: " << join(randomSWScore, ",") << endl;
 
  cerr << "INFO: for file:" << targetfile << endl
@@ -3382,9 +3415,6 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 
 	int otherPosSecond = avgP(spos->second);
 	
-	cerr << "INFO p: " << hpos->second->pos <<  " " << otherPos        << endl;
-	cerr << "INFO p: " << spos->second->pos <<  " " << otherPosSecond  << endl;
-	cerr << " "  << endl;
 	
 	if(abs(otherPos - spos->second->pos) < 500 && abs(hpos->second->pos - otherPosSecond) < 500 ){
 
@@ -3421,7 +3451,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
       }
     }
 
-    cerr << "INFO n half:" << hfs->second.size() << endl;
+
     
   }
 
