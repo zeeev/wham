@@ -237,9 +237,10 @@ string join(vector<double> & ints, string sep){
 
 
 
-int totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
+double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
   int sum = 0;
+  int n   = 0;
 
   // Declares a default Aligner
   StripedSmithWaterman::Aligner aligner;
@@ -251,11 +252,23 @@ int totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
   for(vector<BamAlignment>::iterator r = reads.begin(); 
       r != reads.end(); r++){
+
+    
+    if((*r).CigarData.front().Type != 'S' && (*r).CigarData.back().Type != 'S'){
+      continue;
+    }
+
+    n += 1;
+
     aligner.Align((*r).QueryBases.c_str(), br->alleles.back().c_str(),
                   br->alleles.back().size(),  filter, &alignment);
-    sum += alignment.sw_score;
+
+    sum +=  alignment.sw_score;
+
+
+
   }
-  return sum;
+  return double(sum) / double(n);
 }
 
 
@@ -292,13 +305,12 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
       exit(1);
     }
   }
+  omp_unset_lock(&lock);
 
   if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, br->seqidIndexL, br->five +buffer)){
     cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
     exit(1);
   }
-
-  omp_unset_lock(&lock);
 
   BamAlignment al;
 
@@ -771,6 +783,9 @@ void getTree(node * n, vector<node *> & ns){
 
 bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     
+
+  //  cerr << "GenAllele: " << bp->five << " " << bp->three << " " << bp->svlen << endl;
+
   FastaReference rs;
 
   omp_set_lock(&lock);
@@ -790,9 +805,17 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     }
 
     bp->seqid = rv[bp->seqidIndexL].RefName;
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, bp->svlen + 400 );
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 +1, 200) +
-      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, bp->svlen + 400 );
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, 200) + 
+      // bp->five = first base of deletion -1 last ref base + 1 for fasta 
+      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200); // start one after deletion ends
+
+//    cerr << ">R" << endl;
+//    cerr << ref << endl;
+//    cerr << ">A" << endl;
+//    cerr << alt << endl;
+//    cerr << endl;
+
 
   }
     //duplication;
@@ -847,6 +870,8 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
   bp->alleles.push_back(ref) ;
   bp->alleles.push_back(alt) ;
+
+  //  cerr << "RS: " << ref.size() << " AS: " << alt.size() << endl;
 
   return true;
 }
@@ -1941,6 +1966,13 @@ void loadBam(string & bamFile){
        << pairStore.size() 
        << " reads that were not processed" 
        << endl; 
+
+
+  for(map<string, readPair *>::iterator rp = pairStore.begin();
+      rp != pairStore.end(); rp++){
+    delete rp->second;
+  }
+
 }
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
@@ -2884,9 +2916,9 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->seqidIndexL = putative.front()->seqid;
       bp->seqidIndexR = putative.front()->seqid;
       bp->merged      = 0                      ;
-      bp->five        = lPos                   ;
-      bp->three       = rPos                   ;
-      bp->svlen       = rPos - lPos            ;
+      bp->five        = lPos + 1               ;  // always starts after last node
+      bp->three       = rPos - 1               ;
+      bp->svlen       = bp->three - bp->five   ;
       bp->totalSupport = totalS                ;
       return true;
     }
@@ -3103,7 +3135,7 @@ void genotype(string & bamF, breakpoints * br){
 
   vector<BamAlignment> reads;
 
-  int buffer = 0;
+  int buffer = 20;
     
   while(reads.size() < 2){
     getPopAlignments(bamFiles, br, reads, buffer);
@@ -3119,7 +3151,6 @@ void genotype(string & bamF, breakpoints * br){
   // Declares an alignment that stores the result
   StripedSmithWaterman::Alignment alignment;
 
-
   double aal = 0;
   double abl = 0;
   double bbl = 0;
@@ -3132,7 +3163,7 @@ void genotype(string & bamF, breakpoints * br){
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
     if(nReads > 100){
-      break;
+      //      break;
     }
     
     nReads += 1;
@@ -3143,10 +3174,19 @@ void genotype(string & bamF, breakpoints * br){
    
     double pR = pBases(alignment.cigar, (*it).Qualities);
 
+    
+    //    cerr << "RI: " << (*it).Position << " " << (*it).GetEndPosition() << " " << joinCig((*it).CigarData) << endl;
+    //cerr << "aref pref:" << alignment.sw_score << " " << pR << endl;
+
     aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
 		  br->alleles.back().size(),  filter, &alignment);
 
+
+
+
     double pA = pBases(alignment.cigar, (*it).Qualities);
+
+    //    cerr << "aalt palt:" << alignment.sw_score << " " << pA << endl << endl;
 
     if(br->type == 'V'){
 
@@ -3667,52 +3707,57 @@ int main( int argc, char** argv)
  #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
    vector<BamAlignment> reads;
-   int buffer = 5;
+   int buffer = 20;
    while(reads.size() < 2){
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
    }   
-   int startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
+   double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
    
-   int oldScore = startingScore;
+   double  oldScore = startingScore;
    int oldStart = allBreakpoints[z]->five ;
    int oldEnd   = allBreakpoints[z]->three;
    int flag     = 0;
 
    breakpoints * secondary = new breakpoints;
 
-   for(int f = -5; f < 5; f++){
+   
+   for(int f = -5; f <= 5; f++){
+
      *secondary = *allBreakpoints[z];
-     secondary->five  += f;
-     
+
      if(secondary->five >= secondary->three){
        continue;
      }
-     secondary->svlen = secondary->three - secondary->five; 
+     secondary->svlen = (secondary->three - secondary->five); 
      genAlleles(secondary, globalOpts.fasta, sequences);
-     int newScore = totalAlignmentScore(reads, secondary);
+     double newScore = totalAlignmentScore(reads, secondary);
      
      if(newScore > startingScore){
        startingScore = newScore;
        allBreakpoints[z]->five = secondary->five;
+       allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
        flag = 1;
        allBreakpoints[z]->refined = 1;
      }
    }
+   *secondary = *allBreakpoints[z];
+   for(int t = -5; t <= 5; t++){
 
-   for(int t = -5; t < 5; t++){
      *secondary = *allBreakpoints[z];
+
      secondary->three  += t;
 
      if(secondary->three  <= secondary->five){
        continue;
      }
-     secondary->svlen = secondary->three - secondary->five;
+     secondary->svlen = (secondary->three - secondary->five);
      genAlleles(secondary, globalOpts.fasta, sequences);
-     int newScore = totalAlignmentScore(reads, secondary);
+     double  newScore = totalAlignmentScore(reads, secondary);
      if(newScore > startingScore){
        startingScore = newScore;
        allBreakpoints[z]->three = secondary->three;
+       allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
        flag = 1;
        allBreakpoints[z]->refined = 1;
      }
