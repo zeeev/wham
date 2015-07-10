@@ -254,8 +254,10 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
       r != reads.end(); r++){
 
     
-    if((*r).CigarData.front().Type != 'S' && (*r).CigarData.back().Type != 'S'){
-      continue;
+    if((*r).IsMapped()){
+      if((*r).CigarData.front().Type != 'S' && (*r).CigarData.back().Type != 'S'){
+	continue;
+      }
     }
 
     n += 1;
@@ -263,12 +265,18 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
     aligner.Align((*r).QueryBases.c_str(), br->alleles.back().c_str(),
                   br->alleles.back().size(),  filter, &alignment);
 
+
     sum +=  alignment.sw_score;
 
 
 
   }
-  return double(sum) / double(n);
+  if(sum > 0){
+    return double(sum) / double(n);
+  }
+  else{
+    return 0;
+  }
 }
 
 
@@ -728,13 +736,10 @@ void getTree(node * n, vector<node *> & ns){
 
   ns.push_back(n);
 
-  // if something is pushed to the back of the stack it changes the positions ! be warned.
+  // if something is pushed to the back of the vector it changes the positions ! be warned.
 
   while(!edges.empty()){
     
-    //cerr << " getting graph: left pointer POS: " << edges.back()->L->pos << " right pointer POS: " <<  edges.back()->R->pos << endl;
-    
-
      uint hit = 0;
      
      if(seen.find(edges.back()->L->pos) != seen.end() && seen.find(edges.back()->R->pos) != seen.end() ){
@@ -783,9 +788,6 @@ void getTree(node * n, vector<node *> & ns){
 
 bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     
-
-  //  cerr << "GenAllele: " << bp->five << " " << bp->three << " " << bp->svlen << endl;
-
   FastaReference rs;
 
   omp_set_lock(&lock);
@@ -794,6 +796,9 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
   string ref ;
   string alt ;
+
+
+  bp->seqid = rv[bp->seqidIndexL].RefName;
 
   if(bp->type == 'D'){   
 
@@ -804,18 +809,10 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
       return false;
     }
 
-    bp->seqid = rv[bp->seqidIndexL].RefName;
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, bp->svlen + 400 );
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, 200) + 
       // bp->five = first base of deletion -1 last ref base + 1 for fasta 
       rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200); // start one after deletion ends
-
-//    cerr << ">R" << endl;
-//    cerr << ref << endl;
-//    cerr << ">A" << endl;
-//    cerr << alt << endl;
-//    cerr << endl;
-
 
   }
     //duplication;
@@ -847,7 +844,7 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200, (bp->svlen + 400)) ;
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five-200, 200) + inv + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
 
-
+    
   }
     
   if(ref.size() > 800 && bp->type != 'U'){
@@ -1952,6 +1949,7 @@ void loadBam(string & bamFile){
       omp_unset_lock(&lock);
     }
     else{
+      delete regions[re];
       omp_set_lock(&lock);
       Mb += 1;
       if((Mb % 10) == 0 ){
@@ -1967,7 +1965,7 @@ void loadBam(string & bamFile){
        << " reads that were not processed" 
        << endl; 
 
-
+  // freeing memory
   for(map<string, readPair *>::iterator rp = pairStore.begin();
       rp != pairStore.end(); rp++){
     delete rp->second;
@@ -2999,20 +2997,15 @@ void gatherTrees(vector<vector<node *> > & globalTrees){
     for(map<int, node*>::iterator itt = it->second.begin(); itt != it->second.end(); itt++){
 
       if(lookup[it->first].find(itt->first) != lookup[it->first].end() ){
-	//      cerr << "seen: " << it->first << " " << itt->first << endl;
       }
       else{
 	lookup[it->first][itt->first] = 1;
-
 	vector<node *> tree;
 	getTree(globalGraph.nodes[it->first][itt->first], tree);
 	for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
           lookup[(*ir)->seqid][(*ir)->pos] = 1;
         }
-
 	globalTrees.push_back(tree);
-
-
       }
     }
   }
@@ -3555,11 +3548,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	}		
       }
     }
-
-
-    
   }
-
 }
 
 
@@ -3701,7 +3690,6 @@ int main( int argc, char** argv)
    return 0;
  }
 
-
  nAlleles = 0;
  cerr << "INFO: Refining breakpoints using SW alignments" << endl;
  #pragma omp parallel for
@@ -3712,20 +3700,27 @@ int main( int argc, char** argv)
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
    }   
+   cerr << allBreakpoints[z]->seqid << " " 
+	<< allBreakpoints[z]->five  << " " 
+	<< allBreakpoints[z]->three << " " 
+	<< allBreakpoints[z]->type  << " " 
+	<< allBreakpoints[z]->svlen << endl;
+
+
    double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
-   
+
+
    double  oldScore = startingScore;
-   int oldStart = allBreakpoints[z]->five ;
-   int oldEnd   = allBreakpoints[z]->three;
-   int flag     = 0;
+   int oldStart     = allBreakpoints[z]->five ;
+   int oldEnd       = allBreakpoints[z]->three;
+   int flag         = 0;
 
    breakpoints * secondary = new breakpoints;
 
-   
+
+
    for(int f = -5; f <= 5; f++){
-
      *secondary = *allBreakpoints[z];
-
      if(secondary->five >= secondary->three){
        continue;
      }
@@ -3741,13 +3736,9 @@ int main( int argc, char** argv)
        allBreakpoints[z]->refined = 1;
      }
    }
-   *secondary = *allBreakpoints[z];
    for(int t = -5; t <= 5; t++){
-
      *secondary = *allBreakpoints[z];
-
      secondary->three  += t;
-
      if(secondary->three  <= secondary->five){
        continue;
      }
@@ -3762,6 +3753,9 @@ int main( int argc, char** argv)
        allBreakpoints[z]->refined = 1;
      }
    }
+   
+   delete secondary;
+  
 
    if(flag == 1){
      allBreakpoints[z]->svlen =   allBreakpoints[z]->three - allBreakpoints[z]->five;
@@ -3773,15 +3767,13 @@ int main( int argc, char** argv)
      omp_unset_lock(&lock);  
    }
 
-   delete secondary;
-
    omp_set_lock(&glock);
    nAlleles += 1;
    if((nAlleles % 10) == 0){
      cerr << "INFO: refined " << nAlleles  << " breakpoint pairs / " << allBreakpoints.size()  << endl;
    }
    omp_unset_lock(&glock);
-
+  
  }
 
  cerr << "INFO: Finished breakpoints using SW alignments" << endl;
