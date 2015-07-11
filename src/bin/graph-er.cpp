@@ -3707,12 +3707,6 @@ int main( int argc, char** argv)
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
    }   
-   cerr << allBreakpoints[z]->seqid << " " 
-	<< allBreakpoints[z]->five  << " " 
-	<< allBreakpoints[z]->three << " " 
-	<< allBreakpoints[z]->type  << " " 
-	<< allBreakpoints[z]->svlen << endl;
-
 
    double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
 
