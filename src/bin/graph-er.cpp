@@ -3177,7 +3177,7 @@ void genotype(string & bamF, breakpoints * br){
 
     
     //    cerr << "RI: " << (*it).Position << " " << (*it).GetEndPosition() << " " << joinCig((*it).CigarData) << endl;
-    cerr << "aref pref:" << alignment.sw_score << " " << pR << endl;
+    //cerr << "aref pref:" << alignment.sw_score << " " << pR << endl;
 
     aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
 		  br->alleles.back().size(),  filter, &alignment);
@@ -3185,7 +3185,7 @@ void genotype(string & bamF, breakpoints * br){
 
     double pA = pBases(alignment.cigar, (*it).Qualities);
 
-    cerr << "aalt palt:" << alignment.sw_score << " " << pA << endl << endl;
+    //    cerr << "aalt palt:" << alignment.sw_score << " " << pA << endl << endl;
 
     if(br->type == 'V'){
 
@@ -3214,7 +3214,7 @@ void genotype(string & bamF, breakpoints * br){
     else{
       nalt += 1;
     }
-    cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
+    //    cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
 
     aal += log(exp(pR - 2) + exp(pR -2));
     abl += log(exp(pR - 2) + exp(pA -2));
