@@ -11,7 +11,7 @@
 CC=g++
 GCC=gcc
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS= -g -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x #-D_NO_RAZF
+CFLAGS= -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x #-D_NO_RAZF
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/ -Isrc/fastahack -Isrc/Complete-Striped-Smith-Waterman-Library/src/ -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm 
@@ -19,8 +19,8 @@ RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
 
 
-all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM buildDumper clean
-debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD clean
+all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM whamGraph clean
+debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD graphDebug clean
 
 mvSSW:
 	cp src/lib/ssw.c src/Complete-Striped-Smith-Waterman-Library/src
@@ -45,7 +45,10 @@ buildWHAMDUMPER:
 	$(CC) $(CFLAGS) -g src/lib/*cpp   src/bin/multi-wham.cpp $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-DUMPER $(RUNTIME)
 buildWHAMBAMGENE:
 	$(CC) $(CFLAGS) -g src/lib/*cpp  src/bin/multi-wham-testing-gene.cpp  $(INCLUDE) $(LIBS) -o $(OUTFOLD)WHAM-BAM-GENE $(RUNTIME)
-buildDumper:
-	$(CC) $(CFLAGS) -g src/lib/*cpp src/bin/graph-er.cpp src/lib/gauss.c $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
+whamGraph:
+	$(CC) $(CFLAGS)  -O3 src/lib/*cpp src/bin/graph-er.cpp src/lib/gauss.c $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
+graphDebug:
+	$(CC) $(CFLAGS) -g -DDEBUG src/lib/*cpp src/bin/graph-er.cpp src/lib/gauss.c $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
+
 clean:
 	-@rm *.a
