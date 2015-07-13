@@ -66,6 +66,7 @@ struct options{
   std::vector<string> targetBams;
   bool statsOnly         ;  
   bool skipGeno          ;
+  int MQ                 ;
   int nthreads           ;
   string fasta           ;
   string graphOut        ;
@@ -158,7 +159,7 @@ struct breakpoints{
   vector<int>             nalt               ;
 };
 
-static const char *optString = "r:a:g:x:f:e:hsk";
+static const char *optString = "m:r:a:g:x:f:e:hsk";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -192,6 +193,64 @@ int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
 
 omp_lock_t lock;
 omp_lock_t glock;
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : bam alignemnt, pos
+
+ Function does   : adds soft clip length to end of read to see if it overlaps
+                   end pos
+
+ Function returns: bool
+
+*/
+
+bool endsBefore(BamAlignment & r, int & pos){
+  if(!r.IsMapped()){
+    return false;
+  }
+  int end = r.GetEndPosition();
+
+  if(r.CigarData.back().Type == 'S'){
+    end  += r.CigarData.back().Length;
+  }
+  if((end-5) < pos){
+    return true;
+  }
+  else{
+    return false;
+  }
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : bam alignemnt, pos
+
+ Function does   : substracts soft clip length from start to see if it overlaps
+                   start pos
+
+ Function returns: bool
+
+*/
+
+bool startsAfter(BamAlignment & r, int & pos){
+  if(!r.IsMapped()){
+    return false;
+  }
+  int start = r.Position;
+
+  if(r.CigarData.front().Type == 'S'){
+    start  -= r.CigarData.front().Length;
+  }
+  if((start+5) > pos){
+    return true;
+  }
+  else{
+    return false;
+  }
+}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -252,6 +311,11 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
   for(vector<BamAlignment>::iterator r = reads.begin(); 
       r != reads.end(); r++){
+
+    
+    if(endsBefore((*r), br->five) || startsAfter((*r), br->three)){
+      continue;
+    }
 
     
     if((*r).IsMapped()){
@@ -338,7 +402,7 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
     if(! al.IsPrimaryAlignment()){
       continue;
     }
-    if(al.IsMapped() && al.MapQuality < 10){
+    if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
       continue;
     }
 
@@ -366,7 +430,7 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
       if(! al.IsPrimaryAlignment()){
         continue;
       }
-      if(al.IsMapped() && al.MapQuality < 10){
+      if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
 	continue;
       }
 
@@ -487,6 +551,8 @@ void printHelp(void){
   cerr << "          -e - <STRING> - Comma sep. list of seqids to skip.         " << endl;
   cerr << "          -r - <STRING> - Region in format: seqid:start-end          " << endl;
   cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
+  cerr << "          -m - <INT>    - Mapping quality filter [20].               " << endl;
+
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
@@ -589,8 +655,14 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "POS=" << (*c)->five << "," << (*c)->three << ";";
     
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
-      
-      if((*c)->genotypeIndex[i] == 0){
+      if((*c)->genotypeIndex[i] == -1){
+	ss << "\t" << "./.;" << "."
+           << "," << "."
+           << "," << "."
+           << ";" << (*c)->nalt[i]
+           << ";" << (*c)->nref[i];
+      }
+      else if((*c)->genotypeIndex[i] == 0){
 	ss << "\t" << "0/0;" << (*c)->genotypeLikelhoods[i][0] 
 	   << "," << (*c)->genotypeLikelhoods[i][1] 
 	   << "," << (*c)->genotypeLikelhoods[i][2] 
@@ -1335,7 +1407,7 @@ bool pairFailed(readPair * rp){
        && rp->al2.CigarData[0].Type == 'M' ){
       return true;
     }
-    if(rp->al1.MapQuality < 20 && rp->al2.MapQuality < 20){
+    if(rp->al1.MapQuality < globalOpts.MQ && rp->al2.MapQuality < globalOpts.MQ){
       return true;
     }
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
@@ -1887,12 +1959,23 @@ void loadBam(string & bamFile){
   }
   if(region){
     
-      
-    regionDat * regionInfo = new regionDat;
-    regionInfo->seqidIndex = seqIndexLookup[regionSID];
-    regionInfo->start      = start            ;
-    regionInfo->end        = end              ; 
-    regions.push_back(regionInfo);   
+    int p = start;
+    int e = 0;
+    for(; (p+1000000) <= end; p += 1000000){
+      regionDat * regionInfo = new regionDat;
+      regionInfo->seqidIndex = seqIndexLookup[regionSID];
+      regionInfo->start      = p                      ;
+      regionInfo->end        = 1000000 + p            ; 
+      regions.push_back(regionInfo);   
+      e = p + 1000000; 
+    }
+    if(e < end){
+      regionDat * regionInfo = new regionDat;
+      regionInfo->seqidIndex = seqIndexLookup[regionSID];
+      regionInfo->start      = p                        ;
+      regionInfo->end        = end                      ;
+      regions.push_back(regionInfo);
+    }
 
   }
   else{
@@ -2035,7 +2118,12 @@ int parseOpts(int argc, char** argv)
 	{
 	  break;
 	}
-      
+      case 'm':
+	{
+	  globalOpts.MQ = atoi(((string)optarg).c_str());
+	  cerr << "INFO: Reads with mapping quality below " << globalOpts.MQ << " will be filtered. " << endl;
+	  break;
+	}
       case 'x':
 	{
 	  globalOpts.nthreads = atoi(((string)optarg).c_str());
@@ -3056,7 +3144,6 @@ void dump(vector< vector< node *> > & allTrees){
 
 double pBases(vector<unsigned int> & cigar, string & baseQs){
   
-
   double phredSum   = 0;
   int runningPos = 0; 
 
@@ -3136,7 +3223,7 @@ void genotype(string & bamF, breakpoints * br){
 
   vector<BamAlignment> reads;
 
-  int buffer = 20;
+  int buffer = 0;
     
   while(reads.size() < 2){
     getPopAlignments(bamFiles, br, reads, buffer);
@@ -3163,21 +3250,29 @@ void genotype(string & bamF, breakpoints * br){
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
+    if(endsBefore(*it, br->five) || startsAfter(*it, br->three)){
+      continue;
+    }
+
     if(nReads > 100){
       //      break;
     }
     
     nReads += 1;
 
-
     aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(), 
 		  br->alleles.front().size(), filter, &alignment);
    
     double pR = pBases(alignment.cigar, (*it).Qualities);
 
-    
-    //    cerr << "RI: " << (*it).Position << " " << (*it).GetEndPosition() << " " << joinCig((*it).CigarData) << endl;
-    //cerr << "aref pref:" << alignment.sw_score << " " << pR << endl;
+#ifdef DEBUG
+               cerr << "RI: " << (*it).Position << " " 
+		    << (*it).GetEndPosition() << " " 
+		    << joinCig((*it).CigarData) << " " 
+		    << (*it).MapQuality         << endl;
+    	   cerr << "aref pref:" << alignment.sw_score << " " << alignment.cigar_string << " " << pR << endl;
+
+#endif 
 
     aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
 		  br->alleles.back().size(),  filter, &alignment);
@@ -3185,7 +3280,11 @@ void genotype(string & bamF, breakpoints * br){
 
     double pA = pBases(alignment.cigar, (*it).Qualities);
 
-    //    cerr << "aalt palt:" << alignment.sw_score << " " << pA << endl << endl;
+#ifdef DEBUG
+
+            cerr << "aalt palt:" << alignment.sw_score << " " << alignment.cigar_string << " " << pA << endl << endl;
+
+#endif  DEBUG
 
     if(br->type == 'V'){
 
@@ -3207,14 +3306,16 @@ void genotype(string & bamF, breakpoints * br){
       }
     }
 
-
     if(pR > pA){
       nref += 1;
     }
     else{
       nalt += 1;
     }
-    //    cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
+
+#ifdef DEBUG
+    cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
+#endif 
 
     aal += log(exp(pR - 2) + exp(pR -2));
     abl += log(exp(pR - 2) + exp(pA -2));
@@ -3227,7 +3328,12 @@ void genotype(string & bamF, breakpoints * br){
   gl.push_back(abl);
   gl.push_back(bbl);
  
-  int index = 0;
+  int index = -1;
+
+  if(nref > 0 || nalt > 0){
+    index = 0;
+  }
+
   if(abl > aal && abl > bbl){
     index = 1;
   }
@@ -3569,6 +3675,7 @@ int main( int argc, char** argv)
   globalOpts.nthreads = -1;
   globalOpts.statsOnly = false;
   globalOpts.skipGeno  = false;
+  globalOpts.MQ        = 20   ;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -3707,10 +3814,7 @@ int main( int argc, char** argv)
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
    }   
-
    double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
-
-
    double  oldScore = startingScore;
    int oldStart     = allBreakpoints[z]->five ;
    int oldEnd       = allBreakpoints[z]->three;
@@ -3718,10 +3822,10 @@ int main( int argc, char** argv)
 
    breakpoints * secondary = new breakpoints;
 
-
-
    for(int f = -5; f <= 5; f++){
      *secondary = *allBreakpoints[z];
+     secondary->five = oldStart;
+     secondary->five += f;
      if(secondary->five >= secondary->three){
        continue;
      }
@@ -3739,6 +3843,7 @@ int main( int argc, char** argv)
    }
    for(int t = -5; t <= 5; t++){
      *secondary = *allBreakpoints[z];
+     secondary->three  = oldEnd;
      secondary->three  += t;
      if(secondary->three  <= secondary->five){
        continue;
