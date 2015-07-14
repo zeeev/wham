@@ -2893,9 +2893,10 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
 
 */
 
-bool detectHalfDeletion(vector<node *> tree, breakpoints * bp, node ** n){
+bool detectHalfDeletion(vector<node *> & tree, breakpoints * bp, node ** n){
   
   vector <node *> putative;
+  vector <int>    support ;
 
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
 
@@ -2908,14 +2909,35 @@ bool detectHalfDeletion(vector<node *> tree, breakpoints * bp, node ** n){
       splitR += (*es)->support['S'];
       del    += (*es)->support['D'];
     }
+
+
     if( tooFar > 2){
       putative.push_back((*t));
+      support.push_back(tooFar);
     }
   }
-  if(putative.size() == 1){
-    bp->seqidIndexL = putative.front()->seqid;
-    bp->five        = putative.front()->pos  ;
-    *n = putative.front();
+  
+
+
+  if(putative.size() >= 1){
+
+    int max   = support.front();
+    int index = 0;
+    int maxi  = 0;
+
+    for(vector<int>::iterator it = support.begin(); 
+	it != support.end();  it++){
+      
+      if(*it > max){
+	max = *it;
+	maxi = index;
+      }
+      index+=1;
+    }
+    
+    bp->seqidIndexL = putative[maxi]->seqid;
+    bp->five        = putative[maxi]->pos  ;
+    *n = putative[maxi];
 
     return true;
   }
@@ -3775,6 +3797,8 @@ int main( int argc, char** argv)
    }
    callBreaks(globalTrees[i], allBreakpoints, delBreak);   
  }
+
+ cerr << "INFO: Trying to merge deletion breakpoints: " << delBreak.size() << endl;
 
  mergeDels(delBreak, allBreakpoints);
 
