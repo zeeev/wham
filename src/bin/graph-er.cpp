@@ -140,6 +140,7 @@ struct insertDat{
 // options
 
 struct breakpoints{
+  bool fail              ;
   bool two               ;
   char type              ;
   int seqidIndexL        ;
@@ -605,6 +606,10 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
   for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
     
 
+    if((*c)->fail){
+      continue;
+    }
+
     index += 1;
    
     stringstream ss;
@@ -883,9 +888,11 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   if(bp->type == 'D'){   
 
     if((bp->five - 500) < 0){
+      bp->fail = true;
       return false;
     }
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      bp->fail = true;
       return false;
     }
 
@@ -898,9 +905,11 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     //duplication;
   if(bp->type == 'U'){
     if((bp->five - 500) < 0){
+      bp->fail = true;
       return false;
     }
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      bp->fail = true;
       return false;
     }
     ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200 , bp->svlen + 400);
@@ -912,9 +921,11 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   if(bp->type == 'V'){
 
     if((bp->five - 500) < 0){
+      bp->fail = true;
       return false;
     }
     if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
+      bp->fail = true;
       return false;
     }
     string inv = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five, (bp->svlen) );    
@@ -3066,6 +3077,7 @@ void callBreaks(vector<node *> & tree,
   node * nr; 
 
   bp = new breakpoints;
+  bp->fail    = false;
   bp->two     = false;
   bp->refined = 0;
 
@@ -3668,7 +3680,8 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	  cerr << "INFO: joining deletion breakpoints: " <<  lPos << " " << rPos << endl;
 	  
 	  breakpoints * bp = new breakpoints;
-
+	  
+	  bp->fail         = false                  ;
 	  bp->two          = true                   ;
 	  bp->type         = 'D'                    ;
 	  bp->seqidIndexL  = hpos->second->seqid    ;
@@ -3812,6 +3825,11 @@ int main( int argc, char** argv)
 
  #pragma omp parallel for
  for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
+
+   if(allBreakpoints[z]->fail){
+     continue;
+   }
+
    genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
    omp_set_lock(&glock);
    nAlleles += 1;
@@ -3832,6 +3850,12 @@ int main( int argc, char** argv)
  cerr << "INFO: Refining breakpoints using SW alignments" << endl;
  #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
+
+   if(allBreakpoints[z]->fail){
+     continue;
+   }
+
+
    vector<BamAlignment> reads;
    int buffer = 20;
    while(reads.size() < 2){
@@ -3845,6 +3869,7 @@ int main( int argc, char** argv)
    int flag         = 0;
 
    breakpoints * secondary = new breakpoints;
+   secondary->fail = false;
 
    for(int f = -5; f <= 5; f++){
      *secondary = *allBreakpoints[z];
@@ -3914,6 +3939,10 @@ int main( int argc, char** argv)
  cerr << "INFO: Genotyping SVs." << endl;
 #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
+
+   if(allBreakpoints[z]->fail){
+     continue;
+   }
 
    //#pragma omp parallel for schedule(dynamic, 3)   
    for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
