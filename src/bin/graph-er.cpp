@@ -1,5 +1,4 @@
 /*
-
 This program was created at:  Thu May  7 12:10:40 2015
 This program was created by:  Zev N. Kronenberg
 
@@ -198,6 +197,27 @@ omp_lock_t glock;
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  : p = prob successs, q prob fail, m = success, n = failure;
+
+ Function does   : adds soft clip length to end of read to see if it overlaps
+                   end pos
+
+ Function returns: bool
+
+*/
+
+
+double ldbinomial(double p, double q, int m, int n)
+{ 
+  double temp = lgamma(m + n + 1.0);
+  temp -=  lgamma(n + 1.0) + lgamma(m + 1.0);
+  temp += m*log(p) + n*log(q);
+  return temp;
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
  Function input  : bam alignemnt, pos
 
  Function does   : adds soft clip length to end of read to see if it overlaps
@@ -207,7 +227,7 @@ omp_lock_t glock;
 
 */
 
-bool endsBefore(BamAlignment & r, int & pos){
+bool endsBefore(BamAlignment & r, int & pos, int b){
   if(!r.IsMapped()){
     return false;
   }
@@ -216,7 +236,7 @@ bool endsBefore(BamAlignment & r, int & pos){
   if(r.CigarData.back().Type == 'S'){
     end  += r.CigarData.back().Length;
   }
-  if((end-5) < pos){
+  if((end) < pos+b){
     return true;
   }
   else{
@@ -236,7 +256,7 @@ bool endsBefore(BamAlignment & r, int & pos){
 
 */
 
-bool startsAfter(BamAlignment & r, int & pos){
+bool startsAfter(BamAlignment & r, int & pos, int b){
   if(!r.IsMapped()){
     return false;
   }
@@ -245,7 +265,7 @@ bool startsAfter(BamAlignment & r, int & pos){
   if(r.CigarData.front().Type == 'S'){
     start  -= r.CigarData.front().Length;
   }
-  if((start+5) > pos){
+  if((start+b) > pos){
     return true;
   }
   else{
@@ -312,17 +332,18 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
   for(vector<BamAlignment>::iterator r = reads.begin(); 
       r != reads.end(); r++){
-
     
-    if(endsBefore((*r), br->five) || startsAfter((*r), br->three)){
+    if(endsBefore((*r), br->five,10) || startsAfter((*r), br->three,10)){
       continue;
     }
 
     
     if((*r).IsMapped()){
-      if((*r).CigarData.front().Type != 'S' && (*r).CigarData.back().Type != 'S'){
-	continue;
+      if(((*r).CigarData.front().Type != 'S' && (*r).CigarData.front().Length < 10) &&
+	 ((*r).CigarData.back().Type  != 'S' && (*r).CigarData.back().Length  < 10)){
+        continue;
       }
+
     }
 
     n += 1;
@@ -900,6 +921,14 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, 200) + 
       // bp->five = first base of deletion -1 last ref base + 1 for fasta 
       rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200); // start one after deletion ends
+
+    #ifdef DEBUG
+    cerr << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 5, 5) 
+	 << " -- " 
+	 << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1,  5)
+         << endl;
+    #endif
+
 
   }
     //duplication;
@@ -3202,7 +3231,9 @@ double pBases(vector<unsigned int> & cigar, string & baseQs){
       }
       // deletion D
       if(op == 2 ){
-	phredSum += -4.60517;
+	phredSum += -3;
+	//phredSum += -4.60517;
+	//phredSum += -10;
 
 	continue;
       }
@@ -3257,15 +3288,13 @@ void genotype(string & bamF, breakpoints * br){
 
   vector<BamAlignment> reads;
 
-  int buffer = 0;
+  int buffer = 5;
     
   while(reads.size() < 2){
     getPopAlignments(bamFiles, br, reads, buffer);
     buffer = buffer + 1;     
   }
-  if(reads.size() > 100){
-    random_shuffle ( reads.begin(), reads.end() );
-  }
+
   // Declares a default Aligner
   StripedSmithWaterman::Aligner aligner;
   // Declares a default filter
@@ -3284,12 +3313,8 @@ void genotype(string & bamF, breakpoints * br){
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
-    if(endsBefore(*it, br->five) || startsAfter(*it, br->three)){
+    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)){
       continue;
-    }
-
-    if(nReads > 100){
-      //      break;
     }
     
     nReads += 1;
@@ -3356,6 +3381,29 @@ void genotype(string & bamF, breakpoints * br){
     bbl += log(exp(pA - 2) + exp(pA -2));
   
   }
+
+  int nnref = nref;
+  int nnalt = nalt;
+
+  while(nnref > 100 || nnalt > 100){
+    nnref -= 1;
+    nnalt -= 1;
+    if(nnref < 0){
+      nnref = 0;
+    }
+    if(nnalt < 0){
+      nnalt = 0;
+    }
+  }
+  
+//  cerr << ldbinomial(0.01, 0.99, nnalt, nnref) << endl;
+//  cerr << ldbinomial(0.5 , 0.5,  nnalt, nnref) << endl;
+//  cerr << ldbinomial(0.99, 0.01, nnalt, nnref) << endl;
+
+  aal += ldbinomial(0.01, 0.99, nnalt, nnref);
+  abl += ldbinomial(0.5 , 0.5,  nnalt, nnref);
+  bbl += ldbinomial(0.99, 0.01, nnalt, nnref);
+    
 
   vector<double> gl;
   gl.push_back(aal);
@@ -3855,9 +3903,8 @@ int main( int argc, char** argv)
      continue;
    }
 
-
    vector<BamAlignment> reads;
-   int buffer = 20;
+   int buffer = 1;
    while(reads.size() < 2){
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
@@ -3871,41 +3918,32 @@ int main( int argc, char** argv)
    breakpoints * secondary = new breakpoints;
    secondary->fail = false;
 
-   for(int f = -5; f <= 5; f++){
+   for(int f = -2; f <= 2; f++){
      *secondary = *allBreakpoints[z];
      secondary->five = oldStart;
      secondary->five += f;
      if(secondary->five >= secondary->three){
        continue;
      }
-     secondary->svlen = (secondary->three - secondary->five); 
-     genAlleles(secondary, globalOpts.fasta, sequences);
-     double newScore = totalAlignmentScore(reads, secondary);
-     
-     if(newScore > startingScore){
-       startingScore = newScore;
-       allBreakpoints[z]->five = secondary->five;
-       allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
-       flag = 1;
-       allBreakpoints[z]->refined = 1;
-     }
-   }
-   for(int t = -5; t <= 5; t++){
-     *secondary = *allBreakpoints[z];
-     secondary->three  = oldEnd;
-     secondary->three  += t;
-     if(secondary->three  <= secondary->five){
-       continue;
-     }
-     secondary->svlen = (secondary->three - secondary->five);
-     genAlleles(secondary, globalOpts.fasta, sequences);
-     double  newScore = totalAlignmentScore(reads, secondary);
-     if(newScore > startingScore){
-       startingScore = newScore;
-       allBreakpoints[z]->three = secondary->three;
-       allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
-       flag = 1;
-       allBreakpoints[z]->refined = 1;
+     for(int t = -2; t <= 2; t++){
+       secondary->three  = oldEnd;
+       secondary->three  += t;
+       if(secondary->three  <= secondary->five){
+	 continue;
+       }
+       
+       secondary->svlen = (secondary->three - secondary->five); 
+       genAlleles(secondary, globalOpts.fasta, sequences);
+       double newScore = totalAlignmentScore(reads, secondary);
+       
+       if(newScore > startingScore){
+	 startingScore = newScore;
+	 allBreakpoints[z]->five = secondary->five;
+	 allBreakpoints[z]->three = secondary->three;
+	 allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
+	 flag = 1;
+	 allBreakpoints[z]->refined = 1;
+       }
      }
    }
    
