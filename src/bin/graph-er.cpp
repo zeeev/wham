@@ -72,7 +72,7 @@ struct options{
   map<string, int> toSkip;
   string seqid           ;
   vector<int> region     ;
-  
+  string svs             ; 
 
 }globalOpts;
 
@@ -159,7 +159,7 @@ struct breakpoints{
   vector<int>             nalt               ;
 };
 
-static const char *optString = "m:r:a:g:x:f:e:hsk";
+static const char *optString = "b:m:r:a:g:x:f:e:hsk";
 
 int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -194,6 +194,79 @@ int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
 omp_lock_t lock;
 omp_lock_t glock;
 
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : p = prob successs, q prob fail, m = success, n = failure;
+
+ Function does   : adds soft clip length to end of read to see if it overlaps
+                   end pos
+
+ Function returns: bool
+
+*/
+
+bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup){
+
+  ifstream featureFile (globalOpts.svs.c_str());
+  
+  string line;
+  
+  if(featureFile.is_open()){
+    
+    while(getline(featureFile, line)){
+      
+      vector<string> SV = split(line, "\t");
+      
+      if( (SV[3].compare("DEL") == 0) || (SV[3].compare("DUP") == 0) || (SV[3].compare("INV") == 0) ){
+
+	breakpoints * bk = new breakpoints;
+	
+	bk->fail = false;
+	bk->two  = true ;
+	bk->type = 'D';
+	
+	if((SV[3].compare("DUP") == 0)){
+	  bk->type = 'U';
+	}
+	if((SV[3].compare("INV") == 0)){
+          bk->type = 'V';
+        }
+	if(inverse_lookup.find(SV[0]) == inverse_lookup.end() ){
+	  cerr << "FATAL: could not find seqid in inverse lookup: " << SV[0] << endl;
+	  exit(1);
+	}
+	
+	bk->seqidIndexL = inverse_lookup[SV[0]];
+	bk->seqidIndexR = inverse_lookup[SV[0]];
+	bk->seqid       = SV[0];
+	bk->merged      = false;
+	bk->refined     = false; 
+	bk->five        = atoi(SV[1].c_str());
+	bk->three       = atoi(SV[2].c_str());
+	bk->totalSupport = atoi(SV[4].c_str());
+
+	if(bk->five > bk->three){
+	  cerr << "FATAL: SV starts before it ends: " << line << endl;
+	  exit(1);
+	}
+
+	bk->svlen = (bk->three - bk->five);
+
+	
+	br.push_back(bk);
+
+      }
+      else{
+	cerr << "FATAL: loading external breakpoints: unknown type: " << SV[3] << endl;
+	exit(1);
+      }
+      
+    }
+  }
+  featureFile.close();
+  return true;
+}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -574,6 +647,7 @@ void printHelp(void){
   cerr << "          -r - <STRING> - Region in format: seqid:start-end          " << endl;
   cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
   cerr << "          -m - <INT>    - Mapping quality filter [20].               " << endl;
+  cerr << "          -b - <STRING> - external file to genotype.                 " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
@@ -2115,6 +2189,12 @@ int parseOpts(int argc, char** argv)
 	  globalOpts.skipGeno = true;
 	  break;
 	}
+      case 'b':
+	{
+	  globalOpts.svs = optarg;
+	  cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
+	  break;
+	}
       case 's':
 	{
 	  globalOpts.statsOnly = true;
@@ -3276,7 +3356,7 @@ double pBases(vector<unsigned int> & cigar, string & baseQs){
       }
     }
   }
-
+  
   return phredSum;
 }
 
@@ -3806,78 +3886,101 @@ int main( int argc, char** argv)
    mr.Close();
  }
 
- // load bam has openMP inside for running regions quickly
 
- cerr << "INFO: Loading discordant reads into graph." << endl;
-
- for(vector<string>::iterator bam = globalOpts.targetBams.begin();
-     bam != globalOpts.targetBams.end(); bam++){
+ map<string, int> inverse_lookup;
+ int s = 0;
+ 
+ for(vector<RefData>::iterator it = sequences.begin(); 
+     it != sequences.end(); it++){
    
-   cerr << "INFO: Reading: " << *bam << endl;
-
-   loadBam(*bam);
+   inverse_lookup[(*it).RefName] = s;
    
-   for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
-       seqid != globalGraph.nodes.end(); seqid++){
-	 
-     cerr << "INFO: Number of putative breakpoints for: " << sequences[seqid->first].RefName << ": " 
-	  << globalGraph.nodes[seqid->first].size() << endl;
-   }
+   s+= 1;
  }
-
- cerr << "INFO: Finished loading reads." << endl;
+ 
+ 
+ // load bam has openMP inside for running regions quickly
+ 
+ if(globalOpts.svs.empty()){
+   
+   cerr << "INFO: Loading discordant reads into graph." << endl;
+   
+   for(vector<string>::iterator bam = globalOpts.targetBams.begin();
+       bam != globalOpts.targetBams.end(); bam++){
+     
+     cerr << "INFO: Reading: " << *bam << endl;
+     
+     loadBam(*bam);
+     
+     for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
+	 seqid != globalGraph.nodes.end(); seqid++){
+       
+       cerr << "INFO: Number of putative breakpoints for: " << sequences[seqid->first].RefName << ": " 
+	    << globalGraph.nodes[seqid->first].size() << endl;
+     }
+   }
+   
+   cerr << "INFO: Finished loading reads." << endl;
+ } 
  
  vector<breakpoints*> allBreakpoints ;
  vector<vector<node*> > globalTrees  ;
  
- cerr << "INFO: Finding trees within forest." << endl;
-
- gatherTrees(globalTrees);
- 
-#ifdef DEBUG
- dump(globalTrees);
-#endif
-
- map<int, map <int, node*> > delBreak;
-
- cerr << "INFO: Finding breakpoints in trees." << endl; 
-#pragma omp parallel for schedule(dynamic, 3)
- for(unsigned int i = 0 ; i < globalTrees.size(); i++){
+ if(globalOpts.svs.empty()){
+   cerr << "INFO: Finding trees within forest." << endl;
    
-   if((i % 1000) == 0){
-     omp_set_lock(&glock);     
-     cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
-     omp_unset_lock(&glock);
+   gatherTrees(globalTrees);
+   
+#ifdef DEBUG
+   dump(globalTrees);
+#endif
+   
+   map<int, map <int, node*> > delBreak;
+   
+   cerr << "INFO: Finding breakpoints in trees." << endl; 
+#pragma omp parallel for schedule(dynamic, 3)
+   for(unsigned int i = 0 ; i < globalTrees.size(); i++){
+     
+     if((i % 1000) == 0){
+       omp_set_lock(&glock);     
+       cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
+       omp_unset_lock(&glock);
+     }
+     
+     if(globalTrees[i].size() > 200){
+       omp_set_lock(&glock);
+       cerr << "WARNING: Skipping tree, too many putative breaks." << endl;
+       omp_unset_lock(&glock);
+       continue;
+     }
+     callBreaks(globalTrees[i], allBreakpoints, delBreak);   
    }
-
-   if(globalTrees[i].size() > 200){
-     omp_set_lock(&glock);
-     cerr << "WARNING: Skipping tree, too many putative breaks." << endl;
-     omp_unset_lock(&glock);
-     continue;
-   }
-   callBreaks(globalTrees[i], allBreakpoints, delBreak);   
- }
-
+   
  cerr << "INFO: Trying to merge deletion breakpoints: " << delBreak.size() << endl;
-
+ 
  mergeDels(delBreak, allBreakpoints);
-
+ }
+ 
+ if(! globalOpts.svs.empty()){
+   cerr << "INFO: loading external SV calls" << endl;
+   loadExternal(allBreakpoints, inverse_lookup);
+ }
+ 
  cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
-
+ 
  sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
  
  cerr << "INFO: Gathering alleles." << endl;
-
+ 
  int nAlleles = 0;
 
- #pragma omp parallel for
+#pragma omp parallel for
  for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
-
+   
    if(allBreakpoints[z]->fail){
      continue;
    }
-
+   
    genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
    omp_set_lock(&glock);
    nAlleles += 1;
@@ -3885,24 +3988,24 @@ int main( int argc, char** argv)
      cerr << "INFO: generated " << nAlleles  << " alleles / " << allBreakpoints.size()  << endl;
    }
    omp_unset_lock(&glock);
-}
-
+ }
+ 
  if(globalOpts.skipGeno){
    printBEDPE(allBreakpoints, sequences);
    cerr << "INFO: Skipping genotyping: -k " << endl;
    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
    return 0;
  }
-
+ 
  nAlleles = 0;
  cerr << "INFO: Refining breakpoints using SW alignments" << endl;
- #pragma omp parallel for
+#pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
-
+   
    if(allBreakpoints[z]->fail){
      continue;
    }
-
+   
    vector<BamAlignment> reads;
    int buffer = 1;
    while(reads.size() < 2){
@@ -3914,10 +4017,10 @@ int main( int argc, char** argv)
    int oldStart     = allBreakpoints[z]->five ;
    int oldEnd       = allBreakpoints[z]->three;
    int flag         = 0;
-
+   
    breakpoints * secondary = new breakpoints;
    secondary->fail = false;
-
+   
    for(int f = -2; f <= 2; f++){
      *secondary = *allBreakpoints[z];
      secondary->five = oldStart;
