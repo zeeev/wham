@@ -157,6 +157,10 @@ struct breakpoints{
   vector<int>             genotypeIndex      ;
   vector<int>             nref               ;
   vector<int>             nalt               ;
+
+  double lref;
+  double lalt;
+
 };
 
 static const char *optString = "b:m:r:a:g:x:f:e:hsk";
@@ -245,6 +249,8 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->five        = atoi(SV[1].c_str());
 	bk->three       = atoi(SV[2].c_str());
 	bk->totalSupport = atoi(SV[4].c_str());
+	bk->lalt = 0;
+	bk->lref  = 0;
 
 	if(bk->five > bk->three){
 	  cerr << "FATAL: SV starts before it ends: " << line << endl;
@@ -748,12 +754,16 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     if((*c)->type == 'D' || (*c)->type == 'V' || (*c)->type == 'U' ){
       ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
     }
-    
+
+    double lrt = (*c)->lalt - (*c)->lref;
+
     ss << "\tSUPPORT=" << (*c)->totalSupport << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
-       << "POS=" << (*c)->five << "," << (*c)->three << ";";
-    
+       << "POS=" << (*c)->five << "," << (*c)->three << ";"
+       << "QUAL=" << lrt  ;
+   
+
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       if((*c)->genotypeIndex[i] == -1){
 	ss << "\t" << "./.;" << "."
@@ -3189,6 +3199,8 @@ void callBreaks(vector<node *> & tree,
   bp->fail    = false;
   bp->two     = false;
   bp->refined = 0;
+  bp->lalt = 0;
+  bp->lref = 0;
 
   if(detectDeletion(tree, bp)){
     omp_set_lock(&lock);
@@ -3356,7 +3368,6 @@ double pBases(vector<unsigned int> & cigar, string & baseQs){
       }
     }
   }
-  
   return phredSum;
 }
 
@@ -3507,6 +3518,10 @@ void genotype(string & bamF, breakpoints * br){
   br->genotypeIndex.push_back(index);
   br->nref.push_back(nref);
   br->nalt.push_back(nalt);
+
+
+  br->lref += aal + (abl/2);
+  br->lalt += bbl + (abl/2);
 
 }
 
