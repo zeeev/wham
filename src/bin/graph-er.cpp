@@ -760,10 +760,9 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     ss << "\tSUPPORT=" << (*c)->totalSupport << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
-       << "POS=" << (*c)->five << "," << (*c)->three << ";"
-       << "QUAL=" << lrt  ;
+       << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
+      //       << "QUAL=" << lrt  ;
    
-
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       if((*c)->genotypeIndex[i] == -1){
 	ss << "\t" << "./.;" << "."
@@ -3317,7 +3316,7 @@ double pBases(vector<unsigned int> & cigar, string & baseQs){
       }
       // insertion I
       if(op == 1 ){
-	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
+	phredSum += log(     unPhred(SangerLookup[int(baseQs[runningPos])])) ;
 	runningPos += 1;
 	continue;
       }

@@ -990,11 +990,24 @@ bool loadReadsIntoIndvs(map<string, indvDat*> & ti   ,
 
     vector< CigarOp > cd = (*r).CigarData;
     
-    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition(false,true)].size() > 1))
-	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
-      bad = 1;
-      ti[fname]->nClipping++;
+    if((( abs( (*r).Position - *pos ) < 5 )
+	|| ( abs( (*r).GetEndPosition(false,true) - *pos) < 5 ))
+       && (cd.front().Type == 'S' || cd.back().Type == 'S')  ){
+      
+      if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition(false,true)].size() > 1))){
+	
+	bad = 1;
+	ti[fname]->nClipping++;
+      }    
     }
+    
+
+
+//    if( ((pileup.primary[(*r).Position].size() > 1) || (pileup.primary[(*r).GetEndPosition(false,true)].size() > 1))
+//	&& (cd.front().Type == 'S' || cd.back().Type == 'S') ){
+//      bad = 1;
+//      ti[fname]->nClipping++;
+//    }
     
     if((*r).IsMapped() && (*r).IsMateMapped() && ((*r).RefID == (*r).MateRefID)){
       
@@ -2810,6 +2823,9 @@ int main(int argc, char** argv) {
 
   int seqidIndex = 0;
 
+  vector< regionDat* > regions; 
+
+
   if(globalOpts.region.size() == 2){
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){      
       if((*sit).RefName == globalOpts.seqid){
@@ -2819,20 +2835,32 @@ int main(int argc, char** argv) {
     }
   }
 
-  if(seqidIndex != 0 || globalOpts.region.size() == 2 ){
-    if(! runRegion(seqidIndex, 
-		   globalOpts.region[0], 
-		   globalOpts.region[1], 
-		   sequences, 
-		   kmerDB)){
-      cerr << "WARNING: region failed to run properly." << endl;
+  if(globalOpts.region.size() == 2){
+
+    int start = globalOpts.region[0];
+    int end   = globalOpts.region[1];
+
+    int p = start;
+    int e = 0;
+    for(; (p+1000000) <= end; p += 1000000){
+      regionDat * regionInfo = new regionDat;
+      regionInfo->seqidIndex = seqidIndex             ;
+      regionInfo->start      = p                      ;
+      regionInfo->end        = 1000000 + p            ;
+      regions.push_back(regionInfo);
+      e = p + 1000000;
     }
-    cerr << "INFO: WHAM-BAM finished normally." << endl;
-    return 0;
+    if(e < end){
+      regionDat * regionInfo = new regionDat;
+      regionInfo->seqidIndex = seqidIndex               ;
+      regionInfo->start      = p                        ;
+      regionInfo->end        = end                      ;
+      regions.push_back(regionInfo)                     ;
+    }
+
   }
-  
-  vector< regionDat* > regions; 
-  if(globalOpts.bed.compare("NA") == 0){
+
+  if(globalOpts.bed.compare("NA") == 0 && globalOpts.region.size() != 2){
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
       int start = 500;
       if((*sit).RefLength < 2000){
