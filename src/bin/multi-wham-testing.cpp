@@ -862,7 +862,7 @@ bool processGenotype(string    & fname        ,
     cerr << "Geno: clipping must reach 0.01 frq: " << within_sample_clip_frq << endl;
   #endif
 
-    if( (*rit == 1 && ( within_sample_clip_frq > 0.01 ))){
+    if( (*rit == 1 && ( within_sample_clip_frq > 0.01 )) && idat->nClipping > 1){
 #ifdef DEBUG
       cerr << "geno mq unphred: " << mappingP << " " << idat->MapQ[ri] << endl;
       cerr << "geno aal abl bbl: " << aal << " " << abl << " " << bbl <<  endl;
