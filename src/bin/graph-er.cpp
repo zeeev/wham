@@ -3607,7 +3607,10 @@ void gatherBamStats(string & targetfile){
       max = sequences.size() ;
     }
 
-    int randomChr = rand() % (max -1);
+    int randomChr = 0;
+    if(sequences.size() > 1){
+      randomChr = rand() % (max -1);
+    }
     int randomPos = rand() % (sequences[randomChr].RefLength -1);
     int randomEnd = randomPos + 2000;
 
