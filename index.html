@@ -367,12 +367,18 @@ GT:GL:NR:NA:NS:RD
 <h3>
 <a id="filtering-wham" class="anchor" href="#filtering-wham" aria-hidden="true"><span class="octicon octicon-link"></span></a>Filtering Wham</h3>
 
-<p>For the Wham manuscript we ran a set of filters to improve the performance of the tools when compared to 1kg. </p>
-convert Wham VCF to BEDPE:
+<p>For the Wham manuscript we ran two filters to improve the performance of the tools when compared to 1kg.  The files used can be found with the papers </p>
+
+
+Convert Wham VCF to BEDPE:
 <pre><code>perl /whamToBedPe.pl -c --file NA12878.wham.class.vcf > NA12878.wham.s.bedpe</code></pre>
 
-remove Wham calls in low complexity regions (http://arxiv.org/pdf/1404.0929.pdf)
+Remove Wham calls in low complexity regions (http://arxiv.org/pdf/1404.0929.pdf)
 <pre><code>pairToBed -type neither -b ~/tools/wham/data/LCR-hs37d5.bed -a NA12878.wham.s.bedpe</code></pre>
+
+Remove Wham calls in high depth regions (http://www.genomebiology.com/2014/15/6/R84):
+<pre><code>pairToBed -type neither -b ceph18.b37.lumpy.exclude.2014-01-15.nochr.bedpe   -a NA12878.wham.nolcr.bedpe   >  NA12878.wham.nolcr.nh.bedpe</code></pre>
+
       </section>
     </div>
 
