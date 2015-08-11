@@ -157,6 +157,7 @@ struct breakpoints{
   int svlen              ;
   int totalSupport       ; 
   vector<string> alleles ;
+  vector<int>    supports;
   
   vector<vector<double> > genotypeLikelhoods ;
   vector<int>             genotypeIndex      ;
@@ -642,6 +643,31 @@ void printHelp(void){
   printVersion();
 }
 
+
+int  getSupport(node * N){
+  
+  int support = 0;
+
+  for(vector<edge *>::iterator ed = N->eds.begin() ;
+      ed != N->eds.end(); ed++){
+    support += (*ed)->support['L'];
+    support += (*ed)->support['H'];
+    support += (*ed)->support['S'];
+    support += (*ed)->support['I'];
+    support += (*ed)->support['D'];
+    support += (*ed)->support['V'];
+    support += (*ed)->support['M'];
+    support += (*ed)->support['R'];
+    support += (*ed)->support['X'];
+  
+}
+  return support;
+}
+
+bool sortNodesByPos(node * L, node * R){
+  return (L->pos < R->pos);
+}
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of breakpoint calls
@@ -683,6 +709,8 @@ bool sortNodesBySupport(node * L, node * R){
     totalSR += (*ed)->support['R'];
     totalSR += (*ed)->support['X'];
   }
+
+
   return (totalSL > totalSR) ;  
 }
 
@@ -780,7 +808,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
     double lrt = (*c)->lalt - (*c)->lref;
 
-    ss << "\tSUPPORT=" << (*c)->totalSupport << ";" 
+    ss << "\tSUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
        << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
@@ -1124,6 +1152,7 @@ void initEdge(edge * e){
   e->support['M'] = 0;
   e->support['R'] = 0;
   e->support['X'] = 0;
+  e->support['K'] = 0;
 
 }
 
@@ -1556,7 +1585,7 @@ bool pairFailed(readPair * rp){
     if(rp->al1.MapQuality < globalOpts.MQ && rp->al2.MapQuality < globalOpts.MQ){
       return true;
     }
-    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
+    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 75){
       return true;
     }
   }
@@ -1794,6 +1823,11 @@ void processPair(readPair * rp,  map<string, int> & il,
 
 #ifdef DEBUG
     cerr << "pair failed filter: " << rp->al1.Name  << endl;
+    cerr << "                    " << rp->al1.Position << endl;
+    cerr << "                    " << joinCig(rp->al1.CigarData) << endl;
+    cerr << "                    " << rp->al2.Position << endl;
+    cerr << "                    " << joinCig(rp->al2.CigarData) << endl;
+
 #endif 
     return;
   }
@@ -1808,8 +1842,8 @@ void processPair(readPair * rp,  map<string, int> & il,
   indelToGraph(rp->al2);
   
   if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
-    if( ! IsLongClip(rp->al1.CigarData, 10) 
-	&& ! IsLongClip(rp->al2.CigarData, 10)){
+    if( ! IsLongClip(rp->al1.CigarData, 5) 
+	&& ! IsLongClip(rp->al2.CigarData, 5)){
       return;
     }
     if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
@@ -2534,6 +2568,8 @@ bool detectInsertion(vector<node *> tree, breakpoints * bp){
   }
   if(putative.size() == 2){
 
+    sort(putative.begin(), putative.end(), sortNodesByPos);
+
     int lPos = putative.front()->pos;
     int rPos = putative.back()->pos ;
 
@@ -2837,32 +2873,34 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
   for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
 
 
-    int tooFar  = 0;
-    int splitR  = 0;
-    int del     = 0;
+    int tooFar           = 0;
+    int splitR           = 0;
+    int del              = 0;
+
+
 
     for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
 
-      tooFar += (*es)->support['M'];
+      tooFar += (*es)->support['M'] + (*es)->support['H'];
       splitR += (*es)->support['V'];
       del    += (*es)->support['D'];
 
-
-      //                      cerr << "counts :" << (*t)->pos << "\t" << (*es)->support['H'] << " " << (*es)->support['H']
-      //                   << " " << tooFar << " " << splitR << endl;
     }
 
     if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
       putative.push_back((*t));
     }
   }
-
+  
   if(putative.size() == 2){
+
+    sort(putative.begin(), putative.end(), sortNodesByPos);
     
     int lPos = putative.front()->pos;
     int rPos = putative.back()->pos ;
     
-    int lhit = 0 ; int rhit = 0;
+    int lhit = 0 ; 
+    int rhit = 0;
     
     int totalS = 0;
 
@@ -2882,20 +2920,13 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
         break;
       }
     }
-    
+
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
         ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
         rhit = 1;
         break;
       }
-    }
-
-    
-    if(lPos > rPos){
-      int tmp = lPos;
-      lPos = rPos;
-      rPos = tmp ;
     }
 
     if((rPos - lPos) > 1500000 ){
@@ -2914,11 +2945,83 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
       bp->three         = rPos                   ;
       bp->svlen         = rPos - lPos            ;
       bp->totalSupport  = totalS                 ;
+      bp->supports.push_back(getSupport(putative.front()));
+      bp->supports.push_back(getSupport(putative.back()));
       return true;
     }
     else{
       cerr << "no linked putative breakpoints" << endl;
     }
+  }
+  else if(putative.size() > 2){
+
+    vector <node *> putativeTwo;
+    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  <<\
+      endl;
+
+    sort(putative.begin(), putative.end(), sortNodesBySupport);
+
+    while(putative.size() > 2){
+      putative.pop_back();
+    }
+
+    sort(putative.begin(), putative.end(), sortNodesByPos);
+
+    int lPos = putative.front()->pos;
+    int rPos = putative.front()->pos;
+
+    // cerr << lPos << " " << rPos << endl;
+
+    int nhit   = 0;
+    int totalS = 0;
+
+    for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
+        ed != putative[0]->eds.end(); ed++){
+      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
+
+        totalS += (*ed)->support['L'];
+        totalS += (*ed)->support['H'];
+        totalS += (*ed)->support['S'];
+        totalS += (*ed)->support['I'];
+        totalS += (*ed)->support['D'];
+        totalS += (*ed)->support['V'];
+        totalS += (*ed)->support['M'];
+        totalS += (*ed)->support['R'];
+        totalS += (*ed)->support['X'];
+
+        nhit += 1;
+        break;
+      }
+    }
+
+    for(vector<edge *>::iterator ed = putative[1]->eds.begin() ;
+	ed != putative[1]->eds.end(); ed++){
+      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
+	nhit += 1;
+	break;
+      }
+    }
+
+    if(nhit == 2){
+
+      if((rPos - lPos) > 1500000 ){
+        if(totalS < 5){
+          return  false;
+        }
+      }
+      bp->two           = true                   ;
+      bp->type          = 'V'                    ;
+      bp->merged        =  0                     ;
+      bp->seqidIndexL   = putative.front()->seqid;
+      bp->seqidIndexR   = putative.front()->seqid;
+      bp->five          = lPos                   ;
+      bp->three         = rPos                   ;
+      bp->svlen         = rPos - lPos            ;
+      bp->totalSupport  = totalS                 ;
+      bp->supports.push_back(getSupport(putative.front()));
+      bp->supports.push_back(getSupport(putative.back()));
+      return true;
+    }  
   }
   return false;
 }
@@ -2960,6 +3063,8 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
   }
   if(putative.size() == 2){
 
+    sort(putative.begin(), putative.end(), sortNodesByPos);
+
     int lPos = putative.front()->pos;
     int rPos = putative.back()->pos ;
 
@@ -2993,11 +3098,6 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       }
     }
     
-    if(lPos > rPos){
-      int tmp = lPos;
-      lPos    = rPos;
-      rPos    = tmp ;
-    }
     if((rPos - lPos) > 1500000 ){
       if(totalS < 5){
 	return  false;
@@ -3014,6 +3114,9 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       bp->three       = rPos                   ;
       bp->svlen       = rPos - lPos            ;
       bp->totalSupport  = totalS               ;
+      bp->supports.push_back(getSupport(putative.front()));
+      bp->supports.push_back(getSupport(putative.back()));
+      
       return true;
     }
     else{
@@ -3028,8 +3131,14 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
   
     sort(putative.begin(), putative.end(), sortNodesBySupport);
 
-    int rPos = putative[0]->pos;
-    int lPos = putative[1]->pos;
+    while(putative.size() > 2){
+      putative.pop_back();
+    }
+
+    sort(putative.begin(), putative.end(), sortNodesByPos);
+
+    int rPos = putative.front()->pos;
+    int lPos = putative.back()->pos;
 
     int nhit   = 0;
     int totalS = 0;
@@ -3055,12 +3164,6 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
     }
     
     if(nhit = 2){
-      if(lPos > rPos){
-	int tmp = lPos;
-	lPos    = rPos;
-	rPos    = tmp ;
-      }
-
       if((rPos - lPos) > 1500000 ){
 	if(totalS < 5){
 	  return  false;
@@ -3076,6 +3179,8 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       bp->three       = rPos                   ;
       bp->svlen       = rPos - lPos            ;
       bp->totalSupport  = totalS               ;
+      bp->supports.push_back(getSupport(putative.front()));
+      bp->supports.push_back(getSupport(putative.back()));
       return true;
     }
 
@@ -3117,7 +3222,7 @@ bool detectHalfDeletion(vector<node *> & tree, breakpoints * bp, node ** n){
     }
 
 
-    if( tooFar > 2){
+    if( tooFar > 2 || (splitR > 0 && tooFar > 0)){
       putative.push_back((*t));
       support.push_back(tooFar);
     }
@@ -3173,11 +3278,9 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       int del     = 0;
 
       for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-
 	tooFar += (*es)->support['H'];
 	splitR += (*es)->support['S'];
 	del    += (*es)->support['D'];
-
       }
       if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
 	putative.push_back((*t));
@@ -3185,6 +3288,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   }
   
   if(putative.size() == 2){
+
+    sort(putative.begin(), putative.end(), sortNodesByPos);
     
     int lPos = putative.front()->pos;
     int rPos = putative.back()->pos ;
@@ -3218,11 +3323,6 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 	break;
       }
     }  
-    if(lPos > rPos){
-      int tmp = lPos;
-      lPos    = rPos;
-      rPos    = tmp ;
-    }
 
     if((rPos - lPos) > 1500000 ){
       if(totalS < 5){
@@ -3241,6 +3341,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->three       = rPos - 1               ;
       bp->svlen       = bp->three - bp->five   ;
       bp->totalSupport = totalS                ;
+      bp->supports.push_back(getSupport(putative.front()));
+      bp->supports.push_back(getSupport(putative.back()));
       return true;
     }
     else{
@@ -3254,6 +3356,12 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
        cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
   
        sort(putative.begin(), putative.end(), sortNodesBySupport);
+
+       while(putative.size() > 2){
+	 putative.pop_back();
+       }
+
+       sort(putative.begin(), putative.end(), sortNodesByPos);
 
        int rPos = putative[0]->pos;
        int lPos = putative[1]->pos;
@@ -3289,12 +3397,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
          }
        }
 
-       if(nhit = 2){
-	 if(lPos > rPos){
-	   int tmp = lPos;
-	   lPos    = rPos;
-	   rPos    = tmp ;
-	 }
+       if(nhit == 2){
 
 	 if((rPos - lPos) > 1500000 ){
 	   if(totalS < 5){
@@ -3310,6 +3413,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 	 bp->three       = rPos - 1               ;
 	 bp->svlen       = bp->three - bp->five   ;
 	 bp->totalSupport = totalS                ;
+	 bp->supports.push_back(getSupport(putative.front()));
+	 bp->supports.push_back(getSupport(putative.back()));
 	 return true;
 
 
@@ -3955,23 +4060,21 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	}
 
 	int otherPosSecond = avgP(spos->second);
-	
-	
+		
 	if(abs(otherPos - spos->second->pos) < 500 && abs(hpos->second->pos - otherPosSecond) < 500 ){
 
 	  seen[spos->second->seqid][spos->second->pos] = 1; 
 	  seen[spos->second->seqid][hpos->second->pos] = 1; 
 
+	  vector<node *> putative;
+	  putative.push_back(hpos->second);
+	  putative.push_back(spos->second);
 
-	  int lPos = hpos->second->pos;
-	  int rPos = spos->second->pos;
+	  sort(putative.begin(), putative.end(), sortNodesByPos);
+
+	  int lPos = putative.front()->pos;
+	  int rPos = putative.back()->pos;
 	  
-	  if(lPos > rPos){
-	    int tmp = lPos;
-	    lPos = rPos;
-	    rPos = tmp;
-	  }
-
 
 	  cerr << "INFO: joining deletion breakpoints: " <<  lPos << " " << rPos << endl;
 	  
@@ -3987,6 +4090,8 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	  bp->three        = rPos                   ;
 	  bp->svlen        = rPos - lPos            ;
 	  bp->totalSupport = 0                      ;
+	  bp->supports.push_back(getSupport(putative.front())) ;
+	  bp->supports.push_back(getSupport(putative.back()))  ;
 
 	  br.push_back(bp);
 	}		
