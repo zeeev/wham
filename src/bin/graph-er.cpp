@@ -55,6 +55,11 @@ THE SOFTWARE.
 // gsl header
 #include "gauss.h"
 
+// paired-like hmm
+#include "phredUtils.h"
+#include "alignHMM.h"
+
+
 #define BAM_CIGAR_SHIFT 4
 #define BAM_CIGAR_MASK  ((1 << BAM_CIGAR_SHIFT) - 1)
 
@@ -165,33 +170,7 @@ struct breakpoints{
 
 static const char *optString = "b:m:r:a:g:x:f:e:hsk";
 
-int SangerLookup[126] =    {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
-                            -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
-                            -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
-                            -1,-1, 0, 1, 2,  3, 4, 5, 6, 7, // 30-39   31-40
-			    8, 9,10,11,12, 13,14,15,16,17, // 40-49   41-50
-                            18,19,20,21,22, 23,24,25,26,27, // 50-59   51-60
-                            28,29,30,31,32, 33,34,35,36,37, // 60-69   61-70
-                            38,39,40,41,42, 43,44,45,46,47, // 70-79   71-80
-                            48,49,50,51,52, 53,54,55,56,57, // 80-89   81-90
-                            58,59,60,61,62, 63,64,65,66,67, // 90-99   91-100
-                            68,69,70,71,72, 73,74,75,76,77, // 100-109 101-110
-                            78,79,80,81,82, 83,84,85,86,87, // 110-119 111-120
-                            88,89,90,91,92, 93           }; // 120-119 121-130
 
-int IlluminaOneThree[126] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
-                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
-                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 20-29   21-30
-                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 30-39   31-40
-                             -1,-1,-1,-1,-1  -1,-1,-1,-1,-1, // 40-49   41-50
-                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 50-59   51-60
-                             -1,-1,-1,-1,-1,  0, 1, 2, 3, 4, // 60-69   61-70
-			     5, 6, 7, 8, 9, 10,11,12,13,14, // 70-79   71-80
-                             15,16,17,18,19, 20,21,22,23,24, // 80-89   81-90
-                             25,26,27,28,29, 30,31,32,33,34, // 90-99   91-100
-                             35,36,37,38,39, 40,-1,-1,-1,-1, // 100-109 101-110
-                             -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 110-119 111-120
-                             -1,-1,-1,-1,-1, -1,-1        }; // 120-119 121-130
 
 // omp lock
 
@@ -661,6 +640,50 @@ void printHelp(void){
   cerr << "        STOUT : SV calls in BEDPE format (VCF soon)                 " << endl;  
   cerr << endl;
   printVersion();
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of breakpoint calls
+
+ Function does   : return true if the left is less than the right
+
+ Function returns: bool
+
+*/
+
+bool sortNodesBySupport(node * L, node * R){
+
+  int totalSL = 0;
+  int totalSR = 0;
+
+  for(vector<edge *>::iterator ed = L->eds.begin() ;
+      ed != L->eds.end(); ed++){
+      totalSL += (*ed)->support['L'];
+      totalSL += (*ed)->support['H'];
+      totalSL += (*ed)->support['S'];
+      totalSL += (*ed)->support['I'];
+      totalSL += (*ed)->support['D'];
+      totalSL += (*ed)->support['V'];
+      totalSL += (*ed)->support['M'];
+      totalSL += (*ed)->support['R'];
+      totalSL += (*ed)->support['X'];
+  }
+  
+  
+  for(vector<edge *>::iterator ed = R->eds.begin() ;
+      ed != R->eds.end(); ed++){
+    totalSR += (*ed)->support['L'];
+    totalSR += (*ed)->support['H'];
+    totalSR += (*ed)->support['S'];
+    totalSR += (*ed)->support['I'];
+    totalSR += (*ed)->support['D'];
+    totalSR += (*ed)->support['V'];
+    totalSR += (*ed)->support['M'];
+    totalSR += (*ed)->support['R'];
+    totalSR += (*ed)->support['X'];
+  }
+  return (totalSL > totalSR) ;  
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -3002,6 +3025,60 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
 
     vector <node *> putativeTwo;
     cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+  
+    sort(putative.begin(), putative.end(), sortNodesBySupport);
+
+    int rPos = putative[0]->pos;
+    int lPos = putative[1]->pos;
+
+    int nhit   = 0;
+    int totalS = 0;
+
+    for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
+	ed != putative[0]->eds.end(); ed++){
+      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
+	
+	totalS += (*ed)->support['L'];
+	totalS += (*ed)->support['H'];
+	totalS += (*ed)->support['S'];
+	totalS += (*ed)->support['I'];
+	totalS += (*ed)->support['D'];
+	totalS += (*ed)->support['V'];
+	totalS += (*ed)->support['M'];
+	totalS += (*ed)->support['R'];
+	totalS += (*ed)->support['X'];
+
+
+	nhit += 1;
+	break;
+      }
+    }
+    
+    if(nhit = 2){
+      if(lPos > rPos){
+	int tmp = lPos;
+	lPos    = rPos;
+	rPos    = tmp ;
+      }
+
+      if((rPos - lPos) > 1500000 ){
+	if(totalS < 5){
+	  return  false;
+	}
+      }
+      
+      bp->two         = true                   ;
+      bp->type        = 'U'                    ;
+      bp->merged      = 0                      ;
+      bp->seqidIndexL = putative.front()->seqid;
+      bp->seqidIndexR = putative.front()->seqid;
+      bp->five        = lPos                   ;
+      bp->three       = rPos                   ;
+      bp->svlen       = rPos - lPos            ;
+      bp->totalSupport  = totalS               ;
+      return true;
+    }
+
   }
   else{
     // leaf node
@@ -3130,7 +3207,6 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
         totalS += (*ed)->support['R'];
         totalS += (*ed)->support['X'];
 
-
 	break;
       }
     }
@@ -3176,6 +3252,70 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 
     vector <node *> putativeTwo;
        cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+  
+       sort(putative.begin(), putative.end(), sortNodesBySupport);
+
+       int rPos = putative[0]->pos;
+       int lPos = putative[1]->pos;
+       
+       int nhit   = 0;
+       int totalS = 0;
+
+       for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
+	   ed != putative[0]->eds.end(); ed++){
+	 if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
+
+	   totalS += (*ed)->support['L'];
+	   totalS += (*ed)->support['H'];
+	   totalS += (*ed)->support['S'];
+	   totalS += (*ed)->support['I'];
+	   totalS += (*ed)->support['D'];
+	   totalS += (*ed)->support['V'];
+	   totalS += (*ed)->support['M'];
+	   totalS += (*ed)->support['R'];
+	   totalS += (*ed)->support['X'];
+
+
+	   nhit += 1;
+	   break;
+	 }
+       }
+
+       for(vector<edge *>::iterator ed = putative[1]->eds.begin() ;
+           ed != putative[1]->eds.end(); ed++){
+         if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
+           nhit += 1;
+           break;
+         }
+       }
+
+       if(nhit = 2){
+	 if(lPos > rPos){
+	   int tmp = lPos;
+	   lPos    = rPos;
+	   rPos    = tmp ;
+	 }
+
+	 if((rPos - lPos) > 1500000 ){
+	   if(totalS < 5){
+	     return  false;
+	   }
+	 }
+	 bp->two         = true                   ;
+	 bp->type        = 'D'                    ;
+	 bp->seqidIndexL = putative.front()->seqid;
+	 bp->seqidIndexR = putative.front()->seqid;
+	 bp->merged      = 0                      ;
+	 bp->five        = lPos + 1               ;  // always starts after last node
+	 bp->three       = rPos - 1               ;
+	 bp->svlen       = bp->three - bp->five   ;
+	 bp->totalSupport = totalS                ;
+	 return true;
+
+
+       }
+
+       
   }
   else{
     // leaf node
@@ -3354,6 +3494,8 @@ double pBases(vector<unsigned int> & cigar, string & baseQs){
       // match =
       if(op == 7 ){
 
+	cerr << baseQs[runningPos] << " " << SangerLookup[int(baseQs[runningPos])] << endl;
+
 	phredSum += log( 1 - unPhred(SangerLookup[int(baseQs[runningPos])])) ;
 
 	runningPos += 1;
@@ -3385,12 +3527,8 @@ void genotype(string & bamF, breakpoints * br){
     buffer = buffer + 1;     
   }
 
-  // Declares a default Aligner
-  StripedSmithWaterman::Aligner aligner;
-  // Declares a default filter
-  StripedSmithWaterman::Filter filter;
-  // Declares an alignment that stores the result
-  StripedSmithWaterman::Alignment alignment;
+  alignHMM refHMM(int(reads.front().Length) +1,int(br->alleles.front().size()) +1);
+  alignHMM altHMM(int(reads.front().Length) +1,int(br->alleles.back().size()) +1);
 
   double aal = 0;
   double abl = 0;
@@ -3401,6 +3539,8 @@ void genotype(string & bamF, breakpoints * br){
 
   int nReads = 0;
 
+  phredUtils pu;
+
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
     if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)){
@@ -3408,32 +3548,40 @@ void genotype(string & bamF, breakpoints * br){
     }
     
     nReads += 1;
+    
 
-    aligner.Align((*it).QueryBases.c_str(), br->alleles.front().c_str(), 
-		  br->alleles.front().size(), filter, &alignment);
-   
-    double pR = pBases(alignment.cigar, (*it).Qualities);
-
-#ifdef DEBUG
-               cerr << "RI: " << (*it).Position << " " 
-		    << (*it).GetEndPosition() << " " 
-		    << joinCig((*it).CigarData) << " " 
-		    << (*it).MapQuality         << endl;
-    	   cerr << "aref pref:" << alignment.sw_score << " " << alignment.cigar_string << " " << pR << endl;
-
-#endif 
-
-    aligner.Align((*it).QueryBases.c_str(), br->alleles.back().c_str(),  
-		  br->alleles.back().size(),  filter, &alignment);
+    refHMM.initPriors(br->alleles.front(), it->QueryBases, it->Qualities);
+    refHMM.initTransProbs();
+    refHMM.initializeDelMat();
+    refHMM.updatecells();
+    
+    double pR = refHMM.finalLikelihoodCalculation();
 
 
-    double pA = pBases(alignment.cigar, (*it).Qualities);
+    double div2 = log10(2);
+
+    altHMM.initPriors(br->alleles.back(), it->QueryBases, it->Qualities);
+    altHMM.initTransProbs();
+    altHMM.initializeDelMat();
+    altHMM.updatecells();
+    double pA = altHMM.finalLikelihoodCalculation();
 
 #ifdef DEBUG
+    
+    cerr << "RI: " << (*it).Position << " "
+	 << (*it).GetEndPosition() << " "
+	 << joinCig((*it).CigarData) << " "
+	 << (*it).MapQuality         << endl;
+    cerr << "pref palt:" << pR << " "<< pA << endl;
 
-            cerr << "aalt palt:" << alignment.sw_score << " " << alignment.cigar_string << " " << pA << endl << endl;
+    cerr << br->alleles.front() << " REF " << it->QueryBases << " " << it->Qualities << " " << pR <<  " " << pR << endl; 
+    cerr << br->alleles.back() << " ALT " << it->QueryBases << " " << it->Qualities << " " << pA <<  " " << pR << endl; 
+    
+    cerr << endl;
 
-#endif  DEBUG
+#endif
+
+	      
 
     if(br->type == 'V'){
 
@@ -3441,17 +3589,23 @@ void genotype(string & bamF, breakpoints * br){
       Comp(revcomp);
       string revqual = string((*it).Qualities.rbegin(), (*it).Qualities.rend()); 
 
-      aligner.Align(revcomp.c_str(), br->alleles.back().c_str(),
-		    br->alleles.back().size(),  filter, &alignment);
+      altHMM.initPriors(br->alleles.back(), revcomp, revqual);
+      altHMM.initTransProbs();
+      altHMM.initializeDelMat();
+      altHMM.updatecells();
       
-      double pA1 = pBases(alignment.cigar, revqual);
+      double pA1 =  altHMM.finalLikelihoodCalculation();
       
       if(pA1 > pA){
 	pA = pA1;
-	aligner.Align(revcomp.c_str(), br->alleles.front().c_str(),
-		      br->alleles.front().size(),  filter, &alignment);
 
-	pR = pBases(alignment.cigar, revqual);
+	refHMM.initPriors(br->alleles.front(), revcomp, revqual);
+	refHMM.initTransProbs();
+	refHMM.initializeDelMat();
+	refHMM.updatecells();
+
+	pR = refHMM.finalLikelihoodCalculation();
+
       }
     }
 
@@ -3466,11 +3620,15 @@ void genotype(string & bamF, breakpoints * br){
     cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
 #endif 
 
-    aal += log(exp(pR - 2) + exp(pR -2));
-    abl += log(exp(pR - 2) + exp(pA -2));
-    bbl += log(exp(pA - 2) + exp(pA -2));
-  
+    aal  += pu.log10Add((pR - div2), (pR - div2));
+    abl  += pu.log10Add((pR - div2), (pA - div2));
+    bbl  += pu.log10Add((pA - div2), (pA - div2));
+    
+
+
   }
+
+
 
   int nnref = nref;
   int nnalt = nalt;
@@ -3486,14 +3644,7 @@ void genotype(string & bamF, breakpoints * br){
     }
   }
   
-//  cerr << ldbinomial(0.01, 0.99, nnalt, nnref) << endl;
-//  cerr << ldbinomial(0.5 , 0.5,  nnalt, nnref) << endl;
-//  cerr << ldbinomial(0.99, 0.01, nnalt, nnref) << endl;
 
-  aal += ldbinomial(0.01, 0.99, nnalt, nnref);
-  abl += ldbinomial(0.5 , 0.5,  nnalt, nnref);
-  bbl += ldbinomial(0.99, 0.01, nnalt, nnref);
-    
 
   vector<double> gl;
   gl.push_back(aal);
