@@ -764,12 +764,15 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
     index += 1;
    
+    int svlen = (*c)->svlen;
+
     stringstream ss;
 
     string type = "NONE";
     switch((*c)->type){
     case 'D':
       type = "DEL";
+      svlen = -svlen;
       break;
     case 'U':
       type = "DUP";
@@ -803,7 +806,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ".";
     if((*c)->type == 'D' || (*c)->type == 'V' || (*c)->type == 'U' ){
-      ss << "\t" << "SVLEN=" << (*c)->svlen << ";"; 
+      ss << "\t" << "SVLEN=" << svlen  << ";"; 
     }
 
     double lrt = (*c)->lalt - (*c)->lref;
@@ -3055,7 +3058,6 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       tooClose += (*es)->support['L'];
       FlippedS += (*es)->support['X'];
 
-
     }
     if( (tooFar > 0 && FlippedS  > 1) || FlippedS  > 1 || (tooClose  > 0 && FlippedS  > 1) ){
       putative.push_back((*t));
@@ -3137,8 +3139,10 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
 
     sort(putative.begin(), putative.end(), sortNodesByPos);
 
-    int rPos = putative.front()->pos;
-    int lPos = putative.back()->pos;
+
+    int lPos = putative.front()->pos;
+    int rPos = putative.back()->pos;
+
 
     int nhit   = 0;
     int totalS = 0;
@@ -3163,7 +3167,7 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       }
     }
     
-    if(nhit = 2){
+    if(nhit == 2){
       if((rPos - lPos) > 1500000 ){
 	if(totalS < 5){
 	  return  false;
@@ -3339,7 +3343,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->merged      = 0                      ;
       bp->five        = lPos + 1               ;  // always starts after last node
       bp->three       = rPos - 1               ;
-      bp->svlen       = bp->three - bp->five   ;
+      bp->svlen       = rPos - lPos            ;
       bp->totalSupport = totalS                ;
       bp->supports.push_back(getSupport(putative.front()));
       bp->supports.push_back(getSupport(putative.back()));
@@ -3363,8 +3367,8 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 
        sort(putative.begin(), putative.end(), sortNodesByPos);
 
-       int rPos = putative[0]->pos;
-       int lPos = putative[1]->pos;
+       int lPos = putative.front()->pos;
+       int rPos = putative.back()->pos;
        
        int nhit   = 0;
        int totalS = 0;
@@ -3411,7 +3415,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 	 bp->merged      = 0                      ;
 	 bp->five        = lPos + 1               ;  // always starts after last node
 	 bp->three       = rPos - 1               ;
-	 bp->svlen       = bp->three - bp->five   ;
+	 bp->svlen       = rPos - lPos            ;
 	 bp->totalSupport = totalS                ;
 	 bp->supports.push_back(getSupport(putative.front()));
 	 bp->supports.push_back(getSupport(putative.back()));
