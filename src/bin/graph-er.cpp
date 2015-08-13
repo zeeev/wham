@@ -825,7 +825,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ".";
 
-    ss << "\tSTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << hex << ";";
+    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << hex << ";";
 
     ss << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
