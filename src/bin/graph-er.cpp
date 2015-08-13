@@ -776,7 +776,6 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     index += 1;
    
 
-
     stringstream ss;
 
     string type = "NONE";
@@ -843,38 +842,38 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     }
 
     ss << "LID=" << SML << ";" ; 
-    ss << "RID=" << SMR << ";" ; 
+    ss << "RID=" << SMR ; 
 
 
    
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       if((*c)->genotypeIndex[i] == -1){
-	ss << "\t" << "./.;" << "."
+	ss << "\t" << "./.:" << "."
            << "," << "."
            << "," << "."
-           << ";" << (*c)->nalt[i]
-           << ";" << (*c)->nref[i];
+           << ":" << (*c)->nalt[i]
+           << ":" << (*c)->nref[i];
       }
       else if((*c)->genotypeIndex[i] == 0){
-	ss << "\t" << "0/0;" << (*c)->genotypeLikelhoods[i][0] 
+	ss << "\t" << "0/0:" << (*c)->genotypeLikelhoods[i][0] 
 	   << "," << (*c)->genotypeLikelhoods[i][1] 
 	   << "," << (*c)->genotypeLikelhoods[i][2] 
-	   << ";" << (*c)->nalt[i]
-	   << ";" << (*c)->nref[i];
+	   << ":" << (*c)->nalt[i]
+	   << ":" << (*c)->nref[i];
       }
       else if((*c)->genotypeIndex[i] == 1){
-	ss << "\t" << "0/1;" << (*c)->genotypeLikelhoods[i][0] 
+	ss << "\t" << "0/1:" << (*c)->genotypeLikelhoods[i][0] 
 	   << "," << (*c)->genotypeLikelhoods[i][1] 
 	   << "," << (*c)->genotypeLikelhoods[i][2] 
-	   << ";" << (*c)->nalt[i]
-	   << ";" << (*c)->nref[i];
+	   << ":" << (*c)->nalt[i]
+	   << ":" << (*c)->nref[i];
       }
       else if((*c)->genotypeIndex[i] == 2){
-	ss << "\t" << "1/1;" << (*c)->genotypeLikelhoods[i][0] 
+	ss << "\t" << "1/1:" << (*c)->genotypeLikelhoods[i][0] 
 	   << "," << (*c)->genotypeLikelhoods[i][1] 
 	   << "," << (*c)->genotypeLikelhoods[i][2] 
-	   << ";" << (*c)->nalt[i]
-           << ";" << (*c)->nref[i];
+	   << ":" << (*c)->nalt[i]
+           << ":" << (*c)->nref[i];
       }     
       else{
 	cerr << "FATAL: printBEDPE: unknown genotype." << endl;
