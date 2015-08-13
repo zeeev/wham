@@ -11,7 +11,7 @@
 CC=g++
 GCC=gcc
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS= -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x #-D_NO_RAZF
+CFLAGS= -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x 
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/ -Isrc/fastahack -Isrc/Complete-Striped-Smith-Waterman-Library/src/ -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm 
@@ -19,8 +19,8 @@ RUNTIME=-Wl,-rpath=src/bamtools/lib/
 
 
 
-all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM whamGraph clean
-debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD graphDebug clean
+all: mvSSW createBin bamtools libbamtools.a buildWHAMBAM whamGraph buildMerge clean
+debug: mvSSW createBin bamtools libbamtools.a buildWHAMBAMD graphDebug buildMerge clean
 
 mvSSW:
 	cp src/lib/ssw.c src/Complete-Striped-Smith-Waterman-Library/src
@@ -49,6 +49,12 @@ whamGraph:
 	$(CC) $(CFLAGS)  -O3 src/lib/*cpp src/bin/graph-er.cpp src/lib/gauss.c $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
 graphDebug:
 	$(CC) $(CFLAGS) -g -DDEBUG src/lib/*cpp src/bin/graph-er.cpp src/lib/gauss.c $(INCLUDE) $(LIBS) $(FASTAHACK) $(SSW)  -o $(OUTFOLD)WHAM-GRAPHENING $(RUNTIME)
+
+buildTest:
+	$(CC) -g -I/home/zkronenb/tools/gtest-1.7.0/include/ -L/home/zkronenb/tools/gtest-1.7.0/build -
+buildMerge:
+	$(CC) $(INCLUDE) $(LIBS) src/bin/mergeIndv.cpp src/lib/split.cpp -o $(OUTFOLD)mergeIndvs
+
 
 clean:
 	-@rm *.a
