@@ -733,13 +733,7 @@ bool sortBreak(breakpoints * L, breakpoints * R){
     if(L->five < R->five){
       return true;
     }
-    else{
-      if(L->three < R->three){
-	return true;
-      }
-    }
   }
-  
   else{
     if(L->seqidIndexL < R->seqidIndexL){
       return true;
@@ -769,6 +763,11 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
   for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
     
+    int svlen = (*c)->svlen;
+
+    if(svlen < 5){
+      (*c)->fail = true;
+    }
 
     if((*c)->fail){
       continue;
@@ -776,7 +775,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
     index += 1;
    
-    int svlen = (*c)->svlen;
+
 
     stringstream ss;
 
@@ -4544,7 +4543,6 @@ int main( int argc, char** argv)
    }
    omp_unset_lock(&glock);
  }
-
 
  cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
 
