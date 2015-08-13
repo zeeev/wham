@@ -796,6 +796,15 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     default:
       break;
     }
+
+
+    char hex[8 + 1];
+    for(int i = 0; i < 8; i++) {
+      sprintf(hex + i, "%x", rand() % 16);
+    }
+
+
+
     ss << seqs[(*c)->seqidIndexL].RefName 
        << "\t"
        << ((*c)->five - 10)
@@ -808,18 +817,17 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ((*c)->three + 10)
        << "\t"
-       << type << ":" << index
+       << type << ":" << hex
        << "\t"
        << "."
        << "\t"
        << "."
        << "\t"
        << ".";
-    if((*c)->type == 'D' || (*c)->type == 'V' || (*c)->type == 'U' ){
-      ss << "\t" << "SVLEN=" << svlen  << ";"; 
-    }
 
-    ss << "\tSUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
+    ss << "\tSTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << hex << ";";
+
+    ss << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
        << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
