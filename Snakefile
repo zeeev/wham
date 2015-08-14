@@ -1,4 +1,4 @@
-FILES     = "AFR_EsanESN_HG02943_F AFR_EsanESN_HG03100_M AFR_GambiaGWD_HG02464_M AFR_GambiaGWD_HG02574_F AFR_LuhyaLWK_NA19023_F AFR_MendeMSL_HG03078_M AFR_MendeMSL_HG03085_F EA_Japanese_NA18940_M EA_KinhKHV_HG01600_F EA_KinhKHV_HG01846_M SA_BengaliBEB_HG03006_M SA_BengaliBEB_HG03007_F SA_PunjabiPJL_HG02724_M SA_PunjabiPJL_HG02783_M SA_PunjabiPJL_HG02790_F WEA_EnglandGBR_HG00126_M WEA_EnglandGBR_HG00128_F WEA_FinlandFIN_HG00174_F WEA_FinlandFIN_HG00190_M WEA_FinlandFIN_HG00360_M WEA_SpainIBS_HG01503_M WEA_SpainIBS_HG01504_F".split() #creates array of your input files # just the unique bam identifier
+FILES     = "human1 human2".split()
 FASTA     = "/net/eichler/vol8/home/zevk/shared_resources/assemblies/human_1kg_v37/human_1kg_v37.fasta" # reference genome.  Needs to match
 PATH      = "/net/eichler/vol24/projects/human_diversity/nobackups/C_team_bwa_mappings/hgdp_1kg_overlap/" #full path to the bamfile
 BAMSUFFIX = ".bam" # suffix of the bam
