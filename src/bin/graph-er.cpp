@@ -761,11 +761,13 @@ bool sortBreak(breakpoints * L, breakpoints * R){
   
   if(L->seqidIndexL == R->seqidIndexL ){
     if(L->five < R->five){
+
       return true;
     }
   }
   else{
     if(L->seqidIndexL < R->seqidIndexL){
+
       return true;
     }
   }
@@ -790,6 +792,9 @@ bool sortBreak(breakpoints * L, breakpoints * R){
 void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
   int index = 0;
+
+   sort(calls.begin(), calls.end(), sortBreak);
+
 
   for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
     
@@ -4594,8 +4599,6 @@ int main( int argc, char** argv)
  }
 
  cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
-
- sort(allBreakpoints.begin(), allBreakpoints.end(), sortBreak);
 
  printBEDPE(allBreakpoints, sequences);
   
