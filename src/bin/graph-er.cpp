@@ -156,7 +156,9 @@ struct breakpoints{
   int five               ;
   int three              ;
   int svlen              ;
+  int collapsed          ; 
   int totalSupport       ; 
+  string id              ; 
   vector<string> alleles ;
   vector<int>    supports;
   vector<vector<double> > genotypeLikelhoods ;
@@ -202,9 +204,22 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
     
     while(getline(featureFile, line)){
       
-      vector<string> SV = split(line, "\t");
+      vector<string> SV   = split(line, "\t");
       
-      if( (SV[3].compare("DEL") == 0) || (SV[3].compare("DUP") == 0) || (SV[3].compare("INV") == 0) ){
+      vector<string> info = split(SV[10], ";");
+
+      map<string, string> infoDat;
+
+      for(vector<string>::iterator iz = info.begin(); iz != info.end(); iz++){
+	
+	vector<string> kv = split(*iz, "=");
+	
+	infoDat[kv.front()] = kv.back();
+
+      }
+
+	
+      if( (infoDat["SVTYPE"].compare("DEL") == 0) || (infoDat["SVTYPE"].compare("DUP") == 0) || (infoDat["SVTYPE"].compare("INV") == 0) ){
 
 	breakpoints * bk = new breakpoints;
 	
@@ -212,10 +227,10 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->two  = true ;
 	bk->type = 'D';
 	
-	if((SV[3].compare("DUP") == 0)){
+	if((infoDat["SVTYPE"].compare("DUP") == 0)){
 	  bk->type = 'U';
 	}
-	if((SV[3].compare("INV") == 0)){
+	if((infoDat["SVTYPE"].compare("INV") == 0)){
           bk->type = 'V';
         }
 	if(inverse_lookup.find(SV[0]) == inverse_lookup.end() ){
@@ -223,16 +238,31 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	  exit(1);
 	}
 	
+	vector<string> POS = split(infoDat["POS"], ",");
+	vector<string> SUP = split(infoDat["SUPPORT"], ",");
+
 	bk->seqidIndexL = inverse_lookup[SV[0]];
 	bk->seqidIndexR = inverse_lookup[SV[0]];
 	bk->seqid       = SV[0];
 	bk->merged      = false;
 	bk->refined     = false; 
-	bk->five        = atoi(SV[1].c_str());
-	bk->three       = atoi(SV[2].c_str());
-	bk->totalSupport = atoi(SV[4].c_str());
+
+	cerr << POS[0] << " " << POS[1] << endl;
+
+	bk->five        = atoi(POS[0].c_str());
+	bk->three       = atoi(POS[1].c_str());
+
+	bk->id           = infoDat["ID"];
+	bk->collapsed    = atoi(infoDat["COLLAPSED"].c_str());
 	bk->lalt = 0;
-	bk->lref  = 0;
+	bk->lref = 0;
+
+	bk->sml = split(infoDat["LID"], ",");
+	bk->smr = split(infoDat["RID"], ",");
+
+	bk->supports.push_back(atoi(SUP[0].c_str()));
+	bk->supports.push_back(atoi(SUP[0].c_str()));
+	  
 
 	if(bk->five > bk->three){
 	  cerr << "FATAL: SV starts before it ends: " << line << endl;
@@ -797,14 +827,6 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
       break;
     }
 
-
-    char hex[8 + 1];
-    for(int i = 0; i < 8; i++) {
-      sprintf(hex + i, "%x", rand() % 16);
-    }
-
-
-
     ss << seqs[(*c)->seqidIndexL].RefName 
        << "\t"
        << ((*c)->five - 10)
@@ -817,7 +839,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ((*c)->three + 10)
        << "\t"
-       << type << ":" << hex
+       << type << ":" << (*c)->id
        << "\t"
        << "."
        << "\t"
@@ -825,9 +847,8 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ".";
 
-    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << hex << ";";
-
-    ss << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
+    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << (*c)->id << ";"
+       << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
        << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
@@ -3625,6 +3646,16 @@ void callBreaks(vector<node *> & tree,
   bp->refined = 0;
   bp->lalt = 0;
   bp->lref = 0;
+  bp->collapsed = 0;
+
+  char hex[8 + 1];
+  for(int i = 0; i < 8; i++) {
+    sprintf(hex + i, "%x", rand() % 16);
+  }
+
+  stringstream xx ;
+  xx << hex;
+  bp->id = xx.str();
 
   if(detectDeletion(tree, bp)){
     omp_set_lock(&lock);
@@ -4270,6 +4301,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	  bp->three        = rPos                   ;
 	  bp->svlen        = rPos - lPos            ;
 	  bp->totalSupport = 0                      ;
+	  bp->collapsed    = 0                      ; 
 	  for(map<string, int>::iterator iz = putative.front()->sm.begin()
 		; iz != putative.front()->sm.end(); iz++){
 	    bp->sml.push_back(iz->first);
