@@ -144,8 +144,8 @@ string join(vector<string> & strings, string sep){
 
 void mergeAndDump(vector<svDat *> & svs){
 
-  int fiveSum  = 0;
-  int threeSum = 0;
+  long int fiveSum  = 0;
+  long int threeSum = 0;
 
   int lSupport = 0;
   int rSupport = 0;
@@ -157,6 +157,7 @@ void mergeAndDump(vector<svDat *> & svs){
   int COLLAPSED = 0;
 
     for(vector<svDat *>::iterator iz = svs.begin(); iz != svs.end(); iz++){
+      
       fiveSum   += (*iz)->five;
       threeSum  += (*iz)->three;
       
