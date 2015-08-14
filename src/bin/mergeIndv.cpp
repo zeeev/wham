@@ -181,7 +181,7 @@ void mergeAndDump(vector<svDat *> & svs){
 
 
   int svlen = threeAvg - fiveAvg;
-  if(svs.front()->type.compare("DEL")){
+  if(svs.front()->type.compare("DEL")==0){
     svlen = -svlen;
   }
   
