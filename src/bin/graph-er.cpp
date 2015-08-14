@@ -4290,6 +4290,16 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	  cerr << "INFO: joining deletion breakpoints: " <<  lPos << " " << rPos << endl;
 	  
 	  breakpoints * bp = new breakpoints;
+
+	  char hex[8 + 1];
+	  for(int i = 0; i < 8; i++) {
+	    sprintf(hex + i, "%x", rand() % 16);
+	  }
+
+	  stringstream xx ;
+	  xx << hex;
+	  bp->id = xx.str();
+
 	  
 	  bp->fail         = false                  ;
 	  bp->two          = true                   ;
