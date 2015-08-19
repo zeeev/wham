@@ -2872,6 +2872,15 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
     L->collapsed = true;
 
 
+    for(map<string,int>::iterator iz = L->sm.begin(); iz != L->sm.end(); iz++){
+    
+      if(R->sm.find(iz->first) != R->sm.end()){
+	R->sm[iz->first] += iz->second;
+      }
+      else{
+	R->sm[iz->first] = iz->second;
+      }
+    }
 
     for(vector<edge *>::iterator lc =  L->eds.begin(); lc != L->eds.end(); lc++){
 
@@ -2914,6 +2923,18 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 
     //    cerr << "Joining right" << endl;
     R->collapsed = true;
+
+    for(map<string,int>::iterator iz = R->sm.begin(); iz != R->sm.end(); iz++){
+
+      if(L->sm.find(iz->first) != L->sm.end()){
+        L->sm[iz->first] += iz->second;
+      }
+      else{
+        L->sm[iz->first] = iz->second;
+      }
+    }
+
+
 
     for(vector<edge *>::iterator lc =  R->eds.begin(); lc != R->eds.end(); lc++){
 
