@@ -2871,6 +2871,8 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 
     L->collapsed = true;
 
+
+
     for(vector<edge *>::iterator lc =  L->eds.begin(); lc != L->eds.end(); lc++){
 
 
