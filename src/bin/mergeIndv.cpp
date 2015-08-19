@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include <cstdlib>
 #include <cmath>
 #include "split.h"
+#include <getopt.h>
 
 using namespace std;
 
