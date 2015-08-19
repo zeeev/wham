@@ -4063,7 +4063,7 @@ void gatherBamStats(string & targetfile){
 
   while(i < 8 || n < 100000){
 
-    if((n % 100) == 0){
+    if((n % 10000) == 0 && fail < 10){
       omp_set_lock(&lock);
       cerr << "INFO: processed " << n << " reads for: " << targetfile << endl;
       omp_unset_lock(&lock);

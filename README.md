@@ -12,4 +12,6 @@ WHAM can be easily run as a stand alone tool or as part of gkno (http://gkno.me)
 
 Currently we are preparing the WHAM manuscript.  If you would like to use and cite this tool, for the time being, please cite the WHAM github page.
 
+### WHAM-GRAPHENING
 
+For reference based events (DEL, DUP, INV), we recommend WHAM-GRAPHENING.
