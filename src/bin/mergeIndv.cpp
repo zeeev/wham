@@ -290,9 +290,6 @@ void mergeAndDump(vector<svDat *> & svs){
   // merged SVs need to be re genotyped;
   
 
-  for(int gi = 0 ; gi < NSAMP; gi++){
-    bedpe << "\t.:.:.:." ;
-  }
     
   cout << bedpe.str() << endl;
 
