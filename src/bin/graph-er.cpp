@@ -1040,7 +1040,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
-       << "END=" << ((*c)->three +1) << ";"
+       << "END=" << (*c)->three << ";"
        << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
 
     string SML = ".";
