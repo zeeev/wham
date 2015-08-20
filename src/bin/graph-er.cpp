@@ -68,16 +68,18 @@ using namespace BamTools;
 
 struct options{
   std::vector<string> targetBams;
-  bool statsOnly         ;  
-  bool skipGeno          ;
-  int MQ                 ;
-  int nthreads           ;
-  string fasta           ;
-  string graphOut        ;
-  map<string, int> toSkip;
-  string seqid           ;
-  vector<int> region     ;
-  string svs             ; 
+  bool statsOnly                ;  
+  bool skipGeno                 ;
+  bool vcf                      ;
+  int MQ                        ;
+  int nthreads                  ;
+  string fasta                  ;
+  string graphOut               ;
+  map<string, int> toSkip       ;
+  string seqid                  ;
+  vector<int> region            ;
+  string svs                    ; 
+  map<string,string> SMTAGS     ;
 
 }globalOpts;
 
@@ -173,7 +175,7 @@ struct breakpoints{
 
 };
 
-static const char *optString = "b:m:r:a:g:x:f:e:hsk";
+static const char *optString = "b:m:r:a:g:x:f:e:hskv";
 
 
 
@@ -658,6 +660,7 @@ void printHelp(void){
   cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
   cerr << endl;
   cerr << " Optional:  " << endl;
+  cerr << "          -v - <FLAG>   - Print VCF4.2 rather than BEDPE             " << endl;
   cerr << "          -s - <FLAG>   - Exits the program after the stats are      " << endl;
   cerr << "                          gathered.                                  " << endl;
   cerr << "          -k - <FLAG>   - Skip genotyping (much faster).             " << endl;
@@ -671,7 +674,7 @@ void printHelp(void){
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
-  cerr << "        STOUT : SV calls in BEDPE format (VCF soon)                 " << endl;  
+  cerr << "        STOUT : SV calls in BEDPE or VCF format                     " << endl;  
   cerr << endl;
   printVersion();
 }
@@ -777,6 +780,184 @@ bool sortBreak(breakpoints * L, breakpoints * R){
 
 }
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector of pointers to breakpoints and a bamtools RefVector
+
+ Function does   : prints a vcf format
+
+ Function returns: nada
+
+*/
+
+
+void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
+
+  int index = 0;
+
+  sort(calls.begin(), calls.end(), sortBreak);
+
+
+  stringstream header;
+  
+  header << "##fileformat=VCFv4.2" << endl;
+  header << "##source=WHAM-GRAPHENING:" << VERSION << endl;
+  header << "##reference=" << globalOpts.fasta << endl;
+  header << "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">" << endl;
+  header << "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between REF and ALT alleles\">" << endl;
+  header << "##INFO=<ID=ID,Number=1,Type=String,Description=\"Unique hexadecimal identifier\">" << endl;
+  header << "##INFO=<ID=SUPPORT,Number=2,Type=Integer,Description=\"Number of reads supporting POS and END breakpoints\">" << endl;
+  header << "##INFO=<ID=MERGED,Number=1,Type=Integer,Description=\"SV breakpoints were joined without split read support 0=false 1=true\">" << endl;
+  header << "##INFO=<ID=REFINED,Number=1,Type=Integer,Description=\"SV breakpoints were refined based on SW alignment 0=false 1=true\">" << endl;
+  header << "##INFO=<ID=POS,Number=2,Type=String,Description=\"POS and END\">" << endl;
+  header << "##INFO=<ID=LID,Number=.,Type=String,Description=\"POS breakpoint support came from SM, independent of genotype\">" << endl;
+  header << "##INFO=<ID=RID,Number=.,Type=String,Description=\"END breakpoint support came from SM, independent of genotype\">" << endl;
+  header << "##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"Confidence interval around POS for imprecise variants\">" << endl;
+  header << "##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"Confidence interval around END for imprecise variants\">" << endl;
+  header << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << endl;
+  header << "##FORMAT=<ID=GL,Number=.,Type=Float,Description=\"Genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for all possible genotypes given the set of alleles defined in the REF and ALT fields.\">" << endl;
+  header << "##FORMAT=<ID=AS,Number=1,Type=Integer,Description=\"Number of reads that align better to ALT allele\">" << endl;
+  header << "##FORMAT=<ID=RS,Number=1,Type=Integer,Description=\"Number of reads that align better to REF allele\">" << endl;
+  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" ;
+
+  for(vector<string>::iterator iz = globalOpts.targetBams.begin(); iz !=  globalOpts.targetBams.end(); iz++){
+
+    if(globalOpts.SMTAGS.find(*iz) == globalOpts.SMTAGS.end()){
+      cerr << "FATAL: could not find SM tag for: " << *iz << endl;
+      exit(1);
+    }
+    header << "\t" << globalOpts.SMTAGS[*iz];
+  }
+
+  cout << header.str() << endl;
+
+  for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
+    
+    int svlen = (*c)->svlen;
+
+    if(svlen < 5){
+      (*c)->fail = true;
+    }
+
+    if((*c)->fail){
+      continue;
+    }
+
+    index += 1;
+   
+
+    stringstream ss;
+
+    string type = "BND";
+    switch((*c)->type){
+    case 'D':
+      type = "DEL";
+      svlen = -svlen;
+      break;
+    case 'U':
+      type = "DUP";
+      break;
+    case 'I':
+      type = "INS";
+      break;
+    case 'V':
+      type = "INV";
+      break;
+    default:
+      break;
+    }
+
+    ss << seqs[(*c)->seqidIndexL].RefName 
+       << "\t"
+       << ((*c)->five + 1)
+       << "\t"
+       << "WG:" << type << ":" << (*c)->id
+       << "\t"
+       << "."
+       << "\t"
+       << "<" << type << ">" 
+       << "\t"
+       << "."
+       << "\t"
+       << ".";
+
+    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << (*c)->id << ";"
+       << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
+       << "MERGED=" << (*c)->merged << ";"
+       << "REFINED=" << (*c)->refined << ";"
+       << "POS=" << ((*c)->five + 1) << "," << ((*c)->three +1) << ";" ;
+
+    string SML = ".";
+    string SMR = ".";
+
+    if((*c)->sml.size() > 1){
+      SML = join((*c)->sml, ",");
+    }
+    else{
+      SML = (*c)->sml.front();
+    }
+
+    if((*c)->smr.size() > 1){
+      SMR = join((*c)->smr, ",");
+    }
+    else{
+      SMR = (*c)->smr.front();
+    }
+
+    ss << "LID=" << SML << ";" ; 
+    ss << "RID=" << SMR << ";" ; 
+    ss << "CIPOS=-10,10;CIEND=-10,10";
+    ss << "\tGT:GL:AS:RS";
+
+    if((*c)->genotypeIndex.size() != globalOpts.SMTAGS.size()){
+      
+      for(int gi = 0; gi < globalOpts.SMTAGS.size(); gi++){
+	ss << "\t" << ".:.:." ;
+      }
+      ss << endl;
+      cout << ss.str();
+    }
+    else{
+      for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
+	if((*c)->genotypeIndex[i] == -1){
+	  ss << "\t" << "./.:" << "."
+	     << "," << "."
+	     << "," << "."
+	     << ":" << (*c)->nalt[i]
+	     << ":" << (*c)->nref[i];
+	}
+	else if((*c)->genotypeIndex[i] == 0){
+	  ss << "\t" << "0/0:" << (*c)->genotypeLikelhoods[i][0] 
+	     << "," << (*c)->genotypeLikelhoods[i][1] 
+	     << "," << (*c)->genotypeLikelhoods[i][2] 
+	     << ":" << (*c)->nalt[i]
+	     << ":" << (*c)->nref[i];
+	}
+	else if((*c)->genotypeIndex[i] == 1){
+	  ss << "\t" << "0/1:" << (*c)->genotypeLikelhoods[i][0] 
+	     << "," << (*c)->genotypeLikelhoods[i][1] 
+	     << "," << (*c)->genotypeLikelhoods[i][2] 
+	     << ":" << (*c)->nalt[i]
+	     << ":" << (*c)->nref[i];
+	}
+	else if((*c)->genotypeIndex[i] == 2){
+	  ss << "\t" << "1/1:" << (*c)->genotypeLikelhoods[i][0] 
+	     << "," << (*c)->genotypeLikelhoods[i][1] 
+	     << "," << (*c)->genotypeLikelhoods[i][2] 
+	     << ":" << (*c)->nalt[i]
+	     << ":" << (*c)->nref[i];
+	}     
+	else{
+	cerr << "FATAL: printVCF: unknown genotype." << endl;
+	exit(1);
+	}
+      }
+      ss << endl;
+      cout << ss.str();
+    }
+  }
+}
+
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -844,7 +1025,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << ((*c)->three + 10)
        << "\t"
-       << type << ":" << (*c)->id
+       << "WG:" << type << ":" << (*c)->id
        << "\t"
        << "."
        << "\t"
@@ -2222,7 +2403,7 @@ void loadBam(string & bamFile){
  
   if(! br.Open(bamFile)){
     cerr << "\n" << "FATAL: could not open: " << bamFile << endl;
-    exit(1);
+    exit(1); 
   }
   if(! br.LocateIndex()){    
     vector<string> fileName = split(bamFile, ".");
@@ -2265,7 +2446,14 @@ void loadBam(string & bamFile){
   }
   
   SM = RG.Begin()->Sample;
+
+  omp_set_lock(&lock);
   
+  globalOpts.SMTAGS[bamFile] = SM;
+
+  omp_unset_lock(&lock);  
+
+
   // if the bam is not sorted die
   if(!SH.HasSortOrder()){
     cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header: " << bamFile  << endl;
@@ -2394,112 +2582,118 @@ void loadBam(string & bamFile){
 }
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
-    {
-    int opt = 0;
-    opt = getopt(argc, argv, optString);
-    while(opt != -1){
-      switch(opt){
-      case 'k':
-	{
-	  globalOpts.skipGeno = true;
-	  break;
+{ 
+  int opt = 0;
+  opt = getopt(argc, argv, optString);
+  while(opt != -1){
+    switch(opt){
+    case 'v':
+      {
+	globalOpts.vcf = true;
+	cerr << "INFO: WHAM-GRAPHENING will print VCF to STDOUT: -v set" << globalOpts.svs << endl;
+	break;
+      }
+    case 'k':
+      {
+	globalOpts.skipGeno = true;
+	break;
+      }
+    case 'b':
+      {
+	globalOpts.svs = optarg;
+	cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
+	break;
+      }
+    case 's':
+      {
+	globalOpts.statsOnly = true;
+	break;
+      }
+    case 'g':
+      {
+	globalOpts.graphOut = optarg;
+	cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut 
+	     << endl;
+	break;
+      }
+    case 'a':
+      {
+	globalOpts.fasta = optarg;
+	cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
+	break;
+      }
+    case 'e':
+      {
+	vector<string> seqidsToSkip = split(optarg, ",");
+	for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
+	  globalOpts.toSkip[seqidsToSkip[i]] = 1;
+	  cerr << "INFO: WHAM will skip seqid: " << seqidsToSkip[i] << endl;
 	}
-      case 'b':
-	{
-	  globalOpts.svs = optarg;
-	  cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
-	  break;
-	}
-      case 's':
-	{
-	  globalOpts.statsOnly = true;
-	  break;
-	}
-      case 'g':
-	{
-	  globalOpts.graphOut = optarg;
-	  cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut 
-	       << endl;
-	  break;
-	}
-      case 'a':
-	{
-	  globalOpts.fasta = optarg;
-	  cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
-	  break;
-	}
-      case 'e':
-	{
-	  vector<string> seqidsToSkip = split(optarg, ",");
-	  for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
-	    globalOpts.toSkip[seqidsToSkip[i]] = 1;
-	    cerr << "INFO: WHAM will skip seqid: " << seqidsToSkip[i] << endl;
-	  }
-	  break;
-	}
-      case 'f':
-	{
-	  globalOpts.targetBams     = split(optarg, ",");
-	  cerr << "INFO: target bams:\n" << joinReturn(globalOpts.targetBams) ;
-	  break;
-	}
-      case 'h':
-	{
-	  printHelp();
-	  exit(1);
-	  break;
-	}
-      case '?':
-	{
-	  break;
-	}
-      case 'm':
-	{
-	  globalOpts.MQ = atoi(((string)optarg).c_str());
-	  cerr << "INFO: Reads with mapping quality below " << globalOpts.MQ << " will be filtered. " << endl;
-	  break;
-	}
-      case 'x':
-	{
+	break;
+      }
+    case 'f':
+      {
+	globalOpts.targetBams     = split(optarg, ",");
+	cerr << "INFO: target bams:\n" << joinReturn(globalOpts.targetBams) ;
+	break;
+      }
+    case 'h':
+      {
+	printHelp();
+	exit(1);
+	break;
+      }
+    case '?':
+      {
+	break;
+      }
+    case 'm':
+      {
+	globalOpts.MQ = atoi(((string)optarg).c_str());
+	cerr << "INFO: Reads with mapping quality below " << globalOpts.MQ << " will be filtered. " << endl;
+	break;
+      }
+    case 'x':
+      {
 	  globalOpts.nthreads = atoi(((string)optarg).c_str());
 	  cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads 
 	       << " threads" << endl;
 	  break;
 	}
-      case 'r':
-	{
-	  vector<string> tmp_region = split(optarg, ":");
-	  if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
-	    cerr << "FATAL: region was not set correctly" << endl;
-	    cerr << "INFO:  region format: seqid:start-end" << endl;
-	    exit(1);
-	  }
-	  
-	  vector<string> start_end = split(tmp_region[1], "-");
-	  globalOpts.seqid = tmp_region[0];
-	  globalOpts.region.push_back(atoi(start_end[0].c_str()));
-	  globalOpts.region.push_back(atoi(start_end[1].c_str()));
-
-	  if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
-	    cerr << "FATAL: region was not set correctly" << endl;
-	    cerr << "INFO:  region format: seqid:start-end" << endl;
-	    exit(1);
-	  }
-	  cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
-
-	  if(globalOpts.region.size() != 2){
-	    cerr << "FATAL: incorrectly formatted region." << endl;
-	    cerr << "FATAL: wham is now exiting."          << endl;
-	    exit(1);
-	  }
-	  break;
+    case 'r':
+      {
+	vector<string> tmp_region = split(optarg, ":");
+	if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
+	  cerr << "FATAL: region was not set correctly" << endl;
+	  cerr << "INFO:  region format: seqid:start-end" << endl;
+	  exit(1);
 	}
-
+	
+	vector<string> start_end = split(tmp_region[1], "-");
+	globalOpts.seqid = tmp_region[0];
+	globalOpts.region.push_back(atoi(start_end[0].c_str()));
+	globalOpts.region.push_back(atoi(start_end[1].c_str()));
+	
+	if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
+	  cerr << "FATAL: region was not set correctly" << endl;
+	  cerr << "INFO:  region format: seqid:start-end" << endl;
+	  exit(1);
+	}
+	cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
+	
+	if(globalOpts.region.size() != 2){
+	  cerr << "FATAL: incorrectly formatted region." << endl;
+	  cerr << "FATAL: wham is now exiting."          << endl;
+	  exit(1);
+	}
+	break;
       }
-      opt = getopt( argc, argv, optString ); 
+      
     }
-    return 1;
-    }
+    opt = getopt( argc, argv, optString ); 
+  }
+  return 1;
+}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -3770,91 +3964,15 @@ void dump(vector< vector< node *> > & allTrees){
   graphOutFile.close();
 }
 
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : bam file name and breakpoint
+ Function input  : bam file names (from globalOpts)
 
- Function does   : aligns reads to breakpoints
+ Function does   : genotypes the SVs using a pairedHMM
 
  Function returns: NA
+
 */
-
-double pBases(vector<unsigned int> & cigar, string & baseQs){
-  
-  double phredSum   = 0;
-  int runningPos = 0; 
-
-  for(int i = 0; i < cigar.size(); i++){
-    
-    int op = cigar[i]&BAM_CIGAR_MASK  ;
-    int l  = cigar[i]>>BAM_CIGAR_SHIFT  ;
-
-    for(int j = 0; j < l; j++){      
-
-      // match M
-      if(op == 0 ){
-	phredSum += log( 1 - unPhred(SangerLookup[int(baseQs[runningPos])])) ;
-	runningPos += 1;
-	continue;
-      }
-      // insertion I
-      if(op == 1 ){
-	phredSum += log(     unPhred(SangerLookup[int(baseQs[runningPos])])) ;
-	runningPos += 1;
-	continue;
-      }
-      // deletion D
-      if(op == 2 ){
-	phredSum += -3;
-	//phredSum += -4.60517;
-	//phredSum += -10;
-
-	continue;
-      }
-      // skip N
-      if(op == 3 ){
-	runningPos += 1;
-	continue;
-      }
-      // softclip S
-      if(op == 4 ){
-	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
-	runningPos += 1;
-	continue;
-      }
-      // hardclip H
-      if(op == 5 ){
-	cerr << "FATAL: hard clip made it into genotyping." << endl;
-	cerr << "INFO : report bug to author.             " << endl;
-	exit(1);
-      }    
-      // padding P
-      if(op == 6 ){
-        cerr << "FATAL: padded seq made it into genotyping." << endl;
-        cerr << "INFO : report bug to author.             " << endl;
-        exit(1);
-      }
-      // match =
-      if(op == 7 ){
-
-	cerr << baseQs[runningPos] << " " << SangerLookup[int(baseQs[runningPos])] << endl;
-
-	phredSum += log( 1 - unPhred(SangerLookup[int(baseQs[runningPos])])) ;
-
-	runningPos += 1;
-	continue;
-      }
-      // mismatch X
-      if(op == 8 ){
-	phredSum += log(unPhred(SangerLookup[int(baseQs[runningPos])])) ;
-	runningPos += 1;
-	continue;
-      }
-    }
-  }
-  return phredSum;
-}
 
 void genotype(string & bamF, breakpoints * br){
 
@@ -4370,6 +4488,7 @@ int main( int argc, char** argv)
   globalOpts.statsOnly = false;
   globalOpts.skipGeno  = false;
   globalOpts.MQ        = 20   ;
+  globalOpts.vcf       = false;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -4518,8 +4637,13 @@ int main( int argc, char** argv)
  }
  
  if(globalOpts.skipGeno){
-   printBEDPE(allBreakpoints, sequences);
-   cerr << "INFO: Skipping genotyping: -k " << endl;
+   if(globalOpts.vcf){
+     printVCF(allBreakpoints, sequences);
+   }
+   else{
+     printBEDPE(allBreakpoints, sequences);
+   }
+   cerr << "INFO: Skipping genotyping: -k set" << endl;
    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
    return 0;
  }
@@ -4540,7 +4664,6 @@ int main( int argc, char** argv)
      buffer +=1;
    }   
    double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
-   double  oldScore = startingScore;
    int oldStart     = allBreakpoints[z]->five ;
    int oldEnd       = allBreakpoints[z]->three;
    int flag         = 0;
@@ -4623,8 +4746,13 @@ int main( int argc, char** argv)
 
  cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
 
- printBEDPE(allBreakpoints, sequences);
-  
+ if(globalOpts.vcf){
+   printVCF(allBreakpoints, sequences);
+ }
+ else{
+   printBEDPE(allBreakpoints, sequences);
+ }
+ 
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
  }
