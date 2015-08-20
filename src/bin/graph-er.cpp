@@ -797,7 +797,6 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
   sort(calls.begin(), calls.end(), sortBreak);
 
-
   stringstream header;
   
   header << "##fileformat=VCFv4.2" << endl;
@@ -816,6 +815,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   header << "##INFO=<ID=RID,Number=.,Type=String,Description=\"END breakpoint support came from SM, independent of genotype\">" << endl;
   header << "##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"Confidence interval around POS for imprecise variants\">" << endl;
   header << "##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"Confidence interval around END for imprecise variants\">" << endl;
+  header << "##INFO=<ID=COLLAPSED,Number=1,Type=Integer,Description=\"Number of SV calls merged into record\">" << endl;
   header << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << endl;
   header << "##FORMAT=<ID=GL,Number=.,Type=Float,Description=\"Genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for all possible genotypes given the set of alleles defined in the REF and ALT fields.\">" << endl;
   header << "##FORMAT=<ID=AS,Number=1,Type=Integer,Description=\"Number of reads that align better to ALT allele\">" << endl;
@@ -909,7 +909,8 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
     ss << "LID=" << SML << ";" ; 
     ss << "RID=" << SMR << ";" ; 
-    ss << "CIPOS=-10,10;CIEND=-10,10";
+    ss << "CIPOS=-10,10;CIEND=-10,10;";
+    ss << "COLLAPSED=" << (*c)->collapsed ;
     ss << "\tGT:GL:AS:RS";
 
     if((*c)->genotypeIndex.size() != globalOpts.SMTAGS.size()){
@@ -1061,9 +1062,10 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
     }
 
     ss << "LID=" << SML << ";" ; 
-    ss << "RID=" << SMR ; 
-
-
+    ss << "RID=" << SMR << ";" ; 
+    ss << "CIPOS=-10,10;CIEND=-10,10;";
+    ss << "COLLAPSED=" << (*c)->collapsed ;
+    ss << "\tGT:GL:AS:RS";
    
     for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
       if((*c)->genotypeIndex[i] == -1){

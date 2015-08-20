@@ -58,6 +58,8 @@ struct svDat{
   int    three;
   string id   ;
   string type ; 
+  int collapsed;
+
 
   vector<string> lineDat  ;
  
@@ -154,7 +156,21 @@ void mergeAndDump(vector<svDat *> & svs){
   vector<string> ids;
   vector<string> merged;
   vector<string> refined;
-  
+
+  char hex[8 + 1];
+  for(int i = 0; i < 8; i++) {
+    sprintf(hex + i, "%x", rand() % 16);
+  }
+
+  stringstream xx ;
+  xx << hex;
+
+  string newid = xx.str();
+
+  if(svs.size() == 1){
+    newid = svs.front()->id;
+  }
+   
   int COLLAPSED = 0;
 
     for(vector<svDat *>::iterator iz = svs.begin(); iz != svs.end(); iz++){
@@ -170,12 +186,17 @@ void mergeAndDump(vector<svDat *> & svs){
       merged.push_back((*iz)->info["MERGED"]);
       refined.push_back((*iz)->info["REFINED"]);
 
-
+      if((*iz)->collapsed > 0){
+	COLLAPSED += (*iz)->collapsed; 
+      }
+      else{
+	COLLAPSED += 1;
+      }
     
     }
     
-    if(svs.size() > 1){
-      COLLAPSED = svs.size();
+    if(COLLAPSED == 1){
+      COLLAPSED = 0;
     }
 
   int  fiveAvg = roundHalfwayDown(double(fiveSum) / double(svs.size()));
@@ -227,15 +248,23 @@ void mergeAndDump(vector<svDat *> & svs){
 	<< svs.front()->seqid << "\t"
 	<< (threeAvg - 5) << "\t"
 	<< (threeAvg + 5) << "\t"
-	<< svs.front()->type << ":" << join(ids, "-") << "\t"
+	<< "WG:" << svs.front()->type << ":" << newid << "\t"
 	<< ".\t.\t.\t" 
 	<< "SVTYPE=" << svs.front()->type 
 	<< ";SVLEN=" << svlen << ";ID=" 
-	<< join(ids, "-") << ";SUPPORT=" 
+	<< join(ids, ",") << ";SUPPORT=" 
 	<< lSupport << "," << rSupport 
 	<< ";MERGED=" << join(merged, ",") << ";REFINED=" << join(refined, ",") 
+        << ";END=" << threeAvg 
 	<< ";POS=" << fiveAvg << "," << threeAvg << ";LID=" << join(lidV, ",") 
-	<< ";RID=" << join(ridV, ",") << ";" << "COLLAPSED=" << COLLAPSED <<  endl;
+	<< ";RID=" << join(ridV, ",") << ";" 
+	<< "CIPOS=-10,10;CIEND=-10,10;"
+	<< "COLLAPSED=" << COLLAPSED 
+	<< "\tGT:GL:AS:RS" << endl;
+  
+  
+
+
 
   cout << bedpe.str();
 
@@ -289,10 +318,10 @@ void parseSV(svDat * sv, string & line){
 
   vector<string> support = split(sv->info["SUPPORT"], ',');
 
-
   sv->type = sv->info["SVTYPE"];
   sv->id   = sv->info["ID"];
     
+  sv->collapsed = atoi(sv->info["COLLAPSED"].c_str());
   sv->ls = atoi(support.front().c_str());
   sv->rs = atoi(support.back().c_str());
 
