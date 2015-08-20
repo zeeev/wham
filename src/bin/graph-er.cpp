@@ -809,6 +809,8 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   header << "##INFO=<ID=SUPPORT,Number=2,Type=Integer,Description=\"Number of reads supporting POS and END breakpoints\">" << endl;
   header << "##INFO=<ID=MERGED,Number=1,Type=Integer,Description=\"SV breakpoints were joined without split read support 0=false 1=true\">" << endl;
   header << "##INFO=<ID=REFINED,Number=1,Type=Integer,Description=\"SV breakpoints were refined based on SW alignment 0=false 1=true\">" << endl;
+
+  header << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">" << endl;
   header << "##INFO=<ID=POS,Number=2,Type=String,Description=\"POS and END\">" << endl;
   header << "##INFO=<ID=LID,Number=.,Type=String,Description=\"POS breakpoint support came from SM, independent of genotype\">" << endl;
   header << "##INFO=<ID=RID,Number=.,Type=String,Description=\"END breakpoint support came from SM, independent of genotype\">" << endl;
@@ -885,6 +887,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
        << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
+       << "END=" << ((*c)->three +1) << ";"
        << "POS=" << ((*c)->five + 1) << "," << ((*c)->three +1) << ";" ;
 
     string SML = ".";
@@ -1037,6 +1040,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
        << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";" 
        << "MERGED=" << (*c)->merged << ";"
        << "REFINED=" << (*c)->refined << ";"
+       << "END=" << ((*c)->three +1) << ";"
        << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
 
     string SML = ".";
