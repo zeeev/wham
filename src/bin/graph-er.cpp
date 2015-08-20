@@ -207,8 +207,15 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
     while(getline(featureFile, line)){
       
       vector<string> SV   = split(line, "\t");
+
+      if(SV.front()[0] == '#'){
+	cout << line << endl;
+	continue;
+      }
       
-      vector<string> info = split(SV[10], ";");
+      cerr << SV[7] << endl;
+
+      vector<string> info = split(SV[7], ";");
 
       map<string, string> infoDat;
 
@@ -249,10 +256,8 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->merged      = false;
 	bk->refined     = false; 
 
-	cerr << POS[0] << " " << POS[1] << endl;
-
-	bk->five        = atoi(POS[0].c_str());
-	bk->three       = atoi(POS[1].c_str());
+	bk->five        = atoi(POS[0].c_str()) - 1;
+	bk->three       = atoi(POS[1].c_str()) - 1;
 
 	bk->id           = infoDat["ID"];
 	bk->collapsed    = atoi(infoDat["COLLAPSED"].c_str());
@@ -272,13 +277,12 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	}
 
 	bk->svlen = (bk->three - bk->five);
-
 	
 	br.push_back(bk);
 
       }
       else{
-	cerr << "FATAL: loading external breakpoints: unknown type: " << SV[3] << endl;
+	cerr << "FATAL: loading external breakpoints: unknown type: " << infoDat["SVTYPE"] << endl;
 	exit(1);
       }
       

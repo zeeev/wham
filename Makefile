@@ -53,7 +53,7 @@ graphDebug:
 buildTest:
 	$(CC) -g -I/home/zkronenb/tools/gtest-1.7.0/include/ -L/home/zkronenb/tools/gtest-1.7.0/build -
 buildMerge:
-	$(CC) $(INCLUDE) $(LIBS) src/bin/mergeIndv.cpp src/lib/split.cpp -o $(OUTFOLD)mergeIndvs
+	$(CC) $(CFLAGS) $(INCLUDE) $(LIBS) src/bin/mergeIndv.cpp src/lib/split.cpp -o $(OUTFOLD)mergeIndvs
 
 
 clean:

@@ -60,8 +60,8 @@ struct svDat{
   string type ; 
   int collapsed;
 
-
-  vector<string> lineDat  ;
+  vector<string> genotypeDat;
+  vector<string> lineDat    ;
  
   int ls;
   int rs;
@@ -80,6 +80,32 @@ int roundHalfwayDown(double d)
 
 static const char *optString = "s:f:h";
 
+int NSAMP = 0;
+
+
+void printVersion(void){
+  cerr << "Version: " << VERSION << endl;
+  cerr << "Contact: zev.kronenberg [at] gmail.com " << endl;
+  cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
+  cerr << endl;
+}
+
+
+void printHelp(void){
+  //------------------------------- XXXXXXXXXX --------------------------------
+  cerr << " Usage:  " << endl;
+  cerr << "       mergeIndv -f my.combined.vcf -s 5" << endl;
+  cerr << endl;
+  cerr << " Required:  " << endl;
+  //------------------------------- XXXXXXXXXX --------------------------------
+
+  cerr << "          -f - <STRING> - A vcf file from WHAM-GRAPHENING" << endl;
+  cerr << endl;
+  cerr << " Optional:  " << endl;
+  cerr << "          -s - <INT>   - Merge SVs with both breakpoints N BP away [5] " << endl;
+  cerr << endl;
+  printVersion();
+}
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
 {
@@ -99,6 +125,7 @@ int parseOpts(int argc, char** argv)
       }
     case 'h':
       {
+	printHelp();
 	break;
       }
     case '?':
@@ -243,13 +270,11 @@ void mergeAndDump(vector<svDat *> & svs){
   stringstream bedpe;
   
   bedpe << svs.front()->seqid << "\t"
-	<< (fiveAvg - 5) << "\t"
-	<< (fiveAvg + 5) << "\t"
-	<< svs.front()->seqid << "\t"
-	<< (threeAvg - 5) << "\t"
-	<< (threeAvg + 5) << "\t"
+	<< (fiveAvg) << "\t"
 	<< "WG:" << svs.front()->type << ":" << newid << "\t"
-	<< ".\t.\t.\t" 
+	<< ".\t"
+	<< "<" << svs.front()->type << ">\t"
+	<< ".\t.\t"
 	<< "SVTYPE=" << svs.front()->type 
 	<< ";SVLEN=" << svlen << ";ID=" 
 	<< join(ids, ",") << ";SUPPORT=" 
@@ -260,13 +285,16 @@ void mergeAndDump(vector<svDat *> & svs){
 	<< ";RID=" << join(ridV, ",") << ";" 
 	<< "CIPOS=-10,10;CIEND=-10,10;"
 	<< "COLLAPSED=" << COLLAPSED 
-	<< "\tGT:GL:AS:RS" << endl;
+	<< "\tGT:GL:AS:RS" ;
   
+  // merged SVs need to be re genotyped;
   
 
-
-
-  cout << bedpe.str();
+  for(int gi = 0 ; gi < NSAMP; gi++){
+    bedpe << "\t.:.:.:." ;
+  }
+    
+  cout << bedpe.str() << endl;
 
   for(vector<svDat *>::iterator iz = svs.begin(); iz != svs.end(); iz++){
     delete *iz;
@@ -308,12 +336,16 @@ void mergeAndDump(vector<svDat *> & svs, bool){
 void parseSV(svDat * sv, string & line){
 
   sv->lineDat =  split(line, "\t");
-  vector<string> info = split(sv->lineDat[10], ";");
+  vector<string> info = split(sv->lineDat[7], ";");
   for(vector<string>::iterator iz = info.begin(); iz != info.end(); iz++){
     vector<string> key_value = split(*iz, "=");
     sv->info[ key_value[0] ] = key_value[1];
   }
       
+  for(int gi = 9; gi < sv->lineDat.size() ; gi++){
+    sv->genotypeDat.push_back(sv->lineDat[gi]);
+  }
+
   vector<string> pos = split(sv->info["POS"], ',');
 
   vector<string> support = split(sv->info["SUPPORT"], ',');
@@ -342,7 +374,7 @@ void parseSV(svDat * sv, string & line){
 int main( int argc, char** argv)
 {
 globalOpts.maxDist = 5;
-int parse = parseOpts(argc, argv);
+parseOpts(argc, argv);
 
  vector<svDat *> SVbuffer;
 
@@ -353,6 +385,16 @@ int parse = parseOpts(argc, argv);
  if(myfile.is_open()){
    while( getline (myfile, line) ){
      
+     if(line.substr(0,6).compare("#CHROM") == 0){
+       vector<string> CHROM = split(line, "\t");
+       NSAMP = CHROM.size() - 8;
+     }
+
+     if(line[0] == '#'){
+       cout << line << endl;
+       continue;
+     }
+
      svDat * sv ;
      sv = new svDat;
      parseSV(sv, line);
@@ -400,6 +442,7 @@ int parse = parseOpts(argc, argv);
  else{
    cerr << endl;
    cerr << "FATAL: Unable to open file." << endl;
+   printHelp();
    cerr << endl;
    exit(1);
  }
