@@ -912,7 +912,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
     if((*c)->genotypeIndex.size() != globalOpts.SMTAGS.size()){
       
       for(int gi = 0; gi < globalOpts.SMTAGS.size(); gi++){
-	ss << "\t" << ".:.:." ;
+	ss << "\t" << ".:.:.:." ;
       }
       ss << endl;
       cout << ss.str();
