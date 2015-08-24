@@ -213,7 +213,7 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	continue;
       }
       
-      cerr << SV[7] << endl;
+      cerr << "Reading: " << SV[7] << endl;
 
       vector<string> info = split(SV[7], ";");
 
@@ -2455,14 +2455,6 @@ void loadBam(string & bamFile){
     cerr << endl;
   }
   
-  SM = RG.Begin()->Sample;
-
-  omp_set_lock(&lock);
-  
-  globalOpts.SMTAGS[bamFile] = SM;
-
-  omp_unset_lock(&lock);  
-
 
   // if the bam is not sorted die
   if(!SH.HasSortOrder()){
@@ -4190,13 +4182,40 @@ void gatherBamStats(string & targetfile){
     exit(1);
   }
 
-  // Declares a default Aligner
-  StripedSmithWaterman::Aligner aligner;
-  // Declares a default filter
-  StripedSmithWaterman::Filter filter;
-  // Declares an alignment that stores the result
-  StripedSmithWaterman::Alignment alignment;
-  // Aligns the query to the ref
+
+
+  if(!SH.HasReadGroups()){
+    cerr << endl;
+    cerr << "FATAL: No @RG detected in header.  WHAM uses \"SM:sample\"." << endl;
+    cerr << endl;
+  }
+  
+  SamReadGroupDictionary RG = SH.ReadGroups;
+  
+  if(RG.Size() > 1){
+    cerr << endl;
+    cerr << "WARNING: Multiple libraries (@RG). Assuming same library prep." << endl;
+    cerr << "WARNING: Multiple libraries (@RG). Assuming same sample (SM)." << endl;
+    cerr << endl;
+  }
+
+  string SM;
+  
+  if(!RG.Begin()->HasSample()){
+    cerr << endl;
+    cerr << "FATAL: No SM tag in bam file." << endl;
+    exit(1);
+    cerr << endl;
+  }
+  
+  SM = RG.Begin()->Sample;
+
+  omp_set_lock(&lock);
+  
+  globalOpts.SMTAGS[targetfile] = SM;
+
+  omp_unset_lock(&lock); 
+
 
   RefVector sequences = bamR.GetReferenceData();
 
@@ -4270,25 +4289,7 @@ void gatherBamStats(string & targetfile){
 	continue;
       }
       
-//      int randomChr2 = rand() % (max -1);
-//      int randomPos2 = rand() % (sequences[randomChr].RefLength -1);
-//      int randomEnd2 = randomPos + 10000;
 
-//      int randomL = ( (rand() % 200) - 200 ) + al.Position;
-
-//      while(randomEnd2 > sequences[randomChr].RefLength){
-//	randomChr2 = rand() % (max -1);
-//	randomPos2 = rand() % (sequences[randomChr].RefLength -1);
-//	randomEnd2 = randomPos + 10000;
-//      }
-
-//      string RefChunk = RefSeq.getSubSequence(sequences[randomChr].RefName, randomL, 200);
-					      
-//      aligner.Align(al.QueryBases.c_str(), RefChunk.c_str(), RefChunk.size(), filter, &alignment);      
-
-//      if(alignment.sw_score > 0){
-//	randomSWScore.push_back(double(alignment.sw_score));
-//      }      
 
       string squals = al.Qualities;
       
