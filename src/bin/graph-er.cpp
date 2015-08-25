@@ -824,7 +824,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   header << "##FORMAT=<ID=GL,Number=.,Type=Float,Description=\"Genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for all possible genotypes given the set of alleles defined in the REF and ALT fields.\">" << endl;
   header << "##FORMAT=<ID=AS,Number=1,Type=Integer,Description=\"Number of reads that align better to ALT allele\">" << endl;
   header << "##FORMAT=<ID=RS,Number=1,Type=Integer,Description=\"Number of reads that align better to REF allele\">" << endl;
-  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" ;
+  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
 
   for(vector<string>::iterator iz = globalOpts.targetBams.begin(); iz !=  globalOpts.targetBams.end(); iz++){
 
@@ -4602,7 +4602,7 @@ int main( int argc, char** argv)
 #pragma omp parallel for schedule(dynamic, 3)
    for(unsigned int i = 0 ; i < globalTrees.size(); i++){
      
-     if((i % 1000) == 0){
+     if((i % 100000) == 0){
        omp_set_lock(&glock);     
        cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
        omp_unset_lock(&glock);
