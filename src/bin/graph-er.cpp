@@ -70,6 +70,7 @@ struct options{
   std::vector<string> targetBams;
   bool statsOnly                ;  
   bool skipGeno                 ;
+  bool keepTrying               ;
   bool vcf                      ;
   int MQ                        ;
   int nthreads                  ;
@@ -80,7 +81,7 @@ struct options{
   vector<int> region            ;
   string svs                    ; 
   map<string,string> SMTAGS     ;
-
+  
 }globalOpts;
 
 struct regionDat{
@@ -150,6 +151,7 @@ struct breakpoints{
   bool fail              ;
   bool two               ;
   char type              ;
+  string refBase         ;
   int seqidIndexL        ;
   int seqidIndexR        ;
   string seqid           ;
@@ -175,7 +177,7 @@ struct breakpoints{
 
 };
 
-static const char *optString = "b:m:r:a:g:x:f:e:hskv";
+static const char *optString = "b:m:r:a:g:x:f:e:hskvz";
 
 
 
@@ -209,11 +211,8 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
       vector<string> SV   = split(line, "\t");
 
       if(SV.front()[0] == '#'){
-	cout << line << endl;
 	continue;
       }
-      
-      cerr << "Reading: " << SV[7] << endl;
 
       vector<string> info = split(SV[7], ";");
 
@@ -235,7 +234,8 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->fail = false;
 	bk->two  = true ;
 	bk->type = 'D';
-	
+	bk->refBase = SV[3];
+
 	if((infoDat["SVTYPE"].compare("DUP") == 0)){
 	  bk->type = 'U';
 	}
@@ -664,22 +664,39 @@ void printHelp(void){
   cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
   cerr << endl;
   cerr << " Optional:  " << endl;
-  cerr << "          -v - <FLAG>   - Print VCF4.2 rather than BEDPE             " << endl;
+  cerr << "          -v - <FLAG>   - Print BEDPE instead of VCF4.2. [false]     " << endl;
   cerr << "          -s - <FLAG>   - Exits the program after the stats are      " << endl;
-  cerr << "                          gathered.                                  " << endl;
-  cerr << "          -k - <FLAG>   - Skip genotyping (much faster).             " << endl;
-  cerr << "          -g - <STRING> - File to write graph to (very large output)." << endl;
-  cerr << "          -e - <STRING> - Comma sep. list of seqids to skip.         " << endl;
-  cerr << "          -r - <STRING> - Region in format: seqid:start-end          " << endl;
-  cerr << "          -x - <INT>    - Number of CPUs to use [default: all cores]." << endl;
+  cerr << "                          gathered. [false]                          " << endl;
+  cerr << "          -k - <FLAG>   - Skip genotyping (much faster). [false]     " << endl;
+  cerr << "          -g - <STRING> - File to write graph to (very large output). [false]" << endl;
+  cerr << "          -e - <STRING> - Comma sep. list of seqids to skip [false]. " << endl;
+  cerr << "          -r - <STRING> - Region in format: seqid:start-end [whole genome]  " << endl;
+  cerr << "          -x - <INT>    - Number of CPUs to use [all cores].         " << endl;
   cerr << "          -m - <INT>    - Mapping quality filter [20].               " << endl;
-  cerr << "          -b - <STRING> - external file to genotype.                 " << endl;
+  cerr << "          -b - <STRING> - External file to genotype [false].          " << endl;
+  cerr << "          -z - <FLAG>   - Sample reads until success. [false]         " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;    
-  cerr << "        STOUT : SV calls in BEDPE or VCF format                     " << endl;  
+  cerr << "        STOUT : SV calls in VCF or BEDPE format                     " << endl;  
   cerr << endl;
+
+  cerr << endl;
+  cerr << " Details:  " << endl;
+  cerr << "        -z - <FLAG>   WHAM-GRAPHENING can fail if does not sample        " << endl;
+  cerr << "                      enough reads. This flag prevents WHAM-GRAPHENING   " << endl;
+  cerr << "                      from exiting. If your bam header has seqids not in " << endl;
+  cerr << "                      the bam (e.g. split by region) use -z.             " << endl;
+  cerr << "        -k - <FLAG>   The WHAM-GRAPHENING pipeline can genotype after    " << endl;
+  cerr << "                      samples are merged (-b).  This will save time for  " << endl;
+  cerr << "                      population level calling.                          " << endl;
+  cerr << "        -b - <STRING> The VCF output of WHAM-GRAPHENING for genotyping.  " << endl;
+  cerr << "                      WHAM-GRAPHENING will genotype any BAM file at the  " << endl;
+  cerr << "                      positions in the -b file.                          " << endl;
+
+  cerr << endl;
+
   printVersion();
 }
 
@@ -879,7 +896,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
        << "\t"
        << "WG:" << type << ":" << (*c)->id
        << "\t"
-       << "."
+       << (*c)->refBase
        << "\t"
        << "<" << type << ">" 
        << "\t"
@@ -1294,7 +1311,6 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   string ref ;
   string alt ;
 
-
   bp->seqid = rv[bp->seqidIndexL].RefName;
 
   if(bp->type == 'D'){   
@@ -1375,6 +1391,9 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
   }
   
+  bp->alleles.clear();
+
+  bp->refBase = rs.getSubSequence(rv[bp->seqidIndexL].RefName, (bp->five), 1);
 
   bp->alleles.push_back(ref) ;
   bp->alleles.push_back(alt) ;
@@ -2455,6 +2474,7 @@ void loadBam(string & bamFile){
     cerr << endl;
   }
   
+  SM = RG.Begin()->Sample;
 
   // if the bam is not sorted die
   if(!SH.HasSortOrder()){
@@ -2589,10 +2609,16 @@ int parseOpts(int argc, char** argv)
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
+    case 'z':
+      {
+	globalOpts.keepTrying = true;
+	cerr << "INFO: WHAM-GRAPHENING will not give up sampling reads: -z set" << globalOpts.svs << endl;
+	break;
+      }
     case 'v':
       {
-	globalOpts.vcf = true;
-	cerr << "INFO: WHAM-GRAPHENING will print VCF to STDOUT: -v set" << globalOpts.svs << endl;
+	globalOpts.vcf = false;
+	cerr << "INFO: WHAM-GRAPHENING will print BEDPE to STDOUT: -v set" << globalOpts.svs << endl;
 	break;
       }
     case 'k':
@@ -4167,13 +4193,17 @@ void gatherBamStats(string & targetfile){
 
   BamReader bamR;
   if(!bamR.Open(targetfile)   ){
-  cerr << "FATAL: cannot find - or - read : " << targetfile << endl;
+    cerr << "FATAL: cannot find - or - read : " << targetfile << endl;
     exit(1);
   }
 
   if(! bamR.LocateIndex()){
-  cerr << "FATAL: cannot find - or - open index for : " << targetfile << endl;
-    exit(1);
+    vector<string> fileName = split(targetfile, ".");
+    fileName.back() = "bai";
+    string indexName = join(fileName, ".");
+    if(! bamR.OpenIndex(indexName) ){
+      cerr << "FATAL: cannot find bam index." << endl;
+    }
   }
 
   SamHeader SH = bamR.GetHeader();
@@ -4181,8 +4211,6 @@ void gatherBamStats(string & targetfile){
   cerr << "FATAL: sorted bams must have the @HD SO: tag in each SAM header." << endl;
     exit(1);
   }
-
-
 
   if(!SH.HasReadGroups()){
     cerr << endl;
@@ -4216,7 +4244,6 @@ void gatherBamStats(string & targetfile){
 
   omp_unset_lock(&lock); 
 
-
   RefVector sequences = bamR.GetReferenceData();
 
   int i = 0; // index for while loop
@@ -4238,8 +4265,9 @@ void gatherBamStats(string & targetfile){
     }
 
     fail += 1;
-    if(fail > 1000000){
-      cerr << "FATAL: was not able to gather stats on bamfile: " << targetfile << endl;
+    if(fail > 1000000 && (! globalOpts.keepTrying) ){
+      cerr << "FATAL: Unable to gather stats on bamfile: " << targetfile << endl;
+      cerr << "INFO:  Consider using -z if bamfile was split by region." << endl;
       exit(1);
     }
 
@@ -4348,31 +4376,23 @@ void gatherBamStats(string & targetfile){
   double variance = var(alIns, mu     );
   double sd       = sqrt(variance     );
   double sdd      = sqrt(var(nReads, mud ));
-  
-  //  double sw_mu    = mean(randomSWScore);
-  //  double sw_sd    = sqrt(var(randomSWScore, sw_mu));
  
  omp_set_lock(&lock);
 
  insertDists.mus[  targetfile ] = mu;
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
- // insertDists.swm[ targetfile ] = sw_mu;
- // insertDists.sws[ targetfile ] = sw_sd;
- 
- // cerr << "dist: " << join(randomSWScore, ",") << endl;
+
 
  cerr << "INFO: for file:" << targetfile << endl
       << "      " << targetfile << ": mean depth: ......... " << mud << endl
       << "      " << targetfile << ": sd depth: ........... " << sdd << endl
-   //      << "      " << targetfile << ": mean SW alignments .. " << sw_mu << endl
-   //      << "      " << targetfile << ": sd SW alignments .... " << sw_sd << endl
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
       << "      " << targetfile << ": median insert length. " << median                      << endl
       << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
       << "      " << targetfile << ": lower insert length . " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": upper insert length . " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
-      << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << " " << qsum << " " << qnum << endl
+      << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << endl
       << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
 
   omp_unset_lock(&lock);
@@ -4495,11 +4515,12 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 
 int main( int argc, char** argv)
 {
+  globalOpts.keepTrying = false;
   globalOpts.nthreads = -1;
   globalOpts.statsOnly = false;
   globalOpts.skipGeno  = false;
   globalOpts.MQ        = 20   ;
-  globalOpts.vcf       = false;
+  globalOpts.vcf       = true ;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -4705,7 +4726,9 @@ int main( int argc, char** argv)
 	 allBreakpoints[z]->five = secondary->five;
 	 allBreakpoints[z]->three = secondary->three;
 	 allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
+	 genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
 	 flag = 1;
+
 	 allBreakpoints[z]->refined = 1;
        }
      }

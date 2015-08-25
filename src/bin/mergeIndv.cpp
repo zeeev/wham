@@ -54,6 +54,7 @@ struct options{
 
 struct svDat{
   string seqid;
+  string refBase;
   int    five ;
   int    three;
   string id   ;
@@ -269,10 +270,16 @@ void mergeAndDump(vector<svDat *> & svs){
   
   stringstream bedpe;
   
+  string refBase = svs.front()->refBase;
+
+  if(COLLAPSED > 0){
+    refBase = "N";
+  }
+
   bedpe << svs.front()->seqid << "\t"
 	<< (fiveAvg) << "\t"
 	<< "WG:" << svs.front()->type << ":" << newid << "\t"
-	<< ".\t"
+	<< refBase << "\t"
 	<< "<" << svs.front()->type << ">\t"
 	<< ".\t.\t"
 	<< "SVTYPE=" << svs.front()->type 
@@ -334,6 +341,7 @@ void parseSV(svDat * sv, string & line){
 
   sv->lineDat =  split(line, "\t");
   vector<string> info = split(sv->lineDat[7], ";");
+  sv->refBase = sv->lineDat[3];
   for(vector<string>::iterator iz = info.begin(); iz != info.end(); iz++){
     vector<string> key_value = split(*iz, "=");
     sv->info[ key_value[0] ] = key_value[1];
