@@ -4271,7 +4271,7 @@ void gatherBamStats(string & targetfile){
       exit(1);
     }
 
-    unsigned int max = 24;
+    unsigned int max = 26;
 
     if(sequences.size() < max){
       max = sequences.size() ;
