@@ -946,8 +946,6 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
       for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
 	if((*c)->genotypeIndex[i] == -1){
 	  ss << "\t" << "./.:" << "."
-	     << "," << "."
-	     << "," << "."
 	     << ":" << (*c)->nalt[i]
 	     << ":" << (*c)->nref[i];
 	}
