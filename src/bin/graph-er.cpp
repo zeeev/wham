@@ -3369,7 +3369,7 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     sort(putative.begin(), putative.end(), sortNodesByPos);
 
     int lPos = putative.front()->pos;
-    int rPos = putative.front()->pos;
+    int rPos = putative.back()->pos;
 
     // cerr << lPos << " " << rPos << endl;
 
@@ -4116,22 +4116,6 @@ void genotype(string & bamF, breakpoints * br){
 
   }
 
-
-
-  int nnref = nref;
-  int nnalt = nalt;
-
-  while(nnref > 100 || nnalt > 100){
-    nnref -= 1;
-    nnalt -= 1;
-    if(nnref < 0){
-      nnref = 0;
-    }
-    if(nnalt < 0){
-      nnalt = 0;
-    }
-  }
-  
 
 
   vector<double> gl;
