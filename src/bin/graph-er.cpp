@@ -3357,8 +3357,7 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  <<\
-      endl;
+
 
     sort(putative.begin(), putative.end(), sortNodesBySupport);
 
@@ -3547,7 +3546,7 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-    cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+
   
     sort(putative.begin(), putative.end(), sortNodesBySupport);
 
@@ -3794,7 +3793,7 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
   else if(putative.size() > 2){
 
     vector <node *> putativeTwo;
-       cerr << "greater than two breakpoints: " << putative.size() << " "  << putative.front()->pos  << endl;
+
   
        sort(putative.begin(), putative.end(), sortNodesBySupport);
 
@@ -4069,8 +4068,6 @@ void genotype(string & bamF, breakpoints * br){
 
 #endif
 
-	      
-
     if(br->type == 'V'){
 
       string revcomp = string((*it).QueryBases.rbegin(), (*it).QueryBases.rend());
@@ -4084,16 +4081,18 @@ void genotype(string & bamF, breakpoints * br){
       
       double pA1 =  altHMM.finalLikelihoodCalculation();
       
+      refHMM.initPriors(br->alleles.front(), revcomp, revqual);
+      refHMM.initTransProbs();
+      refHMM.initializeDelMat();
+      refHMM.updatecells();
+      
+      double pR1 = refHMM.finalLikelihoodCalculation();
+      
       if(pA1 > pA){
 	pA = pA1;
-
-	refHMM.initPriors(br->alleles.front(), revcomp, revqual);
-	refHMM.initTransProbs();
-	refHMM.initializeDelMat();
-	refHMM.updatecells();
-
-	pR = refHMM.finalLikelihoodCalculation();
-
+      }
+      if(pR1 > pR){
+	pR = pR1;
       }
     }
 
