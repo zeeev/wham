@@ -179,12 +179,14 @@ struct breakpoints{
 
 static const char *optString = "b:m:r:a:g:x:f:e:hskvz";
 
-
-
 // omp lock
 
 omp_lock_t lock;
 omp_lock_t glock;
+
+// read depth cuttoff
+
+uint MAXREADDEPTH = INFINITY; 
 
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -428,14 +430,14 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
   StripedSmithWaterman::Alignment alignment;
   // Aligns the query to the ref
 
+
   for(vector<BamAlignment>::iterator r = reads.begin(); 
       r != reads.end(); r++){
     
     if(endsBefore((*r), br->five,10) || startsAfter((*r), br->three,10)){
       continue;
     }
-
-    
+        
     if((*r).IsMapped()){
       if(((*r).CigarData.front().Type != 'S' && (*r).CigarData.front().Length < 10) &&
 	 ((*r).CigarData.back().Type  != 'S' && (*r).CigarData.back().Length  < 10)){
@@ -477,88 +479,84 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
 bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAlignment> & reads, int buffer){
 
-  omp_set_lock(&lock);
-
-  BamMultiReader bamR;
-  if(!bamR.Open(bamFiles)){
-    cerr << "FATAL: count not open bamfiles " << join(bamFiles, " ");
-  }
-  if(! bamR.LocateIndexes()){
-    vector<string> modifiedIndexName;
-    for(vector<string>::iterator files = bamFiles.begin();
-	files != bamFiles.end(); files++){
-      vector<string> fileName = split(*files, ".");
+  for(vector<string>::iterator fs = bamFiles.begin(); fs != bamFiles.end(); fs++){
+   
+    BamReader bamR;
+    if(! bamR.Open(*fs)){
+      cerr << "FATAL: unable to open bamfile: " << *fs << endl;
+      cerr << "INFO: if you have a large number of files, check ulimit: NCPU*NBAM. " << endl;
+      exit(1);
+    }
+    
+    if(!bamR.LocateIndex()){
+      vector<string> fileName = split(*fs, ".");
       fileName.back() = "bai";
       string indexName = join(fileName, ".");
-      modifiedIndexName.push_back(indexName);
+      if(! bamR.OpenIndex(indexName) ){
+	cerr << "FATAL: cannot find bam index." << endl;
+	cerr << "INFO: If you have a large number of files, check ulimit: NCPU*NBAM " << endl;
+      }
     }
-    if(! bamR.OpenIndexes(modifiedIndexName) ){
-      cerr << "FATAL: cannot find bam index." << endl;
+     
+    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, br->seqidIndexL, br->five +buffer)){
+      cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
       exit(1);
     }
-  }
-  omp_unset_lock(&lock);
-
-  if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, br->seqidIndexL, br->five +buffer)){
-    cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
-    exit(1);
-  }
-
-  BamAlignment al;
-
-  while(bamR.GetNextAlignment(al)){
-    if((al.AlignmentFlag & 0x0800) != 0 ){
-      continue;
-    }
-    if(! al.IsPaired()){
-      continue;
-    }
-    if(! al.IsMapped() && ! al.IsMateMapped()){
-      continue;
-    }
-    if(al.IsDuplicate()){
-      continue;
-    }
-    if(! al.IsPrimaryAlignment()){
-      continue;
-    }
-    if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
-      continue;
-    }
-
-    reads.push_back(al);
-  }
-  if(br->two){
-    if(!bamR.SetRegion(br->seqidIndexL, br->three-buffer, br->seqidIndexL, br->three+buffer)){
-      cerr << "FATAL: cannot set region for genotyping." << endl;
-      exit(1);
-    }
-
+    
+    BamAlignment al;
+    
     while(bamR.GetNextAlignment(al)){
       if((al.AlignmentFlag & 0x0800) != 0 ){
-        continue;
+	continue;
       }
       if(! al.IsPaired()){
-        continue;
+	continue;
       }
       if(! al.IsMapped() && ! al.IsMateMapped()){
-        continue;
+	continue;
       }
       if(al.IsDuplicate()){
-        continue;
+	continue;
       }
       if(! al.IsPrimaryAlignment()){
-        continue;
+	continue;
       }
       if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
 	continue;
       }
-
+      
       reads.push_back(al);
     }
-  }
+    if(br->two){
+      if(!bamR.SetRegion(br->seqidIndexL, br->three-buffer, br->seqidIndexL, br->three+buffer)){
+	cerr << "FATAL: cannot set region for genotyping." << endl;
+	exit(1);
+      }
+      while(bamR.GetNextAlignment(al)){
+	if((al.AlignmentFlag & 0x0800) != 0 ){
+	  continue;
+	}
+	if(! al.IsPaired()){
+	  continue;
+	}
+	if(! al.IsMapped() && ! al.IsMateMapped()){
+        continue;
+	}
+	if(al.IsDuplicate()){
+        continue;
+	}
+	if(! al.IsPrimaryAlignment()){
+        continue;
+	}
+	if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
+	  continue;
+	}
+	reads.push_back(al);
+      }
+    }
 
-  bamR.Close();
+    bamR.Close();
+  }
   
   return true;
 }
@@ -4014,6 +4012,12 @@ void genotype(string & bamF, breakpoints * br){
     buffer = buffer + 1;     
   }
 
+  bool toohigh = false;
+
+  if(reads.size() > (insertDists.avgD[bamF] * 10)){
+    toohigh = true;
+  }
+
   alignHMM refHMM(int(reads.front().Length) +1,int(br->alleles.front().size()) +1);
   alignHMM altHMM(int(reads.front().Length) +1,int(br->alleles.back().size()) +1);
 
@@ -4030,13 +4034,12 @@ void genotype(string & bamF, breakpoints * br){
 
   for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
 
-    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)){
+    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20) || toohigh || (*it).MapQuality < 10){
       continue;
     }
     
     nReads += 1;
     
-
     refHMM.initPriors(br->alleles.front(), it->QueryBases, it->Qualities);
     refHMM.initTransProbs();
     refHMM.initializeDelMat();
@@ -4252,16 +4255,26 @@ void gatherBamStats(string & targetfile){
       exit(1);
     }
 
-    unsigned int max = 26;
-
-    if(sequences.size() < max){
-      max = sequences.size() ;
-    }
+    uint max = sequences.size() ;
 
     int randomChr = 0;
-    if(sequences.size() > 1){
-      randomChr = rand() % (max -1);
+    bool exclude = true;
+    
+    while(exclude){
+      if(sequences.size() > 1){
+	int prand = rand() % (max -1);
+      
+	if(globalOpts.toSkip.find(sequences[prand].RefName) == globalOpts.toSkip.end()){
+	  randomChr = prand;
+	  exclude = false;
+	}
+
+      }
+      else{
+	exclude = false;
+      }
     }
+
     int randomPos = rand() % (sequences[randomChr].RefLength -1);
     int randomEnd = randomPos + 2000;
 
@@ -4358,7 +4371,7 @@ void gatherBamStats(string & targetfile){
   double sd       = sqrt(variance     );
   double sdd      = sqrt(var(nReads, mud ));
  
- omp_set_lock(&lock);
+  omp_set_lock(&lock);
 
  insertDists.mus[  targetfile ] = mu;
  insertDists.sds[  targetfile ] = sd;
@@ -4582,7 +4595,6 @@ int main( int argc, char** argv)
 	    << globalGraph.nodes[seqid->first].size() << endl;
      }
    }
-   
    cerr << "INFO: Finished loading reads." << endl;
  } 
  
@@ -4660,6 +4672,12 @@ int main( int argc, char** argv)
    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
    return 0;
  }
+
+
+ MAXREADDEPTH = 0;
+ for(map<string, double>::iterator mi = insertDists.avgD.begin(); mi != insertDists.avgD.end(); mi++){
+   MAXREADDEPTH += mi->second;
+ }
  
  nAlleles = 0;
  cerr << "INFO: Refining breakpoints using SW alignments" << endl;
@@ -4676,6 +4694,13 @@ int main( int argc, char** argv)
      getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
      buffer +=1;
    }   
+   
+
+   if(reads.size() > (MAXREADDEPTH * 3)){
+   cerr << allBreakpoints[z]->five << " " << reads.size() << " " << MAXREADDEPTH << " " << (MAXREADDEPTH * 10) << endl;
+     continue;
+   }
+
    double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
    int oldStart     = allBreakpoints[z]->five ;
    int oldEnd       = allBreakpoints[z]->three;
@@ -4696,8 +4721,7 @@ int main( int argc, char** argv)
        secondary->three  += t;
        if(secondary->three  <= secondary->five){
 	 continue;
-       }
-       
+       }     
        secondary->svlen = (secondary->three - secondary->five); 
        genAlleles(secondary, globalOpts.fasta, sequences);
        double newScore = totalAlignmentScore(reads, secondary);
@@ -4717,15 +4741,9 @@ int main( int argc, char** argv)
    
    delete secondary;
   
-
    if(flag == 1){
      allBreakpoints[z]->svlen =   allBreakpoints[z]->three - allBreakpoints[z]->five;
-//     omp_set_lock(&lock);  
-//     cerr << "INFO: refined breakpoint pair: " << endl
-//	  << "      "<< oldStart << " -> "  << allBreakpoints[z]->five << endl
-//	  << "      "<< oldEnd   << " -> "  << allBreakpoints[z]->three << endl;
-//     cerr << "      SW score: " << oldScore << " -> " << startingScore << endl;
-//     omp_unset_lock(&lock);  
+
    }
 
    omp_set_lock(&glock);
@@ -4747,7 +4765,7 @@ int main( int argc, char** argv)
      continue;
    }
 
-   //#pragma omp parallel for schedule(dynamic, 3)   
+#pragma omp parallel for schedule(dynamic, 3)   
    for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
      genotype(globalOpts.targetBams[i], allBreakpoints[z]        );
    }
