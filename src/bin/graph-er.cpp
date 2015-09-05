@@ -4697,7 +4697,6 @@ int main( int argc, char** argv)
    
 
    if(reads.size() > (MAXREADDEPTH * 3)){
-   cerr << allBreakpoints[z]->five << " " << reads.size() << " " << MAXREADDEPTH << " " << (MAXREADDEPTH * 10) << endl;
      continue;
    }
 
