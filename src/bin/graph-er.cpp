@@ -4757,14 +4757,13 @@ int main( int argc, char** argv)
 
  int NGeno = 0;
  cerr << "INFO: Genotyping SVs." << endl;
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 3)   
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
 
    if(allBreakpoints[z]->fail){
      continue;
    }
 
-#pragma omp parallel for schedule(dynamic, 3)   
    for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
      genotype(globalOpts.targetBams[i], allBreakpoints[z]        );
    }
