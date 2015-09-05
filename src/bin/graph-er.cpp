@@ -186,7 +186,7 @@ omp_lock_t glock;
 
 // read depth cuttoff
 
-uint MAXREADDEPTH = INFINITY; 
+uint MAXREADDEPTH = 0; 
 
 
 //------------------------------- SUBROUTINE --------------------------------
