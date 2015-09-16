@@ -4037,6 +4037,10 @@ void genotype(string & bamF, breakpoints * br){
     if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20) || toohigh || (*it).MapQuality < 10){
       continue;
     }
+
+
+    alignHMM refHMM(int((*it).Length) +1,int(br->alleles.front().size()) +1);
+    alignHMM altHMM(int((*it).Length) +1,int(br->alleles.back().size()) +1);
     
     nReads += 1;
     
@@ -4113,8 +4117,7 @@ void genotype(string & bamF, breakpoints * br){
     aal  += pu.log10Add((pR - div2), (pR - div2));
     abl  += pu.log10Add((pR - div2), (pA - div2));
     bbl  += pu.log10Add((pA - div2), (pA - div2));
-    
-
+   
 
   }
 
