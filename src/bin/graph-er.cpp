@@ -74,6 +74,7 @@ struct options{
   bool vcf                      ;
   int MQ                        ;
   int nthreads                  ;
+  int lastSeqid                 ;
   string fasta                  ;
   string graphOut               ;
   map<string, int> toSkip       ;
@@ -177,7 +178,7 @@ struct breakpoints{
 
 };
 
-static const char *optString = "b:m:r:a:g:x:f:e:hskvz";
+static const char *optString = "u:b:m:r:a:g:x:f:e:hskvz";
 
 // omp lock
 
@@ -2605,6 +2606,13 @@ int parseOpts(int argc, char** argv)
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
+    case 'u':
+      {
+      cerr << "INFO: You are using a hidden flag." << endl;
+      globalOpts.lastSeqid =  atoi(((string)optarg).c_str());
+      cerr << "INFO: Random sampling will only go up to: " << globalOpts.lastSeqid << endl;
+      break;
+      }
     case 'z':
       {
 	globalOpts.keepTrying = true;
@@ -4260,6 +4268,10 @@ void gatherBamStats(string & targetfile){
 
     uint max = sequences.size() ;
 
+    if(globalOpts.lastSeqid > 0){
+      max = globalOpts.lastSeqid;
+    }
+
     int randomChr = 0;
     bool exclude = true;
     
@@ -4380,8 +4392,9 @@ void gatherBamStats(string & targetfile){
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
 
+ stringstream whereTo;
 
- cerr << "INFO: for file:" << targetfile << endl
+ whereTo << "INFO: for file:" << targetfile << endl
       << "      " << targetfile << ": mean depth: ......... " << mud << endl
       << "      " << targetfile << ": sd depth: ........... " << sdd << endl
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
@@ -4391,6 +4404,16 @@ void gatherBamStats(string & targetfile){
       << "      " << targetfile << ": upper insert length . " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
       << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << endl
       << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
+
+
+
+ if(globalOpts.statsOnly){
+   cout << whereTo.str();
+ }
+ else{
+   cerr << whereTo.str();
+ }
+
 
   omp_unset_lock(&lock);
 }
@@ -4512,6 +4535,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 
 int main( int argc, char** argv)
 {
+  globalOpts.lastSeqid  = 0;
   globalOpts.keepTrying = false;
   globalOpts.nthreads = -1;
   globalOpts.statsOnly = false;
