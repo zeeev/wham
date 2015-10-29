@@ -1,7 +1,11 @@
-
 ### WHAM-GRAPHENING
 
-For reference based events (DEL, DUP, INV), we recommend WHAM-GRAPHENING.  
+WHAM-GRAPHENING is under development, but produces more accurate deletion, duplication and inversion calls.
+
+The genotyping module can be slow in high-copy regions.  I recommend filtering SVs prior to genotyping (-k skips genotyping).
+
+Full documentation is coming soon. 
+
 
 ### All WHAM documents can be found on the wiki:
 
