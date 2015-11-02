@@ -6,6 +6,9 @@ The genotyping module can be slow in high-copy regions.  I recommend filtering S
 
 Full documentation is coming soon. 
 
+Workflow:
+
+![alt tag](https://github.com/jewmanchue/wham/blob/master/docs/wg.png)
 
 ### All WHAM documents can be found on the wiki:
 
