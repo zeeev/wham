@@ -1,5 +1,5 @@
 ### WHAM-GRAPHENING
-======
+
 
 WHAM-GRAPHENING is under development, but produces more accurate deletion, duplication and inversion calls.
 
@@ -11,9 +11,9 @@ Workflow:
 
 ![alt tag](https://github.com/jewmanchue/wham/blob/master/docs/wg.png)
 
+======
 
 ### WHAM
-======
 
 ## All WHAM documents can be found on the wiki:
 
