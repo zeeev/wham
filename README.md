@@ -15,7 +15,7 @@ Workflow:
 
 ### WHAM
 
-## All WHAM documents can be found on the wiki:
+All WHAM documents can be found on the wiki:
 
 http://jewmanchue.github.io/wham/
 
