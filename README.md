@@ -11,13 +11,13 @@ Workflow:
 
 ![alt tag](https://github.com/jewmanchue/wham/blob/master/docs/wg.png)
 
-### All WHAM documents can be found on the wiki:
-
-http://jewmanchue.github.io/wham/
-
 
 ### WHAM
 ======
+
+## All WHAM documents can be found on the wiki:
+
+http://jewmanchue.github.io/wham/
 
 WHole-genome Alignment Metrics (WHAM) is a structural variant (SV) caller that integrates several sources of mapping information to identify SVs.  WHAM classifies SVs using a flexible and extendable machine-learning algorithm (random forest).  WHAM is not only accurate at identifying SVs, but its association test can identify shared SVs enriched in a cohort of diseased individuals compared to a background of healthy individuals.   
 
