@@ -1,4 +1,5 @@
 ### WHAM-GRAPHENING
+======
 
 WHAM-GRAPHENING is under development, but produces more accurate deletion, duplication and inversion calls.
 
@@ -15,7 +16,8 @@ Workflow:
 http://jewmanchue.github.io/wham/
 
 
-### What is WHAM?
+### WHAM
+======
 
 WHole-genome Alignment Metrics (WHAM) is a structural variant (SV) caller that integrates several sources of mapping information to identify SVs.  WHAM classifies SVs using a flexible and extendable machine-learning algorithm (random forest).  WHAM is not only accurate at identifying SVs, but its association test can identify shared SVs enriched in a cohort of diseased individuals compared to a background of healthy individuals.   
 
