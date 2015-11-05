@@ -9,12 +9,15 @@
 #ifndef alignHMM_phredUtils_h
 #define alignHMM_phredUtils_h
 
+#include <stdint.h>
 #include <cmath>
 #include "string.h"
 #include "float.h"
+#include "fastonebigheader.h"
 
 const int MAXQUAL = 60;
 const int MAXQUAL_LOG10 = -6;
+
 
 const int SangerLookup[127] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-10
 			       -1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 10-19   11-20
@@ -46,12 +49,21 @@ const int IlluminaOneThree[127] = {-1,-1,-1,-1,-1, -1,-1,-1,-1,-1, // 0-9     1-
 
 int LookUp[126];
 
+//http://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
+inline double fastPow(double a, double b) {
+  union {
+    double d;
+    int x[2];
+  } u = { a };
+  u.x[1] = (int)(b * (u.x[1] - 1072632447) + 1072632447);
+  u.x[0] = 0;
+  return u.d;
+}
+
 class phredUtils{
 
     
 private:
-
-    
     
     bool IsFiniteNumber(double x)
     {
@@ -70,21 +82,19 @@ public:
         return LookUp[int(b)];
     }
     double qualToProb(char b){
-        int  v = LookUp[int(b)];
-        return pow(10.0,(-1*double(v)/10));
+	return fastPow(10,(-1*double(LookUp[int(b)])/10));
     }
     double qualToProbLog10(char b){
-        return log10(1-qualToProb(b));
+      return fastlog2(1-qualToProb(b));
     }
     double qualToProbErrorLog10(char b){
-         return log10(qualToProb(b));
+         return fastlog2(qualToProb(b));
     }
     double phredToLog10(int i){
-        double p = pow(10.0,(-1*double(i)/10));
-        return log10(p);
+      return fastlog2(fastPow(10,(-1*double(i)/10)));
     }
     double phredToProb(int i){
-        return pow(10.0,(-1*double(i)/10));
+        return fastPow(10,(-1*double(i)/10));
     }
     double log10Add(double a, double b){
         if(a > b){
@@ -93,13 +103,14 @@ public:
         if(! IsFiniteNumber(a)){
             return b;
         }
-        double diff = b - a;
+     
+	double diff = b - a;
 
         if(diff >= 8){
             return b;
-        }
-	
-        return  b + log10(1.0 + pow(10, -1*diff));
+        }	
+        
+	return  b + fastlog2(1.0 + fastPow(10, -1*diff));
     }
  
 };

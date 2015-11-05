@@ -38,8 +38,8 @@ private:
     uint NCOL; /*!< Haplotype length +1 */
 
     void dumpMat(double ** mat, int nrow, int ncol){
-        for(uint i = 0; i < nrow; i++){
-            for(uint j = 0; j < ncol; j++){
+        for(int i = 0; i < nrow; i++){
+            for(int j = 0; j < ncol; j++){
                 std::cerr << mat[i][j] << "\t";
             }
             std::cerr << std::endl;
@@ -95,16 +95,18 @@ public:
            haplotype.size() == 0 || readSeq.size() == 0){
             return false;
         }
-     
+
         for(uint i = 0; i < readSeq.size(); i++){
             char b = readSeq[i];
             char q = readQual[i];
+	    
             for(uint j = 0; j < haplotype.size(); j++){
                 char h = haplotype[j];
                 priorMatrix[i+1][j+1] = (b == h || b == 'N' || h == 'N') ?
                 pu.qualToProbLog10(q) : pu.qualToProbErrorLog10(q);
             }
         }
+
         return true;
     }
     bool initTransProbs(void){

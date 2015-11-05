@@ -82,7 +82,7 @@ struct options{
   vector<int> region            ;
   string svs                    ; 
   map<string,string> SMTAGS     ;
-  
+  string saT                    ;
 }globalOpts;
 
 struct regionDat{
@@ -178,7 +178,7 @@ struct breakpoints{
 
 };
 
-static const char *optString = "u:b:m:r:a:g:x:f:e:hskvz";
+static const char *optString = "i:u:b:m:r:a:g:x:f:e:hskvz";
 
 // omp lock
 
@@ -673,6 +673,7 @@ void printHelp(void){
   cerr << "          -x - <INT>    - Number of CPUs to use [all cores].         " << endl;
   cerr << "          -m - <INT>    - Mapping quality filter [20].               " << endl;
   cerr << "          -b - <STRING> - External file to genotype [false].          " << endl;
+  cerr << "          -i - <STRING> - non standard split read tag [SA]            " << endl;
   cerr << "          -z - <FLAG>   - Sample reads until success. [false]         " << endl;
 
   cerr << endl;
@@ -693,6 +694,8 @@ void printHelp(void){
   cerr << "        -b - <STRING> The VCF output of WHAM-GRAPHENING for genotyping.  " << endl;
   cerr << "                      WHAM-GRAPHENING will genotype any BAM file at the  " << endl;
   cerr << "                      positions in the -b file.                          " << endl;
+  cerr << "        -i - <STRING> WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
+  cerr << "                      Older version of bwa-mem used XP.                  " << endl;
 
   cerr << endl;
 
@@ -1967,21 +1970,36 @@ void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
     
     vector<string> sat = split (sas[i], ',');
 
-    if(sat.size() != 6){
+    if(sat.size() != 6 && globalOpts.saT == "SA"){
       cerr << "FATAL: failure to parse SA optional tag" << endl;
       exit(1);
     }
-
-    if(sat[2].compare("-") == 0){
-      sDat.strand = true;
-    }
-    else{
-      sDat.strand = false;
-    }
-
+    
     sDat.seqid = il[sat[0]];
-    sDat.pos   = atoi(sat[1].c_str()) - 1;
-    parseCigar(sDat.cig, sat[3]);
+
+    if(globalOpts.saT == "SA"){
+      sDat.pos   = atoi(sat[1].c_str()) - 1;
+      if(sat[2].compare("-") == 0){
+	sDat.strand = true;
+      }
+      else{
+	sDat.strand = false;
+      }
+      parseCigar(sDat.cig, sat[3]);
+    }
+    else if(globalOpts.saT == "XP"){
+      char strand = sat[1][0];
+      sat[1].erase(0,1);
+      sDat.pos   = atoi(sat[1].c_str()) - 1;
+      if(strand == '-'){
+	sDat.strand = true;
+      }
+      else{
+	sDat.strand = false;
+      }
+      parseCigar(sDat.cig, sat[2]);
+    }
+    
     parsed.push_back(sDat);
 
   }
@@ -2204,14 +2222,14 @@ void processPair(readPair * rp,  map<string, int> & il,
     //   mateNotMapped(rp, 'K');
   }
           
-  if(rp->al1.GetTag("SA", sa1)){
+  if(rp->al1.GetTag(  globalOpts.saT, sa1)){
     vector<saTag> parsedSa1;
     parseSA(parsedSa1, sa1, il);
     //    cerr << sa1 << endl;
     splitToGraph(rp->al1, parsedSa1, SM);
     //    cerr << "s1 processed " << endl;
   }
-  if(rp->al2.GetTag("SA", sa2)){
+  if(rp->al2.GetTag(  globalOpts.saT, sa2)){
     vector<saTag> parsedSa2;
     parseSA(parsedSa2, sa2, il);
     //    cerr << sa2 << endl;
@@ -2606,6 +2624,20 @@ int parseOpts(int argc, char** argv)
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
+    case 'i':
+      {
+	globalOpts.saT = optarg;
+	
+	if(globalOpts.saT != "XP" && globalOpts.saT != "XP"){
+	  cerr << "FATAL: only SA and XP optional tags are supported for split reads" << endl;
+	  exit(1);
+	}
+	
+	cerr << "INFO: You are using a non standard split-read tag: " << globalOpts.saT << endl;
+	
+
+	break;
+      }
     case 'u':
       {
       cerr << "INFO: You are using a hidden flag." << endl;
@@ -4319,7 +4351,7 @@ void gatherBamStats(string & targetfile){
       if(al.GetTag("XA", any)){
         continue;
       }
-      if(al.GetTag("SA", any)){
+      if(al.GetTag(  globalOpts.saT, any)){
         continue;
       }
       if(al.IsDuplicate()){
@@ -4542,6 +4574,7 @@ int main( int argc, char** argv)
   globalOpts.skipGeno  = false;
   globalOpts.MQ        = 20   ;
   globalOpts.vcf       = true ;
+  globalOpts.saT       =   "SA" ;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){

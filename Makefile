@@ -11,7 +11,7 @@
 CC=g++
 GCC=gcc
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS= -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x 
+CFLAGS= -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/ -Isrc/fastahack -Isrc/Complete-Striped-Smith-Waterman-Library/src/ -Isrc/seqan/core/include/ -Isrc/seqan/extras/include
 OUTFOLD=bin/
 LIBS=-L./ -lbamtools -fopenmp -lz -lm 
