@@ -81,38 +81,117 @@ public:
     int qualToPhred(char b){
         return LookUp[int(b)];
     }
+
+    #ifdef SLOW
+    double qualToProb(char b){
+      return pow(10,(-1*double(LookUp[int(b)])/10));
+    }
+    #endif 
+
+    #ifdef FAST
     double qualToProb(char b){
 	return fastPow(10,(-1*double(LookUp[int(b)])/10));
     }
+    #endif 
+    
+    #ifdef SLOW
+    double qualToProbLog10(char b){
+      return log10(1-qualToProb(b));
+    }
+    #endif 
+
+    #ifdef FAST
     double qualToProbLog10(char b){
       return fastlog2(1-qualToProb(b));
     }
+    #endif
+
+
+    #ifdef SLOW
+    double qualToProbErrorLog10(char b){
+      return log10(qualToProb(b));
+    }
+    #endif 
+
+    #ifdef FAST
     double qualToProbErrorLog10(char b){
          return fastlog2(qualToProb(b));
     }
+    #endif
+
+    #ifdef SLOW
+    double phredToLog10(int i){
+      return log10(pow(10,(-1*double(i)/10)));
+    }
+    #endif
+
+    
+    #ifdef FAST
     double phredToLog10(int i){
       return fastlog2(fastPow(10,(-1*double(i)/10)));
     }
+    #endif
+
+    #ifdef SLOW
+    double phredToProb(int i){
+      return pow(10,(-1*double(i)/10));
+    }
+    #endif 
+
+    #ifdef FAST
     double phredToProb(int i){
         return fastPow(10,(-1*double(i)/10));
     }
-    double log10Add(double a, double b){
-        if(a > b){
-            return log10Add(b, a);
-        }
-        if(! IsFiniteNumber(a)){
-            return b;
-        }
-     
-	double diff = b - a;
+    #endif
 
-        if(diff >= 8){
-            return b;
-        }	
-        
-	return  b + fastlog2(1.0 + fastPow(10, -1*diff));
+    #ifdef SLOW
+    double phredToProbLog10(int i){
+      return log10(1 - pow(10,(-1*double(i)/10)));
+    }    
+    #endif
+
+    #ifdef FAST
+    double phredToProbLog10(int i){
+      return fastlog2(1-fastPow(10,(-1*double(i)/10)));
     }
- 
+    #endif 
+    
+    #ifdef SLOW 
+    double log10Add(double a, double b){
+      if(a > b){
+	return log10Add(b, a);
+      }
+      if(! IsFiniteNumber(a)){
+	return b;
+      }
+      
+      double diff = b - a;
+
+      if(diff >= 8){
+	return b;
+      }
+      return  b + log10(1.0 + pow(10, -1*diff));
+    }
+    #endif
+
+    #ifdef FAST
+    double log10Add(double a, double b){
+      if(a > b){
+	return log10Add(b, a);
+      }
+      if(! IsFiniteNumber(a)){
+	return b;
+      }
+      
+      double diff = b - a;
+      
+      if(diff >= 8){
+	return b;
+      }	
+      
+      return  b + fastlog2(1.0 + fastPow(10, -1*diff));
+    }
+    #endif
 };
 
 #endif

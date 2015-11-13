@@ -4058,6 +4058,9 @@ void genotype(string & bamF, breakpoints * br){
     toohigh = true;
   }
 
+  std::transform(br->alleles.front().begin(), br->alleles.front().end(), br->alleles.front().begin(), ::toupper);
+  std::transform(br->alleles.back().begin(), br->alleles.back().end(), br->alleles.back().begin(), ::toupper);
+
   alignHMM refHMM(int(reads.front().Length) +1,int(br->alleles.front().size()) +1);
   alignHMM altHMM(int(reads.front().Length) +1,int(br->alleles.back().size()) +1);
 
@@ -4106,10 +4109,10 @@ void genotype(string & bamF, breakpoints * br){
 	 << (*it).GetEndPosition() << " "
 	 << joinCig((*it).CigarData) << " "
 	 << (*it).MapQuality         << endl;
-    cerr << "pref palt:" << pR << " "<< pA << endl;
+    cerr << "pRef: " << pR << " pAlt: " << pA << endl;
 
-    cerr << br->alleles.front() << " REF " << it->QueryBases << " " << it->Qualities << " " << pR <<  " " << pR << endl; 
-    cerr << br->alleles.back() << " ALT " << it->QueryBases << " " << it->Qualities << " " << pA <<  " " << pR << endl; 
+    cerr << br->alleles.front() << " REF " << it->QueryBases << " " << it->Qualities <<  " " << pR << endl; 
+    cerr << br->alleles.back() << " ALT " << it->QueryBases << " " << it->Qualities <<  " " << pA << endl; 
     
     cerr << endl;
 
