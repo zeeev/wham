@@ -136,7 +136,7 @@ void printHeader(void){
   header << "##FORMAT=<ID=GL,Number=.,Type=Float,Description=\"Genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for all possible genotypes given the set of alleles defined in the REF and ALT fields.\">" << endl;
   header << "##FORMAT=<ID=AS,Number=1,Type=Integer,Description=\"Number of reads that align better to ALT allele\">" << endl;
   header << "##FORMAT=<ID=RS,Number=1,Type=Integer,Description=\"Number of reads that align better to REF allele\">" << endl;
-  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t." << endl;
+  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tNONE" << endl;
   
   cout << header.str();
 }
@@ -437,8 +437,8 @@ void mergeAndDump(vector<svDat *> & svs){
 	<< "CIPOS=" << fiveCIL << "," << fiveCIH << ";"
         << "CIEND=" << threeCIL << "," << threeCIH << ";"
 	<< "COLLAPSED=" << COLLAPSED 
-	<< "\tGT:GL:AS:RS" ;
-  
+	<< "\tGT:GL:AS:RS\t.:.:.:." ;
+
   // merged SVs need to be re genotyped;
   
 
