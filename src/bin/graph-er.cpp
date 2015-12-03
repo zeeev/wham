@@ -164,6 +164,8 @@ struct breakpoints{
   int collapsed          ; 
   int totalSupport       ; 
   string id              ; 
+  string fives           ;
+  string threes          ;
   vector<string> alleles ;
   vector<int>    supports;
   vector<vector<double> > genotypeLikelhoods ;
@@ -172,7 +174,11 @@ struct breakpoints{
   vector<int>             nalt               ;
   vector<string>          sml                ; 
   vector<string>          smr                ; 
-
+  int posCIL;
+  int posCIH;
+  int endCIL;
+  int endCIH;
+  
   double lref;
   double lalt;
 
@@ -250,9 +256,11 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	  exit(1);
 	}
 	
-	vector<string> POS = split(infoDat["POS"], ",");
-	vector<string> SUP = split(infoDat["SUPPORT"], ",");
+	vector<string> POS   = split(infoDat["POS"], ",");
+	vector<string> SUP   = split(infoDat["SUPPORT"], ",");
 
+	bk->fives            = infoDat["FIVE"];
+	bk->threes           = infoDat["THREE"];
 	bk->seqidIndexL = inverse_lookup[SV[0]];
 	bk->seqidIndexR = inverse_lookup[SV[0]];
 	bk->seqid       = SV[0];
@@ -269,6 +277,16 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 
 	bk->sml = split(infoDat["LID"], ",");
 	bk->smr = split(infoDat["RID"], ",");
+
+
+	vector<string> cipos = split(infoDat["CIPOS"], ",");
+	vector<string> ciend = split(infoDat["CIEND"], ",");
+
+	bk->posCIL = atoi(cipos.front().c_str());
+	bk->posCIH = atoi(cipos.back().c_str());
+	
+	bk->endCIL = atoi(ciend.front().c_str());
+	bk->endCIH = atoi(ciend.back().c_str());
 
 	bk->supports.push_back(atoi(SUP[0].c_str()));
 	bk->supports.push_back(atoi(SUP[0].c_str()));
@@ -834,6 +852,8 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
   header << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">" << endl;
   header << "##INFO=<ID=POS,Number=2,Type=String,Description=\"POS and END\">" << endl;
+  header << "##INFO=<ID=FIVE,Number=.,Type=Integer,Description=\"collapsed POS\">" << endl;
+  header << "##INFO=<ID=THREE,Number=.,Type=Integer,Description=\"collapsed END\">" << endl;
   header << "##INFO=<ID=LID,Number=.,Type=String,Description=\"POS breakpoint support came from SM, independent of genotype\">" << endl;
   header << "##INFO=<ID=RID,Number=.,Type=String,Description=\"END breakpoint support came from SM, independent of genotype\">" << endl;
   header << "##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"Confidence interval around POS for imprecise variants\">" << endl;
@@ -912,7 +932,20 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
        << "REFINED=" << (*c)->refined << ";"
        << "END=" << ((*c)->three +1) << ";"
        << "POS=" << ((*c)->five + 1) << "," << ((*c)->three +1) << ";" ;
+       
+    stringstream tmp1;
+    stringstream tmp2;
 
+    if((*c)->fives.empty()){
+      tmp1 << (*c)->five  + 1;
+      tmp2 << (*c)->three + 1;
+      
+      (*c)->fives = tmp1.str();
+      (*c)->threes = tmp2.str();
+    }
+    ss << "FIVE=" << (*c)->fives << ";";
+    ss << "THREE=" << (*c)->threes << ";";
+    
     string SML = ".";
     string SMR = ".";
 
@@ -932,7 +965,8 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
     ss << "LID=" << SML << ";" ; 
     ss << "RID=" << SMR << ";" ; 
-    ss << "CIPOS=-10,10;CIEND=-10,10;";
+    ss << "CIPOS=" << (*c)->posCIL << "," << (*c)->posCIH << ";";
+    ss << "CIEND=" << (*c)->endCIL << "," << (*c)->endCIH << ";";
     ss << "COLLAPSED=" << (*c)->collapsed ;
     ss << "\tGT:GL:AS:RS";
 
@@ -3933,6 +3967,11 @@ void callBreaks(vector<node *> & tree,
   bp->lref = 0;
   bp->collapsed = 0;
 
+  bp->posCIL = -10;
+  bp->posCIH =  10;
+  bp->endCIL = -10;
+  bp->endCIH =  10;
+
   char hex[8 + 1];
   for(int i = 0; i < 8; i++) {
     sprintf(hex + i, "%x", rand() % 16);
@@ -4544,6 +4583,11 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 	  bp->svlen        = rPos - lPos            ;
 	  bp->totalSupport = 0                      ;
 	  bp->collapsed    = 0                      ; 
+	  bp->posCIL = -10;
+	  bp->posCIH =  10;
+	  bp->endCIL = -10;
+	  bp->endCIH =  10;
+
 	  for(map<string, int>::iterator iz = putative.front()->sm.begin()
 		; iz != putative.front()->sm.end(); iz++){
 	    bp->sml.push_back(iz->first);
