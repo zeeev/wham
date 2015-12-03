@@ -1,4 +1,4 @@
-### WHAM-GRAPHENING
+### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
 
 
 WHAM-GRAPHENING is under development, but produces more accurate deletion, duplication and inversion calls.
@@ -13,7 +13,7 @@ Workflow:
 
 ======
 
-### WHAM
+### WHAM [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
 
 All WHAM documents can be found on the wiki:
 
@@ -26,4 +26,4 @@ WHAM can be easily run as a stand alone tool or as part of gkno (http://gkno.me)
 Currently we are preparing the WHAM manuscript.  If you would like to use and cite this tool, for the time being, please cite the WHAM github page.
 
 
-[![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
+
