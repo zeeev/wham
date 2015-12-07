@@ -78,6 +78,7 @@ struct options{
   string fasta                  ;
   string graphOut               ;
   map<string, int> toSkip       ;
+  map<string, int> toInclude    ;
   string seqid                  ;
   vector<int> region            ;
   string svs                    ; 
@@ -184,7 +185,7 @@ struct breakpoints{
 
 };
 
-static const char *optString = "i:u:b:m:r:a:g:x:f:e:hskvz";
+static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskvz";
 
 // omp lock
 
@@ -680,19 +681,20 @@ void printHelp(void){
   cerr << "                          of bams: a.bam,b.bam,..." << endl;
   cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
   cerr << endl;
-  cerr << " Optional:  " << endl;
-  cerr << "          -v - <FLAG>   - Print BEDPE instead of VCF4.2. [false]     " << endl;
-  cerr << "          -s - <FLAG>   - Exits the program after the stats are      " << endl;
-  cerr << "                          gathered. [false]                          " << endl;
-  cerr << "          -k - <FLAG>   - Skip genotyping (much faster). [false]     " << endl;
+  cerr << " Optional:  Recommended flags are noted with : *                             " << endl;
+  cerr << "          -v - <FLAG>   - Print BEDPE instead of VCF4.2. [false]             " << endl;
+  cerr << "          -s - <FLAG>   - Exits the program after the stats are              " << endl;
+  cerr << "                          gathered. [false]                                  " << endl;
+  cerr << "  *       -k - <FLAG>   - Skip genotyping (much faster). [false]             " << endl;
   cerr << "          -g - <STRING> - File to write graph to (very large output). [false]" << endl;
-  cerr << "          -e - <STRING> - Comma sep. list of seqids to skip [false]. " << endl;
-  cerr << "          -r - <STRING> - Region in format: seqid:start-end [whole genome]  " << endl;
-  cerr << "          -x - <INT>    - Number of CPUs to use [all cores].         " << endl;
-  cerr << "          -m - <INT>    - Mapping quality filter [20].               " << endl;
-  cerr << "          -b - <STRING> - External file to genotype [false].          " << endl;
-  cerr << "          -i - <STRING> - non standard split read tag [SA]            " << endl;
-  cerr << "          -z - <FLAG>   - Sample reads until success. [false]         " << endl;
+  cerr << "  *|-c    -e - <STRING> - Comma sep. list of seqids to skip [false].         " << endl;
+  cerr << "  *|-e    -c - <STRING> - Comma sep. list of seqids to keep [false].         " << endl;
+  cerr << "          -r - <STRING> - Region in format: seqid:start-end [whole genome]   " << endl;
+  cerr << "  *       -x - <INT>    - Number of CPUs to use [all cores].                 " << endl;
+  cerr << "          -m - <INT>    - Mapping quality filter [20].                       " << endl;
+  cerr << "          -b - <STRING> - External file to genotype [false].                 " << endl;
+  cerr << "          -i - <STRING> - non standard split read tag [SA]                   " << endl;
+  cerr << "          -z - <FLAG>   - Sample reads until success. [false]                " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
@@ -714,7 +716,9 @@ void printHelp(void){
   cerr << "                      positions in the -b file.                          " << endl;
   cerr << "        -i - <STRING> WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
   cerr << "                      Older version of bwa-mem used XP.                  " << endl;
-
+  cerr << "    -e|-c  - <STRING> A list of seqids to include or exclude while       " << endl;
+  cerr << "                      sampling insert and depth.  For humans you should  " << endl;
+  cerr << "                      use the standard chromosomes 1,2,3...X,Y.          " << endl;
   cerr << endl;
 
   printVersion();
@@ -2729,6 +2733,16 @@ int parseOpts(int argc, char** argv)
 	}
 	break;
       }
+    case 'c':
+      {
+        vector<string> seqidsToInclude = split(optarg, ",");
+        for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
+          globalOpts.toInclude[seqidsToInclude[i]] = 1;
+          cerr << "INFO: WHAM will only sample seqid: " << seqidsToInclude[i] << endl;
+	}
+        break;
+      }
+
     case 'f':
       {
 	globalOpts.targetBams     = split(optarg, ",");
@@ -4352,12 +4366,14 @@ void gatherBamStats(string & targetfile){
     while(exclude){
       if(sequences.size() > 1){
 	int prand = rand() % (max -1);
-      
 	if(globalOpts.toSkip.find(sequences[prand].RefName) == globalOpts.toSkip.end()){
 	  randomChr = prand;
 	  exclude = false;
 	}
-
+	if(globalOpts.toInclude.size() > 0 
+	   && globalOpts.toInclude.find(sequences[prand].RefName) == globalOpts.toInclude.end()){
+	  exclude = true;
+	}
       }
       else{
 	exclude = false;
