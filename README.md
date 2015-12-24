@@ -1,7 +1,7 @@
 ### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
 
 
-WHAM-GRAPHENING is under development, but produces more accurate deletion, duplication and inversion calls.
+WHAM-GRAPHENING has increased accuracy for deletions, duplications and inversions.
 
 The genotyping module can be slow in high-copy regions.  I recommend filtering SVs prior to genotyping (-k skips genotyping).
 
