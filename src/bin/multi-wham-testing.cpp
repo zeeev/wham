@@ -264,7 +264,7 @@ void printHeader(void){
   cout << "##INFO=<ID=SU,Number=1,Type=Integer,Description=\"Number of supplemental reads supporting position\">"           << endl;
   cout << "##INFO=<ID=CU,Number=1,Type=Integer,Description=\"Number of neighboring all soft clip clusters across all individuals at pileup position\">" << endl;
   cout << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Number of reads at pileup position across individuals passing filters\">" << endl;
-  cout << "##INFO=<ID=NC,Number=1,Type=String,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
+  cout << "##INFO=<ID=NC,Number=1,Type=Float,Description=\"Number of soft clipped sequences collapsed into consensus\">"   << endl;
   cout << "##INFO=<ID=MQ,Number=1,Type=Float,Description=\"Average mapping quality\">"                                      << endl;
   cout << "##INFO=<ID=MQF,Number=1,Type=Float,Description=\"Fraction of reads with MQ less than 50\">"                      << endl;
   cout << "##INFO=<ID=SP,Number=3,Type=Integer,Description=\"Number of reads supporting endpoint: mate-position,split-read,alternative-mapping\">" << endl;

@@ -1,4 +1,4 @@
-/*
+/* 
 This program was created at:  Thu May  7 12:10:40 2015
 This program was created by:  Zev N. Kronenberg
 
@@ -29,7 +29,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-
 */
 
 #include <string>
@@ -292,7 +291,6 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->supports.push_back(atoi(SUP[0].c_str()));
 	bk->supports.push_back(atoi(SUP[0].c_str()));
 	  
-
 	if(bk->five > bk->three){
 	  cerr << "FATAL: SV starts before it ends: " << line << endl;
 	  exit(1);
@@ -346,7 +344,7 @@ double ldbinomial(double p, double q, int m, int n)
 
 */
 
-bool endsBefore(BamAlignment & r, int & pos, int b){
+inline bool endsBefore(BamAlignment & r, int & pos, int b){
   if(!r.IsMapped()){
     return false;
   }
@@ -363,7 +361,6 @@ bool endsBefore(BamAlignment & r, int & pos, int b){
   }
 }
 
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : bam alignemnt, pos
@@ -375,7 +372,7 @@ bool endsBefore(BamAlignment & r, int & pos, int b){
 
 */
 
-bool startsAfter(BamAlignment & r, int & pos, int b){
+inline bool startsAfter(BamAlignment & r, int & pos, int b){
   if(!r.IsMapped()){
     return false;
   }
@@ -473,8 +470,6 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 
 
     sum +=  alignment.sw_score;
-
-
 
   }
   if(sum > 0){
@@ -591,7 +586,7 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
  Function returns: string
 
 */
-void Comp(string & seq){
+inline void Comp(string & seq){
   
   locale loc;
 
@@ -629,7 +624,7 @@ void Comp(string & seq){
 }
 
 
-int phred(double v){
+inline int phred(double v){
 
   double s = (-10 * log10(v) ); 
   
@@ -642,7 +637,7 @@ int phred(double v){
 
 }
 
-double unPhred(int v){
+inline double unPhred(int v){
   
   return pow(10.0,(-1*double(v)/10));
 
@@ -819,10 +814,7 @@ bool sortBreak(breakpoints * L, breakpoints * R){
       return true;
     }
   }
-  
   return false;
-  
-
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1176,7 +1168,7 @@ void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
 
 */
 
-double mean(vector<int> & data){
+inline double mean(vector<int> & data){
 
   double sum = 0;
 
@@ -1186,7 +1178,7 @@ double mean(vector<int> & data){
   return sum / data.size();
 }
 
-double mean(vector<double> & data){
+inline double mean(vector<double> & data){
 
   double sum = 0;
 
@@ -1206,7 +1198,7 @@ double mean(vector<double> & data){
 
 */
 
-double var(vector<double> & data, double mu){
+inline double var(vector<double> & data, double mu){
   double variance = 0;
 
   for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
@@ -1225,7 +1217,7 @@ double var(vector<double> & data, double mu){
  Function returns: void
 
 */
-void endPos(vector<cigDat> & cigs, int * pos){
+inline void endPos(vector<cigDat> & cigs, int * pos){
 
   for(vector<cigDat>::iterator it = cigs.begin();
       it != cigs.end(); it++){
@@ -1436,7 +1428,11 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   bp->alleles.push_back(ref) ;
   bp->alleles.push_back(alt) ;
 
-  //  cerr << "RS: " << ref.size() << " AS: " << alt.size() << endl;
+  // upper case alleles
+  std::transform(bp->alleles.front().begin(), bp->alleles.front().end(), 
+		 bp->alleles.front().begin(), ::toupper);
+  std::transform(bp->alleles.back().begin(), bp->alleles.back().end(), 
+		 bp->alleles.back().begin(), ::toupper);
 
   return true;
 }
@@ -1527,7 +1523,7 @@ string joinReturn(vector<string> strings){
 
 */
 
-bool isPointIn(readPair * rp){
+inline bool isPointIn(readPair * rp){
 
   if(!rp->al1.IsMapped() || !rp->al2.IsMapped()){
     return false;
@@ -1562,7 +1558,7 @@ bool isPointIn(readPair * rp){
 */
 
 
-bool isInGraph(int refID, int pos, graph & lc){
+inline bool isInGraph(int refID, int pos, graph & lc){
 
   if(lc.nodes.find(refID) == lc.nodes.end()){
     return false;
@@ -1667,7 +1663,6 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    else{
      globalGraph.nodes[refID][l]->sm[SM] += 1;
    }
-
 
    nodeR->collapsed = false;
    
@@ -1878,7 +1873,7 @@ string joinCig(vector<CigarOp> strings){
 
 */
 
-bool areBothClipped(vector<CigarOp> & ci){
+inline bool areBothClipped(vector<CigarOp> & ci){
 
   if(ci.front().Type == 'S' && ci.back().Type == 'S'){
     return true;
@@ -1896,7 +1891,7 @@ bool areBothClipped(vector<CigarOp> & ci){
 
 */
 
-bool IsLongClip(vector<CigarOp> & ci, unsigned int len){
+inline bool IsLongClip(vector<CigarOp> & ci, unsigned int len){
 
   if(ci.front().Type == 'S' && ci.front().Length >= len){
     return true;
@@ -1918,7 +1913,7 @@ bool IsLongClip(vector<CigarOp> & ci, unsigned int len){
 
 */
 
-int match(vector<CigarOp> co){
+inline int match(vector<CigarOp> & co){
   
   int m = 0;
   
@@ -1928,9 +1923,7 @@ int match(vector<CigarOp> co){
       m += it->Length;
     }
   }
-  
   return m;
-  
 }
 
 
@@ -1944,7 +1937,7 @@ int match(vector<CigarOp> co){
 
 */
 
-bool pairFailed(readPair * rp){
+inline bool pairFailed(readPair * rp){
   
   if(rp->al1.IsMapped() && rp->al2.IsMapped()){
     if(rp->al1.Length == rp->al1.CigarData[0].Length 
@@ -2178,9 +2171,7 @@ void deviantInsertSize(readPair * rp, char supportType, string & SM){
     addIndelToGraph(rp->al2.RefID, start, end, supportType, SM);
     
   }
-
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -2199,22 +2190,12 @@ void processPair(readPair * rp,  map<string, int> & il,
   cerr << "processing pair" << endl;
 #endif 
 
-  
   string sa1;
   string sa2;
   
   bool sameStrand = false;
 
   if(pairFailed(rp)){
-
-#ifdef DEBUG
-    cerr << "pair failed filter: " << rp->al1.Name  << endl;
-    cerr << "                    " << rp->al1.Position << endl;
-    cerr << "                    " << joinCig(rp->al1.CigarData) << endl;
-    cerr << "                    " << rp->al2.Position << endl;
-    cerr << "                    " << joinCig(rp->al2.CigarData) << endl;
-
-#endif 
     return;
   }
  
@@ -2415,28 +2396,11 @@ bool runRegion(string filename,
       }
 
       if(globalPairStore[rps->first]->flag == 1){
-//	cerr << "c: "     << globalPairStore[rps->first]->count << endl;
-//	cerr << "f: "     << globalPairStore[rps->first]->flag << endl;
-//	cerr << "test1A " << (*rps->second).al2.Name << endl;
-//	cerr << "test1B " << (*rps->second).al1.Name << endl;
 	(*globalPairStore[rps->first]).al2 = (*rps->second).al2;
       }
       else{
-//	cerr << "c: "     << globalPairStore[rps->first]->count << endl;
-//	cerr << "f: "     << globalPairStore[rps->first]->flag << endl;
-//	cerr << "test2A " << (*rps->second).al1.Name << endl;
-//	cerr << "test2B " << (*rps->second).al2.Name << endl;
       	(*globalPairStore[rps->first]).al1 = (*rps->second).al1;
       }
-//      cerr << "INFO: about to process read pairs in different regions: " << globalPairStore[rps->first]->flag << " " 
-//	   << globalPairStore[rps->first]->al1.Name      << " "
-//	   << globalPairStore[rps->first]->al1.AlignmentFlag      << " "
-//	   << globalPairStore[rps->first]->al1.RefID     << " " 
-//	   << globalPairStore[rps->first]->al1.Position  << " " 
-//	   << globalPairStore[rps->first]->al2.Name      << " " 
-//	   << globalPairStore[rps->first]->al2.AlignmentFlag      << " "
-//	   << globalPairStore[rps->first]->al2.RefID     << " " 
-//	   << globalPairStore[rps->first]->al2.Position  << endl;
       processPair(globalPairStore[rps->first], localInverseLookUp, &low, &high, SM);
       delete globalPairStore[rps->first];
       delete pairStore[rps->first];
@@ -2605,10 +2569,7 @@ void loadBam(string & bamFile){
   br.Close();
   
   // global read pair store
-
   map<string, readPair*> pairStore;
-
-
 
   int Mb = 0;
 
@@ -2648,7 +2609,7 @@ void loadBam(string & bamFile){
        << " reads that were not processed" 
        << endl; 
 
-  // freeing memory
+  // cleaning up
   for(map<string, readPair *>::iterator rp = pairStore.begin();
       rp != pairStore.end(); rp++){
     delete rp->second;
@@ -4111,12 +4072,6 @@ void genotype(string & bamF, breakpoints * br){
     toohigh = true;
   }
 
-  std::transform(br->alleles.front().begin(), br->alleles.front().end(), br->alleles.front().begin(), ::toupper);
-  std::transform(br->alleles.back().begin(), br->alleles.back().end(), br->alleles.back().begin(), ::toupper);
-
-  alignHMM refHMM(int(reads.front().Length) +1,int(br->alleles.front().size()) +1);
-  alignHMM altHMM(int(reads.front().Length) +1,int(br->alleles.back().size()) +1);
-
   double aal = 0;
   double abl = 0;
   double bbl = 0;
@@ -4128,15 +4083,16 @@ void genotype(string & bamF, breakpoints * br){
 
   phredUtils pu;
 
-  for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); it++){
+  for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end(); 
+      it++){
 
-    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20) || toohigh || (*it).MapQuality < 10){
+    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20) 
+       || toohigh || (*it).MapQuality < 10){
       continue;
     }
 
-
     alignHMM refHMM(int((*it).Length) +1,int(br->alleles.front().size()) +1);
-    alignHMM altHMM(int((*it).Length) +1,int(br->alleles.back().size()) +1);
+    alignHMM altHMM(int((*it).Length) +1,int(br->alleles.back().size())  +1);
     
     nReads += 1;
     
@@ -4147,7 +4103,6 @@ void genotype(string & bamF, breakpoints * br){
     
     double pR = refHMM.finalLikelihoodCalculation();
 
-
     double div2 = log10(2);
 
     altHMM.initPriors(br->alleles.back(), it->QueryBases, it->Qualities);
@@ -4156,26 +4111,13 @@ void genotype(string & bamF, breakpoints * br){
     altHMM.updatecells();
     double pA = altHMM.finalLikelihoodCalculation();
 
-#ifdef DEBUG
-    
-    cerr << "RI: " << (*it).Position << " "
-	 << (*it).GetEndPosition() << " "
-	 << joinCig((*it).CigarData) << " "
-	 << (*it).MapQuality         << endl;
-    cerr << "pRef: " << pR << " pAlt: " << pA << endl;
-
-    cerr << br->alleles.front() << " REF " << it->QueryBases << " " << it->Qualities <<  " " << pR << endl; 
-    cerr << br->alleles.back() << " ALT " << it->QueryBases << " " << it->Qualities <<  " " << pA << endl; 
-    
-    cerr << endl;
-
-#endif
-
     if(br->type == 'V'){
 
-      string revcomp = string((*it).QueryBases.rbegin(), (*it).QueryBases.rend());
+      string revcomp = string((*it).QueryBases.rbegin(), 
+			      (*it).QueryBases.rend());
       Comp(revcomp);
-      string revqual = string((*it).Qualities.rbegin(), (*it).Qualities.rend()); 
+      string revqual = string((*it).Qualities.rbegin(), 
+			      (*it).Qualities.rend()); 
 
       altHMM.initPriors(br->alleles.back(), revcomp, revqual);
       altHMM.initTransProbs();
@@ -4206,18 +4148,11 @@ void genotype(string & bamF, breakpoints * br){
       nalt += 1;
     }
 
-#ifdef DEBUG
-    cerr << "ll: " << aal << " " << abl << " " << bbl << endl;
-#endif 
-
     aal  += pu.log10Add((pR - div2), (pR - div2));
     abl  += pu.log10Add((pR - div2), (pA - div2));
     bbl  += pu.log10Add((pA - div2), (pA - div2));
-   
-
+    
   }
-
-
 
   vector<double> gl;
   gl.push_back(aal);
@@ -4242,10 +4177,8 @@ void genotype(string & bamF, breakpoints * br){
   br->nref.push_back(nref);
   br->nalt.push_back(nalt);
 
-
   br->lref += aal + (abl/2);
   br->lalt += bbl + (abl/2);
-
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -4647,7 +4580,6 @@ int main( int argc, char** argv)
     exit(1);
   }
 
-
   if(globalOpts.nthreads == -1){
   }
   else{
@@ -4666,7 +4598,6 @@ int main( int argc, char** argv)
   for(unsigned int i = 0; i < globalOpts.targetBams.size(); i++){     
     gatherBamStats(globalOpts.targetBams[i]);    
   }
-
   if(globalOpts.statsOnly){
     cerr << "INFO: Exiting as -s flag is set." << endl;
     cerr << "INFO: WHAM finished normally, goodbye! " << endl;
@@ -4684,7 +4615,6 @@ int main( int argc, char** argv)
    sequences = mr.GetReferenceData();
    mr.Close();
  }
-
 
  map<string, int> inverse_lookup;
  int s = 0;

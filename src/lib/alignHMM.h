@@ -88,12 +88,9 @@ public:
       }
     }
 
-    bool initPriors(std::string & haplotype,
+inline bool initPriors(std::string & haplotype,
                     std::string & readSeq,
                     std::string & readQual){
-
-
-
         
       for(uint i = 0; i < readSeq.size(); i++){
 	char b = readSeq[i];
@@ -108,7 +105,7 @@ public:
       return true;
     }
 
-    bool initTransProbs(void){
+inline bool initTransProbs(void){
 
       transitions[MATCH_TO_MATCH_I] = -2.744828e-05 ;
       transitions[MATCH_TO_INS_I]   = -4.5          ;
