@@ -2033,7 +2033,7 @@ bool score(string seqid                 ,
   if(totalDat.nDiscordant   == 0 
      && totalDat.nsplitRead == 0 
      && totalDat.evert      == 0 
-     && totalDat.primary[*pos].size() < 3){
+     && totalDat.primary[*pos].size() < globalOpts.min){
 #ifdef DEBUG
     cerr << "left scoring because there was no discordant, no splits, no everts" << endl;
 #endif
