@@ -1,4 +1,4 @@
-### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
+### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)[![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
 
 WHAM-GRAPHENING has increased accuracy for deletions, duplications and inversions.
