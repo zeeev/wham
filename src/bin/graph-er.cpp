@@ -290,7 +290,7 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->endCIH = atoi(ciend.back().c_str());
 
 	bk->supports.push_back(atoi(SUP[0].c_str()));
-	bk->supports.push_back(atoi(SUP[0].c_str()));
+	bk->supports.push_back(atoi(SUP[1].c_str()));
 
 	if(bk->five > bk->three){
 	  cerr << "FATAL: SV starts before it ends: " << line << endl;
