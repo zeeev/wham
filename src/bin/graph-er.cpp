@@ -4069,7 +4069,9 @@ void genotype(string & bamF, breakpoints * br){
 
   bool toohigh = false;
 
-  if(reads.size() > (insertDists.avgD[bamF] * 10)){
+  int max = insertDists.avgD[bamF] + (4 * sqrt(insertDists.avgD[bamF]));
+
+  if(reads.size() > max ){
     toohigh = true;
   }
 
