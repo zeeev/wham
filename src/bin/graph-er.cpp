@@ -486,16 +486,21 @@ double totalAlignmentScore(vector<BamAlignment> & reads, breakpoints * br){
 /*
  Function input  : breakpoint pointer
 
- Function does   : finds alignment alt score
+ Function does   : loads up the reads 
 
- Function returns: double
+ Function returns: bool
 
 */
 
+bool getPopAlignments(vector<string> & bamFiles, 
+		      breakpoints * br, 
+		      map< string, vector<BamAlignment> > & reads, 
+		      int buffer){
 
-bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAlignment> & reads, int buffer){
+  for(vector<string>::iterator fs = bamFiles.begin(); 
+      fs != bamFiles.end(); fs++){
 
-  for(vector<string>::iterator fs = bamFiles.begin(); fs != bamFiles.end(); fs++){
+    reads[*fs];
 
     BamReader bamR;
     if(! bamR.Open(*fs)){
@@ -514,7 +519,8 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
       }
     }
 
-    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, br->seqidIndexL, br->five +buffer)){
+    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, 
+		       br->seqidIndexL, br->five +buffer)){
       cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
       exit(1);
     }
@@ -541,7 +547,7 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
 	continue;
       }
 
-      reads.push_back(al);
+      reads[*fs].push_back(al);
     }
     if(br->two){
       if(!bamR.SetRegion(br->seqidIndexL, br->three-buffer, br->seqidIndexL, br->three+buffer)){
@@ -567,7 +573,7 @@ bool getPopAlignments(vector<string> & bamFiles, breakpoints * br, vector<BamAli
 	if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
 	  continue;
 	}
-	reads.push_back(al);
+	reads[*fs].push_back(al);
       }
     }
 
@@ -3842,7 +3848,6 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
 
     vector <node *> putativeTwo;
 
-
        sort(putative.begin(), putative.end(), sortNodesBySupport);
 
        while(putative.size() > 2){
@@ -4044,28 +4049,17 @@ void dump(vector< vector< node *> > & allTrees){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : bam file names (from globalOpts)
+ Function input  : vector of reads for an individual
 
- Function does   : genotypes the SVs using a pairedHMM
+ Function does   : genotype the individual with pairHMM
 
  Function returns: NA
 
 */
 
-void genotype(string & bamF, breakpoints * br){
+void genotype(vector<BamAlignment> & reads, 
+	      string & bamF, breakpoints * br){
 
-  vector<string> bamFiles;
-
-  bamFiles.push_back(bamF);
-
-  vector<BamAlignment> reads;
-
-  int buffer = 5;
-
-  while(reads.size() < 2){
-    getPopAlignments(bamFiles, br, reads, buffer);
-    buffer = buffer + 1;
-  }
 
   bool toohigh = false;
 
@@ -4086,16 +4080,22 @@ void genotype(string & bamF, breakpoints * br){
 
   phredUtils pu;
 
-  for(vector<BamAlignment>::iterator it = reads.begin(); it != reads.end();
-      it++){
+  // currently no illumina reads greater than 300
+  // single allocation for alignment object
+
+  alignHMM refHMM(300,int(br->alleles.front().size()) +1);
+  alignHMM altHMM(300,int(br->alleles.back().size())  +1);
+
+  for(vector<BamAlignment>::iterator it = reads.begin(); 
+      it != reads.end(); it++){
 
     if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)
        || toohigh || (*it).MapQuality < 10){
       continue;
     }
 
-    alignHMM refHMM(int((*it).Length) +1,int(br->alleles.front().size()) +1);
-    alignHMM altHMM(int((*it).Length) +1,int(br->alleles.back().size())  +1);
+    refHMM.clear(int((*it).Length) +1, int(br->alleles.front().size()) +1);
+    altHMM.clear(int((*it).Length) +1, int(br->alleles.back().size())  +1);
 
     nReads += 1;
 
@@ -4558,44 +4558,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
   }
 }
 
-
-//-------------------------------    MAIN     --------------------------------
-/*
- Comments:
-*/
-
-int main( int argc, char** argv)
-{
-  globalOpts.lastSeqid  = 0;
-  globalOpts.keepTrying = false;
-  globalOpts.nthreads = -1;
-  globalOpts.statsOnly = false;
-  globalOpts.skipGeno  = false;
-  globalOpts.MQ        = 20   ;
-  globalOpts.vcf       = true ;
-  globalOpts.saT       =   "SA" ;
-
-  int parse = parseOpts(argc, argv);
-  if(parse != 1){
-    cerr << "FATAL: unable to parse command line correctly. Double check commands." << endl;
-    cerr << endl;
-    printHelp();
-    exit(1);
-  }
-
-  if(globalOpts.nthreads == -1){
-  }
-  else{
-    omp_set_num_threads(globalOpts.nthreads);
-  }
-
-  if(globalOpts.fasta.empty()){
-    cerr << "FATAL: no reference fasta provided." << endl << endl;
-    printHelp();
-    exit(1);
-  }
-
-  // gather the insert length and other stats
+void allStats(void){
 
 #pragma omp parallel for schedule(dynamic, 3)
   for(unsigned int i = 0; i < globalOpts.targetBams.size(); i++){
@@ -4604,8 +4567,158 @@ int main( int argc, char** argv)
   if(globalOpts.statsOnly){
     cerr << "INFO: Exiting as -s flag is set." << endl;
     cerr << "INFO: WHAM finished normally, goodbye! " << endl;
-    return 0;
+    exit(0);
   }
+}
+
+void loadReads(std::vector<RefData> & sequences){
+  // load bam has openMP inside for running regions quickly
+  if(globalOpts.svs.empty()){
+    cerr << "INFO: Loading discordant reads into forest." << endl;
+
+    for(vector<string>::iterator bam = globalOpts.targetBams.begin();
+	bam != globalOpts.targetBams.end(); bam++){
+
+      cerr << "INFO: Reading: " << *bam << endl;
+
+      loadBam(*bam);
+
+      for(map<int, map<int, node * > >::iterator seqid
+	    = globalGraph.nodes.begin();
+	  seqid != globalGraph.nodes.end(); seqid++){
+	
+	cerr << "INFO: Number of putative breakpoints for: "
+	     << sequences[seqid->first].RefName << ": "
+	     << globalGraph.nodes[seqid->first].size() << endl;
+      }
+    }
+    cerr << "INFO: Finished loading reads." << endl;
+  }
+}
+
+void processAlleles(vector<breakpoints*> & allBreakpoints,
+		    vector<RefData> & sequences){
+
+  cerr << "INFO: Gathering alleles." << endl;
+  
+  int nAlleles = 0;
+  
+#pragma omp parallel for
+  for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
+    
+    if(allBreakpoints[z]->fail){
+      continue;
+    }
+    
+    genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
+    omp_set_lock(&glock);
+    nAlleles += 1;
+    if((nAlleles % 100) == 0){
+      cerr << "INFO: generated " << nAlleles  
+	   << " alleles / " << allBreakpoints.size()  << endl;
+    }
+    omp_unset_lock(&glock);
+  }
+}
+
+void refineBreakpoint(breakpoints * br,
+		      map<string, vector< BamAlignment > > & ReadsPerPerson,
+		      vector<RefData> & sequences){
+    
+
+  std::vector<BamAlignment> reads;
+  
+  for(map<string, vector< BamAlignment > >::iterator 
+	it = ReadsPerPerson.begin(); it != ReadsPerPerson.end(); it++){
+    
+    for(vector<BamAlignment>::iterator iz = it->second.begin();
+	iz != it->second.end(); iz++){
+      reads.push_back(*iz);
+    }
+  }
+
+  if(reads.size() > (MAXREADDEPTH * 3)){
+    return;
+  }
+  
+  double startingScore = totalAlignmentScore(reads, br);
+  int oldStart     = br->five ;
+  int oldEnd       = br->three;
+  int flag         = 0;
+  
+  breakpoints * secondary = new breakpoints;
+  secondary->fail = false;
+  
+  for(int f = -2; f <= 2; f++){
+    *secondary = *br;
+    secondary->five = oldStart;
+    secondary->five += f;
+    if(secondary->five >= secondary->three){
+      continue;
+    }
+    for(int t = -2; t <= 2; t++){
+      secondary->three  = oldEnd;
+      secondary->three  += t;
+      if(secondary->three  <= secondary->five){
+	continue;
+      }
+      secondary->svlen = (secondary->three - secondary->five);
+      genAlleles(secondary, globalOpts.fasta, sequences);
+      double newScore = totalAlignmentScore(reads, secondary);
+      
+      if(newScore > startingScore){
+	startingScore = newScore;
+	br->five = secondary->five;
+	br->three = secondary->three;
+	br->svlen = br->three - br->five;
+	genAlleles(br, globalOpts.fasta, sequences);
+	flag = 1;
+	br->refined = 1;	
+      }
+    }
+  }
+    
+  delete secondary;
+  
+  if(flag == 1){
+    br->svlen = br->three - br->five; 
+  }
+}
+
+//-------------------------------    MAIN     --------------------------------
+/*
+ Comments:
+*/
+
+int main( int argc, char** argv)
+{
+  globalOpts.nthreads   = 1    ;
+  globalOpts.lastSeqid  = 0    ;
+  globalOpts.MQ         = 20   ; 
+  globalOpts.saT        = "SA" ;
+  globalOpts.keepTrying = false;
+  globalOpts.statsOnly  = false;
+  globalOpts.skipGeno   = false;
+  globalOpts.vcf        = true ;
+
+  int parse = parseOpts(argc, argv);
+  if(parse != 1){
+    cerr << "FATAL: unable to parse command line correctly." << endl;
+     printHelp();
+    exit(1);
+  }
+ 
+  omp_set_num_threads(globalOpts.nthreads);
+ 
+  if(globalOpts.fasta.empty()){
+    cerr << "FATAL: no reference fasta provided." << endl << endl;
+    printHelp();
+    exit(1);
+  }
+  // gather stats for each bam (depth, insert l, ...)
+  allStats();
+
+ 
 
  RefVector sequences;
 
@@ -4624,35 +4737,11 @@ int main( int argc, char** argv)
 
  for(vector<RefData>::iterator it = sequences.begin();
      it != sequences.end(); it++){
-
    inverse_lookup[(*it).RefName] = s;
-
    s+= 1;
  }
 
-
- // load bam has openMP inside for running regions quickly
-
- if(globalOpts.svs.empty()){
-
-   cerr << "INFO: Loading discordant reads into graph." << endl;
-
-   for(vector<string>::iterator bam = globalOpts.targetBams.begin();
-       bam != globalOpts.targetBams.end(); bam++){
-
-     cerr << "INFO: Reading: " << *bam << endl;
-
-     loadBam(*bam);
-
-     for(map<int, map<int, node * > >::iterator seqid = globalGraph.nodes.begin();
-	 seqid != globalGraph.nodes.end(); seqid++){
-
-       cerr << "INFO: Number of putative breakpoints for: " << sequences[seqid->first].RefName << ": "
-	    << globalGraph.nodes[seqid->first].size() << endl;
-     }
-   }
-   cerr << "INFO: Finished loading reads." << endl;
- }
+ loadReads(sequences);
 
  vector<breakpoints*> allBreakpoints ;
  vector<vector<node*> > globalTrees  ;
@@ -4662,10 +4751,6 @@ int main( int argc, char** argv)
 
    gatherTrees(globalTrees);
 
-#ifdef DEBUG
-   dump(globalTrees);
-#endif
-
    map<int, map <int, node*> > delBreak;
 
    cerr << "INFO: Finding breakpoints in trees." << endl;
@@ -4674,7 +4759,8 @@ int main( int argc, char** argv)
 
      if((i % 100000) == 0){
        omp_set_lock(&glock);
-       cerr << "INFO: Processed " << i << "/" << globalTrees.size() << " trees" << endl;
+       cerr << "INFO: Processed " << i 
+	    << "/" << globalTrees.size() << " trees" << endl;
        omp_unset_lock(&glock);
      }
 
@@ -4687,7 +4773,8 @@ int main( int argc, char** argv)
      callBreaks(globalTrees[i], allBreakpoints, delBreak);
    }
 
- cerr << "INFO: Trying to merge deletion breakpoints: " << delBreak.size() << endl;
+ cerr << "INFO: Trying to merge deletion breakpoints: " 
+      << delBreak.size() << endl;
 
  mergeDels(delBreak, allBreakpoints);
  }
@@ -4697,25 +4784,7 @@ int main( int argc, char** argv)
    loadExternal(allBreakpoints, inverse_lookup);
  }
 
- cerr << "INFO: Gathering alleles." << endl;
-
- int nAlleles = 0;
-
-#pragma omp parallel for
- for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
-
-   if(allBreakpoints[z]->fail){
-     continue;
-   }
-
-   genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
-   omp_set_lock(&glock);
-   nAlleles += 1;
-   if((nAlleles % 100) == 0){
-     cerr << "INFO: generated " << nAlleles  << " alleles / " << allBreakpoints.size()  << endl;
-   }
-   omp_unset_lock(&glock);
- }
+ processAlleles(allBreakpoints, sequences);
 
  if(globalOpts.skipGeno){
    if(globalOpts.vcf){
@@ -4729,110 +4798,37 @@ int main( int argc, char** argv)
    return 0;
  }
 
+ 
 
- MAXREADDEPTH = 0;
- for(map<string, double>::iterator mi = insertDists.avgD.begin(); mi != insertDists.avgD.end(); mi++){
-   MAXREADDEPTH += mi->second;
- }
-
- nAlleles = 0;
- cerr << "INFO: Refining breakpoints using SW alignments" << endl;
 #pragma omp parallel for
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
+   
+   if(allBreakpoints[z]->fail) continue;
 
-   if(allBreakpoints[z]->fail){
-     continue;
+   if((z % 100) == 0){
+
+     omp_set_lock(&glock);
+     cerr << "INFO: Refined and genotyped " << z
+	  << "/" << allBreakpoints.size() << " breakpoints" << endl;
+     omp_unset_lock(&glock);
+     
    }
 
-   vector<BamAlignment> reads;
-   int buffer = 1;
-   while(reads.size() < 2){
-     getPopAlignments(globalOpts.targetBams, allBreakpoints[z], reads, buffer);
-     buffer +=1;
+   map<string, vector< BamAlignment > > ReadsPerPerson;
+  
+   getPopAlignments(globalOpts.targetBams, 
+		    allBreakpoints[z], 
+		    ReadsPerPerson, 5);
+ 
+  
+   refineBreakpoint(allBreakpoints[z], ReadsPerPerson, sequences);
+
+   for(unsigned int p = 0; p < globalOpts.targetBams.size(); p++){
+     genotype(ReadsPerPerson[ globalOpts.targetBams[p] ], 
+	      globalOpts.targetBams[p], allBreakpoints[z]);
    }
-
-
-   if(reads.size() > (MAXREADDEPTH * 3)){
-     continue;
-   }
-
-   double startingScore = totalAlignmentScore(reads, allBreakpoints[z]);
-   int oldStart     = allBreakpoints[z]->five ;
-   int oldEnd       = allBreakpoints[z]->three;
-   int flag         = 0;
-
-   breakpoints * secondary = new breakpoints;
-   secondary->fail = false;
-
-   for(int f = -2; f <= 2; f++){
-     *secondary = *allBreakpoints[z];
-     secondary->five = oldStart;
-     secondary->five += f;
-     if(secondary->five >= secondary->three){
-       continue;
-     }
-     for(int t = -2; t <= 2; t++){
-       secondary->three  = oldEnd;
-       secondary->three  += t;
-       if(secondary->three  <= secondary->five){
-	 continue;
-       }
-       secondary->svlen = (secondary->three - secondary->five);
-       genAlleles(secondary, globalOpts.fasta, sequences);
-       double newScore = totalAlignmentScore(reads, secondary);
-
-       if(newScore > startingScore){
-	 startingScore = newScore;
-	 allBreakpoints[z]->five = secondary->five;
-	 allBreakpoints[z]->three = secondary->three;
-	 allBreakpoints[z]->svlen = (allBreakpoints[z]->three - allBreakpoints[z]->five);
-	 genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
-	 flag = 1;
-
-	 allBreakpoints[z]->refined = 1;
-       }
-     }
-   }
-
-   delete secondary;
-
-   if(flag == 1){
-     allBreakpoints[z]->svlen =   allBreakpoints[z]->three - allBreakpoints[z]->five;
-
-   }
-
-   omp_set_lock(&glock);
-   nAlleles += 1;
-   if((nAlleles % 10) == 0){
-     cerr << "INFO: refined " << nAlleles  << " breakpoint pairs / " << allBreakpoints.size()  << endl;
-   }
-   omp_unset_lock(&glock);
  }
-
- cerr << "INFO: Finished breakpoints using SW alignments" << endl;
-
- int NGeno = 0;
- cerr << "INFO: Genotyping SVs." << endl;
-#pragma omp parallel for schedule(dynamic, 3)
- for(unsigned int z = 0; z < allBreakpoints.size(); z++){
-
-   if(allBreakpoints[z]->fail){
-     continue;
-   }
-
-   for(unsigned int i = 0 ; i < globalOpts.targetBams.size(); i++){
-     genotype(globalOpts.targetBams[i], allBreakpoints[z]        );
-   }
-   omp_set_lock(&glock);
-   NGeno += 1;
-   if((NGeno % 100) == 0 && z != 0){
-     cerr << "Genotyped: " << NGeno  << "/" << allBreakpoints.size() << " SVs." << endl;
-   }
-   omp_unset_lock(&glock);
- }
-
- cerr << "INFO: Sorting "  << allBreakpoints.size() << " putative SVs." << endl;
-
+ 
  if(globalOpts.vcf){
    printVCF(allBreakpoints, sequences);
  }
