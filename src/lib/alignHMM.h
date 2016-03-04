@@ -35,6 +35,9 @@ class alignHMM {
   uint NROW; /*!< Read length + 1     */
   uint NCOL; /*!< Haplotype length +1 */
   
+  uint MAXROW;
+  uint MAXCOL;
+
   void dumpMat(double ** mat, int nrow, int ncol){
     for(int i = 0; i < nrow; i++){
       for(int j = 0; j < ncol; j++){
@@ -47,7 +50,7 @@ class alignHMM {
  public:
   ~alignHMM(){
     delete transitions;
-    for(uint i = 0; i < NROW; i++){
+    for(uint i = 0; i < MAXROW; i++){
       delete[] matchMatrix[i];
       delete[] insertionMatrix[i];
       delete[] deletionMatrix[i];
@@ -64,6 +67,9 @@ class alignHMM {
     
     NROW = nrow;
     NCOL = ncol;
+
+    MAXROW = NROW;
+    MAXCOL = NCOL;
     
     matchMatrix      = new double * [NROW];
     insertionMatrix  = new double * [NROW];
