@@ -4796,7 +4796,7 @@ int main( int argc, char** argv)
 
  int count = 0;
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 3)
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
    
    if(allBreakpoints[z]->fail) continue;
