@@ -435,7 +435,7 @@ string join(vector<double> & ints, string sep){
 
 
 
-double totalAlignmentScore(map< string, vector<BamAlignment> > & reads, 
+double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
 			   breakpoints * br){
 
   int sum = 0;
@@ -448,31 +448,31 @@ double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
   // Declares an alignment that stores the result
   StripedSmithWaterman::Alignment alignment;
   // Aligns the query to the ref
-  
+
   for(map<string, vector<BamAlignment> >::iterator it = reads.begin();
       it != reads.end(); it++){
     for(vector<BamAlignment>::iterator r = it->second.begin();
 	r != it->second.end(); r++){
-      
+
       if(endsBefore((*r), br->five,10) || startsAfter((*r), br->three,10)){
 	continue;
       }
-      
+
       if((*r).IsMapped()){
-	if(((*r).CigarData.front().Type != 'S' 
+	if(((*r).CigarData.front().Type != 'S'
 	    && (*r).CigarData.front().Length < 10) &&
-	   ((*r).CigarData.back().Type  != 'S' && 
+	   ((*r).CigarData.back().Type  != 'S' &&
 	    (*r).CigarData.back().Length  < 10)){
 	  continue;
 	}
       }
-      
+
       n += 1;
-      
+
       aligner.Align((*r).QueryBases.c_str(), br->alleles.back().c_str(),
 		    br->alleles.back().size(),  filter, &alignment);
-      
-      sum +=  alignment.sw_score;      
+
+      sum +=  alignment.sw_score;
     }
   }
   if(sum > 0){
@@ -487,21 +487,21 @@ double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
 /*
  Function input  : breakpoint pointer
 
- Function does   : loads up the reads 
+ Function does   : loads up the reads
 
  Function returns: total number of reads
 
 */
 
-int getPopAlignments(vector<string> & bamFiles, 
-		      breakpoints * br, 
-		      map< string, vector<BamAlignment> > & reads, 
+int getPopAlignments(vector<string> & bamFiles,
+		      breakpoints * br,
+		      map< string, vector<BamAlignment> > & reads,
 		      int buffer){
 
   int nreads = 0;
 
 
-  for(vector<string>::iterator fs = bamFiles.begin(); 
+  for(vector<string>::iterator fs = bamFiles.begin();
       fs != bamFiles.end(); fs++){
 
     reads[*fs];
@@ -523,7 +523,7 @@ int getPopAlignments(vector<string> & bamFiles,
       }
     }
 
-    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer, 
+    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer,
 		       br->seqidIndexL, br->five +buffer)){
       cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
       exit(1);
@@ -4063,7 +4063,7 @@ void dump(vector< vector< node *> > & allTrees){
 
 */
 
-void genotype(vector<BamAlignment> & reads, 
+void genotype(vector<BamAlignment> & reads,
 	      string & bamF, breakpoints * br){
 
 
@@ -4092,7 +4092,7 @@ void genotype(vector<BamAlignment> & reads,
   alignHMM refHMM(300,int(br->alleles.front().size()) +1);
   alignHMM altHMM(300,int(br->alleles.back().size())  +1);
 
-  for(vector<BamAlignment>::iterator it = reads.begin(); 
+  for(vector<BamAlignment>::iterator it = reads.begin();
       it != reads.end(); it++){
 
     if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)
@@ -4566,7 +4566,7 @@ void mergeDels(map <int, map <int, node * > > & hf, vector< breakpoints *> & br)
 
 void allStats(void){
 
-#pragma omp parallel for schedule(dynamic, 3)
+#pragma omp parallel for schedule(dynamic, 1)
   for(unsigned int i = 0; i < globalOpts.targetBams.size(); i++){
     gatherBamStats(globalOpts.targetBams[i]);
   }
@@ -4592,7 +4592,7 @@ void loadReads(std::vector<RefData> & sequences){
       for(map<int, map<int, node * > >::iterator seqid
 	    = globalGraph.nodes.begin();
 	  seqid != globalGraph.nodes.end(); seqid++){
-	
+
 	cerr << "INFO: Number of putative breakpoints for: "
 	     << sequences[seqid->first].RefName << ": "
 	     << globalGraph.nodes[seqid->first].size() << endl;
@@ -4606,21 +4606,21 @@ void processAlleles(vector<breakpoints*> & allBreakpoints,
 		    vector<RefData> & sequences){
 
   cerr << "INFO: Gathering alleles." << endl;
-  
+
   int nAlleles = 0;
-  
+
 #pragma omp parallel for
   for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
-    
+
     if(allBreakpoints[z]->fail){
       continue;
     }
-    
+
     genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
     omp_set_lock(&glock);
     nAlleles += 1;
     if((nAlleles % 100) == 0){
-      cerr << "INFO: generated " << nAlleles  
+      cerr << "INFO: generated " << nAlleles
 	   << " alleles / " << allBreakpoints.size()  << endl;
     }
     omp_unset_lock(&glock);
@@ -4631,20 +4631,20 @@ void refineBreakpoint(int nReads,
 		      breakpoints * br,
 		      map<string, vector< BamAlignment > > & ReadsPerPerson,
 		      vector<RefData> & sequences){
-    
+
 
   if(nReads > (MAXREADDEPTH * 3)){
     return;
   }
-  
+
   double startingScore = totalAlignmentScore(ReadsPerPerson, br);
   int oldStart     = br->five ;
   int oldEnd       = br->three;
   int flag         = 0;
-  
+
   breakpoints * secondary = new breakpoints;
   secondary->fail = false;
-  
+
   for(int f = -2; f <= 2; f++){
     *secondary = *br;
     secondary->five = oldStart;
@@ -4661,7 +4661,7 @@ void refineBreakpoint(int nReads,
       secondary->svlen = (secondary->three - secondary->five);
       genAlleles(secondary, globalOpts.fasta, sequences);
       double newScore = totalAlignmentScore(ReadsPerPerson, secondary);
-      
+
       if(newScore > startingScore){
 	startingScore = newScore;
 	br->five = secondary->five;
@@ -4669,15 +4669,15 @@ void refineBreakpoint(int nReads,
 	br->svlen = br->three - br->five;
 	genAlleles(br, globalOpts.fasta, sequences);
 	flag = 1;
-	br->refined = 1;	
+	br->refined = 1;
       }
     }
   }
-    
+
   delete secondary;
-  
+
   if(flag == 1){
-    br->svlen = br->three - br->five; 
+    br->svlen = br->three - br->five;
   }
 }
 
@@ -4690,7 +4690,7 @@ int main( int argc, char** argv)
 {
   globalOpts.nthreads   = 1    ;
   globalOpts.lastSeqid  = 0    ;
-  globalOpts.MQ         = 20   ; 
+  globalOpts.MQ         = 20   ;
   globalOpts.saT        = "SA" ;
   globalOpts.keepTrying = false;
   globalOpts.statsOnly  = false;
@@ -4703,9 +4703,9 @@ int main( int argc, char** argv)
      printHelp();
     exit(1);
   }
- 
+
   omp_set_num_threads(globalOpts.nthreads);
- 
+
   if(globalOpts.fasta.empty()){
     cerr << "FATAL: no reference fasta provided." << endl << endl;
     printHelp();
@@ -4714,7 +4714,7 @@ int main( int argc, char** argv)
   // gather stats for each bam (depth, insert l, ...)
   allStats();
 
- 
+
 
  RefVector sequences;
 
@@ -4755,7 +4755,7 @@ int main( int argc, char** argv)
 
      if((i % 100000) == 0){
        omp_set_lock(&glock);
-       cerr << "INFO: Processed " << i 
+       cerr << "INFO: Processed " << i
 	    << "/" << globalTrees.size() << " trees" << endl;
        omp_unset_lock(&glock);
      }
@@ -4769,7 +4769,7 @@ int main( int argc, char** argv)
      callBreaks(globalTrees[i], allBreakpoints, delBreak);
    }
 
- cerr << "INFO: Trying to merge deletion breakpoints: " 
+ cerr << "INFO: Trying to merge deletion breakpoints: "
       << delBreak.size() << endl;
 
  mergeDels(delBreak, allBreakpoints);
@@ -4798,7 +4798,7 @@ int main( int argc, char** argv)
 
 #pragma omp parallel for schedule(dynamic, 3)
  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
-   
+
    if(allBreakpoints[z]->fail) continue;
 
    if((count % 100) == 0){
@@ -4807,7 +4807,7 @@ int main( int argc, char** argv)
      cerr << "INFO: Refined and genotyped " << count
 	  << "/" << allBreakpoints.size() << " breakpoints" << endl;
      omp_unset_lock(&glock);
-     
+
    }
 
    omp_set_lock(&lock);
@@ -4815,20 +4815,20 @@ int main( int argc, char** argv)
    omp_unset_lock(&lock);
 
    map<string, vector< BamAlignment > > ReadsPerPerson;
-  
-   int nReads = getPopAlignments(globalOpts.targetBams, 
-				 allBreakpoints[z], 
+
+   int nReads = getPopAlignments(globalOpts.targetBams,
+				 allBreakpoints[z],
 				 ReadsPerPerson, 5);
- 
-   refineBreakpoint(nReads, allBreakpoints[z], 
+
+   refineBreakpoint(nReads, allBreakpoints[z],
 		    ReadsPerPerson, sequences);
 
    for(unsigned int p = 0; p < globalOpts.targetBams.size(); p++){
-     genotype(ReadsPerPerson[ globalOpts.targetBams[p] ], 
+     genotype(ReadsPerPerson[ globalOpts.targetBams[p] ],
 	      globalOpts.targetBams[p], allBreakpoints[z]);
    }
  }
- 
+
  if(globalOpts.vcf){
    printVCF(allBreakpoints, sequences);
  }
