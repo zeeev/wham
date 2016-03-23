@@ -1,11 +1,10 @@
+WHAM now is split into two programs: WHAM-BAM and WHAM-GRAPHENING.  WHAM-GRAPHENING is more accurate than WHAM, by reducing the FDR.  If you’re using WHAM for general structural variant discovery use WHAM-GRAPHENING.  WHAM-BAM should be used for associations testing and discovery of insertions or translocations.  Currently WHAM-GRAPHENING supports deletions, duplications and inversions.
+
+
 ### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham) [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
+WHAM-GRAPHENING takes a bam file and a reference genome and prints a VCF file to STDOUT and error messages to STDOUT.  WHAM-GRAPHENING can take one or more bam files, but it is better to call SVs independently.  Multiple call sets can be merged prior to genotyping. 
 
-WHAM-GRAPHENING has increased accuracy for deletions, duplications and inversions.
-
-The genotyping module can be slow in high-copy regions.  I recommend filtering SVs prior to genotyping (-k skips genotyping).
-
-Full documentation is coming soon. 
 
 Workflow:
 
