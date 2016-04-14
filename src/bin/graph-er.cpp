@@ -49,16 +49,12 @@ THE SOFTWARE.
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
 
-
 // openMP - swing that hammer
 #include <omp.h>
 
 // bamtools and my headers
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
-
-// gsl header
-#include "gauss.h"
 
 // paired-like hmm
 #include "phredUtils.h"
@@ -89,16 +85,17 @@ struct options{
 }globalOpts;
 
 
-
 //GLOBAL STRUCTS
 // the forest of graphs
 graph        globalGraph;
 // library stats (insertsize ...)
 libraryStats insertDists;
-// global read pair store                                                                              
+// global read pair store
 map<string, readPair*> globalPairStore;
+// seqid->int index
+map<string, int> inverse_lookup;
 
- 
+
 
 // options
 
@@ -121,8 +118,7 @@ uint MAXREADDEPTH = 0;
  Function returns: bool
 */
 
-bool loadExternal(vector<breakpoints *> & br,
-		  map<string, int> & inverse_lookup){
+bool loadExternal(vector<breakpoints *> & br ){
 
   ifstream featureFile (globalOpts.svs.c_str());
 
@@ -767,27 +763,28 @@ void getTree(node * n, vector<node *> & ns){
 
   ns.push_back(n);
 
-  // if something is pushed to the back of the vector it changes the positions ! be warned.
+  /* if something is pushed to the back of the vector it changes the
+     positions ! be warned. */
 
   while(!edges.empty()){
 
      uint hit = 0;
 
-     if(seen.find(edges.back()->L->pos) != seen.end() 
+     if(seen.find(edges.back()->L->pos) != seen.end()
 	&& seen.find(edges.back()->R->pos) != seen.end() ){
        hit = 1;
      }
-     else if(seen.find(edges.back()->L->pos) == seen.end() 
+     else if(seen.find(edges.back()->L->pos) == seen.end()
 	     && seen.find(edges.back()->R->pos) == seen.end()){
        seen[edges.back()->L->pos] = 1;
        seen[edges.back()->R->pos] = 1;
        ns.push_back(edges.back()->L);
        ns.push_back(edges.back()->R);
-       edges.insert(edges.end(), 
-		    edges.back()->L->eds.begin(), 
+       edges.insert(edges.end(),
+		    edges.back()->L->eds.begin(),
 		    edges.back()->L->eds.end());
-       edges.insert(edges.end(), 
-		    edges.back()->R->eds.begin(), 
+       edges.insert(edges.end(),
+		    edges.back()->R->eds.begin(),
 		    edges.back()->R->eds.end());
      }
      else if(seen.find(edges.back()->L->pos) == seen.end()){
@@ -796,19 +793,18 @@ void getTree(node * n, vector<node *> & ns){
 
        ns.push_back(edges.back()->L);
 
-       edges.insert(edges.end(), 
-		    edges.back()->L->eds.begin(), 
+       edges.insert(edges.end(),
+		    edges.back()->L->eds.begin(),
 		    edges.back()->L->eds.end() );
      }
      else{
        seen[edges.back()->R->pos] = 1;
        ns.push_back(edges.back()->R);
-       
-       edges.insert(edges.end(), 
-		    edges.back()->R->eds.begin(), 
-		    edges.back()->R->eds.end());
+
+       edges.insert(edges.end(),
+		    edges.back()->R->eds.begin(),
+		    edges.back()->R->eds.end() );
      }
-     
      if(hit == 1){
        edges.pop_back();
      }
@@ -846,10 +842,13 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
       return false;
     }
 
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, bp->svlen + 400 );
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200, 200) +
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
+			    bp->svlen + 400 );
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
+			    200) +
       // bp->five = first base of deletion -1 last ref base + 1 for fasta
-      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200); // start one after deletion ends
+      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200);
+    // start one after deletion ends
 
     #ifdef DEBUG
     cerr << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 5, 5)
@@ -869,8 +868,10 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
       bp->fail = true;
       return false;
     }
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200 , bp->svlen + 400);
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200 , bp->svlen + 200)
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200,
+			    bp->svlen + 400);
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
+			    bp->svlen + 200)
       + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five , bp->svlen)
       + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three , 200);
 
@@ -885,12 +886,15 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
       bp->fail = true;
       return false;
     }
-    string inv = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five, (bp->svlen) );
+    string inv = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five,
+				   (bp->svlen) );
     inv = string(inv.rbegin(), inv.rend());
     Comp(inv);
 
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200, (bp->svlen + 400)) ;
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five-200, 200) + inv + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
+    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200,
+			    (bp->svlen + 400)) ;
+    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five-200, 200)
+      + inv + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
 
 
   }
@@ -908,7 +912,8 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   }
   if(alt.size() > 1200 && bp->type == 'U'){
 
-    alt = alt.substr(0,400) + alt.substr(bp->svlen, 400) +  alt.substr(alt.size() -400, 400);
+    alt = alt.substr(0,400) + alt.substr(bp->svlen, 400)
+      + alt.substr(alt.size() -400, 400);
 
   }
 
@@ -973,12 +978,17 @@ inline bool isPointIn(readPair * rp){
 
 */
 
-void addIndelToGraph(int refID, int l, int r, char s, string & SM){
+void addIndelToGraph(int refIDL, 
+		     int refIDR,
+		     int l, 
+		     int r, 
+		     char s, 
+		     string & SM){
 
   omp_set_lock(&glock);
 
-  if( ! isInGraph(refID, l, globalGraph)
-      &&  ! isInGraph(refID, r, globalGraph) ){
+  if( ! isInGraph(refIDL, l, globalGraph)
+      &&  ! isInGraph(refIDR, r, globalGraph) ){
 
     node * nodeL;
     node * nodeR;
@@ -988,20 +998,8 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
     nodeR = new node;
     ed    = new edge;
 
-    if(nodeL->sm.find("SM") == nodeL->sm.end()){
-      nodeL->sm[SM] = 0;
-    }
-    else{
-      nodeL->sm[SM] += 1;
-    }
-
-    if(nodeR->sm.find("SM") == nodeR->sm.end()){
-      nodeR->sm[SM] = 0;
-    }
-    else{
-      nodeR->sm[SM] += 1;
-    }
-
+    nodeL->sm[SM] = 1;
+    nodeR->sm[SM] = 1;
 
     nodeL->collapsed = false;
     nodeR->collapsed = false;
@@ -1022,16 +1020,16 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
     nodeR->eds.push_back(ed);
 
     nodeL->pos = l;
-    nodeL->seqid = refID;
+    nodeL->seqid = refIDL;
     nodeR->pos = r;
-    nodeR->seqid = refID;
+    nodeR->seqid = refIDR;
 
-    globalGraph.nodes[refID][l] = nodeL;
-    globalGraph.nodes[refID][r] = nodeR;
+    globalGraph.nodes[refIDL][l] = nodeL;
+    globalGraph.nodes[refIDR][r] = nodeR;
 
   }
- else if(isInGraph(refID, l, globalGraph)
-	 &&  ! isInGraph(refID, r, globalGraph)){
+ else if(isInGraph(refIDL, l, globalGraph)
+	 &&  ! isInGraph(refIDR, r, globalGraph)){
 
    node * nodeR;
    edge * ed;
@@ -1039,21 +1037,8 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    nodeR = new node;
    ed    = new edge;
 
-   if(nodeR->sm.find("SM") == nodeR->sm.end()){
-     nodeR->sm[SM] = 0;
-   }
-   else{
-     nodeR->sm[SM] += 1;
-   }
-
-   if(globalGraph.nodes[refID][l]->sm.find("SM")
-      == globalGraph.nodes[refID][l]->sm.end()){
-     globalGraph.nodes[refID][l]->sm[SM] = 0;
-   }
-   else{
-     globalGraph.nodes[refID][l]->sm[SM] += 1;
-   }
-
+   nodeR->sm[SM] = 1;
+  
    nodeR->collapsed = false;
 
    nodeR->beginSupport = 0;
@@ -1062,19 +1047,29 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    initEdge(ed);
    ed->support[s] += 1;
 
-   nodeR->pos   = r;
-   nodeR->seqid = refID;
-   ed->L = globalGraph.nodes[refID][l];
-   ed->R = nodeR;
+   nodeR->pos      = r;
+   nodeR->seqid    = refIDR;
+   ed->L           = globalGraph.nodes[refIDL][l];
+   ed->R           = nodeR;
 
    nodeR->eds.push_back(ed);
 
-   globalGraph.nodes[refID][l]->eds.push_back(ed);
-   globalGraph.nodes[refID][r] = nodeR;
+   globalGraph.nodes[refIDL][l]->eds.push_back(ed);
+   globalGraph.nodes[refIDR][r] = nodeR;
+
+   if(globalGraph.nodes[refIDL][l]->sm.find(SM) == 
+      globalGraph.nodes[refIDL][l]->sm.end()){
+
+     globalGraph.nodes[refIDL][l]->sm[SM] =  1;
+
+   }
+   else{
+     globalGraph.nodes[refIDL][l]->sm[SM] += 1;
+   }
 
  }
- else if(! isInGraph(refID, l, globalGraph)
-	 &&  isInGraph(refID, r, globalGraph)){
+ else if(! isInGraph(refIDL, l, globalGraph)
+	 &&  isInGraph(refIDR, r, globalGraph)){
 
    node * nodeL;
    edge * ed;
@@ -1082,60 +1077,53 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    nodeL = new node;
    ed    = new edge;
 
-   if(nodeL->sm.find("SM") == nodeL->sm.end()){
-     nodeL->sm[SM] = 0;
-   }
-   else{
-     nodeL->sm[SM] += 1;
-   }
-
-   if(globalGraph.nodes[refID][r]->sm.find("SM")
-      == globalGraph.nodes[refID][r]->sm.end()){
-     globalGraph.nodes[refID][r]->sm[SM] = 0;
-   }
-   else{
-     globalGraph.nodes[refID][r]->sm[SM] += 1;
-   }
-
-
-   nodeL->collapsed = false;
+   nodeL->collapsed    = false;
    nodeL->beginSupport = 0;
    nodeL->endSupport   = 0;
 
-
    initEdge(ed);
-   ed->support[s] +=1;
-   nodeL->pos   = l;
-   nodeL->seqid = refID;
-   ed->R = globalGraph.nodes[refID][r];
+   ed->support[s] += 1;
+   nodeL->pos      = l;
+   nodeL->seqid    = refIDL;
+   ed->R = globalGraph.nodes[refIDR][r];
    ed->L = nodeL;
 
    nodeL->eds.push_back(ed);
 
-   globalGraph.nodes[refID][r]->eds.push_back(ed);
-   globalGraph.nodes[refID][l] = nodeL;
-}
+   globalGraph.nodes[refIDR][r]->eds.push_back(ed);
+   globalGraph.nodes[refIDL][l] = nodeL;
+
+   if(globalGraph.nodes[refIDR][r]->sm.find(SM) ==
+      globalGraph.nodes[refIDR][r]->sm.end()){
+
+     globalGraph.nodes[refIDR][r]->sm[SM] = 1;
+
+   }
+   else{
+     globalGraph.nodes[refIDR][r]->sm[SM] += 1;
+   }
+ }
  else{
    uint hit = 0;
 
-   if(globalGraph.nodes[refID][l]->sm.find(SM)
-      != globalGraph.nodes[refID][l]->sm.end()){
-     globalGraph.nodes[refID][l]->sm[SM] = 0;
+   if(globalGraph.nodes[refIDL][l]->sm.find(SM)
+      != globalGraph.nodes[refIDL][l]->sm.end()){
+     globalGraph.nodes[refIDL][l]->sm[SM] = 1;
    }
    else{
-     globalGraph.nodes[refID][l]->sm[SM] += 1;
+     globalGraph.nodes[refIDL][l]->sm[SM] += 1;
    }
-   if(globalGraph.nodes[refID][r]->sm.find(SM)
-      != globalGraph.nodes[refID][r]->sm.end()){
-     globalGraph.nodes[refID][r]->sm[SM] = 0;
+   if(globalGraph.nodes[refIDR][r]->sm.find(SM)
+      != globalGraph.nodes[refIDR][r]->sm.end()){
+     globalGraph.nodes[refIDR][r]->sm[SM] = 1;
    }
    else{
-     globalGraph.nodes[refID][r]->sm[SM] += 1;
+     globalGraph.nodes[refIDR][r]->sm[SM] += 1;
    }
 
    for(vector<edge *>::iterator ite
-	 = globalGraph.nodes[refID][l]->eds.begin();
-       ite != globalGraph.nodes[refID][l]->eds.end(); ite++){
+	 = globalGraph.nodes[refIDL][l]->eds.begin();
+       ite != globalGraph.nodes[refIDL][l]->eds.end(); ite++){
      if((*ite)->L->pos == l && (*ite)->R->pos == r){
 
        (*ite)->support[s] += 1;
@@ -1148,10 +1136,10 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
      ne = new edge;
      initEdge(ne);
      ne->support[s]+=1;
-     ne->L =      globalGraph.nodes[refID][l];
-     ne->R =      globalGraph.nodes[refID][r];
-     globalGraph.nodes[refID][l]->eds.push_back(ne);
-     globalGraph.nodes[refID][r]->eds.push_back(ne);
+     ne->L =      globalGraph.nodes[refIDL][l];
+     ne->R =      globalGraph.nodes[refIDR][r];
+     globalGraph.nodes[refIDL][l]->eds.push_back(ne);
+     globalGraph.nodes[refIDR][r]->eds.push_back(ne);
    }
  }
   omp_unset_lock(&glock);
@@ -1208,13 +1196,13 @@ bool indelToGraph(BamAlignment & ba, string & SM){
     case 'I':
       {
 	hit = true;
-	addIndelToGraph(ba.RefID, p, p + ci->Length, 'I', SM);
+	addIndelToGraph(ba.RefID, ba.RefID, p, (p + ci->Length), 'I', SM);
 	break;
       }
     case 'D':
       {
 	hit = true;
-	addIndelToGraph(ba.RefID, p , (p + ci->Length ), 'D', SM);
+	addIndelToGraph(ba.RefID, ba.RefID, p, (p + ci->Length), 'D', SM);
 	p += ci->Length;
 	break;
       }
@@ -1261,9 +1249,9 @@ inline bool pairFailed(readPair * rp){
  Function returns: NA
 */
 
-void splitToGraph(BamAlignment & al ,
+void splitToGraph(BamAlignment  & al,
 		  vector<saTag> & sa,
-		  string & SM){
+		  string & SM       ){
 
   if(!al.IsMapped()){
     return;
@@ -1274,64 +1262,44 @@ void splitToGraph(BamAlignment & al ,
     return;
   }
 
-  if(sa[0].seqid != al.RefID){
-    return;
-  }
-
-  char support = 'S';
-
-  if((sa[0].strand && ! al.IsReverseStrand())
-     || (! sa[0].strand && al.IsReverseStrand() )){
-    support = 'V';
-  }
-
+  // split read is trimmed on both side skip
   if(sa.front().cig.front().Type == 'S'
      && sa.front().cig.back().Type == 'S'){
     return;
   }
 
-  if(al.CigarData.front().Type == 'S'
+  // alignment is trimmed on both sides skip
+  if(al.CigarData.front().Type   == 'S'
      && al.CigarData.back().Type == 'S'){
     return;
   }
 
-  if(al.CigarData.front().Type == 'S'){
+  char support = 'S';
 
-    int start = al.Position;
-    int end   = sa.front().pos  ;
-
-    if(sa.front().cig.back().Type == 'S'){
-      endPos(sa[0].cig, &end) ;
-
-      if(end > start ){
-	support = 'X';
-      }
-    }
-
-    if(start > end){
-      int tmp = start;
-      start = end;
-      end   = tmp;
-    }
-    addIndelToGraph(al.RefID, start, end, support, SM);
+  // split reads are on different strands
+  if((sa[0].strand && ! al.IsReverseStrand())
+     || (! sa[0].strand && al.IsReverseStrand() )){
+    support = 'V';
   }
-  else{
-    int start = al.GetEndPosition(false,true);
-    int end   = sa.front().pos                ;
-    if(sa[0].cig.back().Type == 'S'){
-      endPos(sa.front().cig, &end);
-    }
-    else{
-      if(start > end){
-	support = 'X';
-      }
-    }
-    if(start > end){
-      start = sa[0].pos;
-      end   = al.GetEndPosition(false,true);
-    }
-    addIndelToGraph(al.RefID, start, end, support, SM);
+
+
+  int start = al.Position    ;
+  int end   = sa.front().pos ;
+
+  /* since both sides are not clipped if the back is clipped we know
+     the front is not */
+
+  if(al.CigarData.back().Type == 'S'){
+    start = al.GetEndPosition(false,true);
   }
+
+  /* we also know that both sides of the split read are not trimmed */
+
+  if(sa.front().cig.back().Type == 'S'){
+    endPos(sa[0].cig, &end)  ;
+  }
+
+  addIndelToGraph(al.RefID, sa[0].seqid, start, end, support, SM);
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1345,49 +1313,48 @@ void splitToGraph(BamAlignment & al ,
 
 */
 
-void deviantInsertSize(readPair * rp, char supportType, string & SM){
+bool deviantInsertSize(readPair * rp, char supportType, string & SM){
 
+  if(! rp->al1.IsMapped() || ! rp->al2.IsMapped() ){
+    return false;
+  }
+  
+  //
+  if(rp->al1.RefID != rp->al2.RefID){
+    return false;
+  }
+
+  // both reads are clipped, skip
   if(! IsLongClip(rp->al1.CigarData, 1)
      && ! IsLongClip(rp->al2.CigarData, 1)){
-    return;
+    return false;
   }
+  
+  int start = rp->al1.Position;
+  int end   = rp->al2.Position;
+
   if(rp->al1.CigarData.front().Type == 'S'
      || rp->al1.CigarData.back().Type == 'S'){
-    int start = rp->al1.Position;
-    int end   = rp->al2.Position;
+
     if(rp->al2.CigarData.back().Type == 'S'){
       end = rp->al2.GetEndPosition();
     }
-
     if(rp->al1.CigarData.back().Type == 'S'){
       start = rp->al1.GetEndPosition(false,true);
     }
-    if(start > end){
-      int tmp = end;
-      end = start  ;
-      start = tmp  ;
-    }
-    addIndelToGraph(rp->al1.RefID, start, end, supportType, SM);
   }
   else{
-    int start = rp->al2.Position;
-    int end   = rp->al1.Position;
-
     if(rp->al1.CigarData.back().Type == 'S'){
       end = rp->al1.GetEndPosition();
     }
-
     if(rp->al2.CigarData.back().Type == 'S'){
       start = rp->al2.GetEndPosition(false,true);
     }
-    if(start > end){
-      int tmp = end;
-      end = start  ;
-      start = tmp  ;
-    }
-    addIndelToGraph(rp->al2.RefID, start, end, supportType, SM);
-
   }
+  
+  addIndelToGraph(rp->al2.RefID, rp->al2.RefID, start, end, supportType, SM);
+
+  return true;
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1398,8 +1365,10 @@ void deviantInsertSize(readPair * rp, char supportType, string & SM){
 
 */
 
-void processPair(readPair * rp,  map<string, int> & il,
-		 double   * low, double * high, string & SM){
+void processPair(readPair * rp, 
+		 double   * low, 
+		 double * high, 
+		 string & SM){
 
   string sa1;
   string sa2;
@@ -1410,91 +1379,48 @@ void processPair(readPair * rp,  map<string, int> & il,
     return;
   }
 
-  // not doing translocations
-
-  if(rp->al1.RefID != rp->al2.RefID
-     && rp->al1.MapQuality > 20
-     && rp->al2.MapQuality > 20){
-    //    return;
-
-    string nada = ".";
-
-    rp->al1.GetTag(  globalOpts.saT, nada);
-
-    std::cerr << rp->al1.RefID
-	      << " "
-	      << rp->al1.Position
-	      << " "
-	      << joinCig(rp->al1.CigarData)
-	      << " "
-	      << nada
-	      << " p1 "
-	      << "  -- " ;
-
-    nada = ".";
-    rp->al2.GetTag(  globalOpts.saT, nada);
-
-
-    std::cerr << rp->al2.RefID
-	      << " "
-	      << rp->al2.Position
-	      << " "
-	      << joinCig(rp->al2.CigarData)
-	      << " p2 "
-	      << "  "
-	      << nada
-
-	      << std::endl;
-
-  }
-
   indelToGraph(rp->al1, SM);
   indelToGraph(rp->al2, SM);
 
-  if( rp->al1.IsMapped() && rp->al2.IsMapped() ){
-    if( ! IsLongClip(rp->al1.CigarData, 5)
-	&& ! IsLongClip(rp->al2.CigarData, 5)){
-      return;
+  if( ! IsLongClip(rp->al1.CigarData, 5)
+      && ! IsLongClip(rp->al2.CigarData, 5)){
+    return;
+  }
+
+  if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
+     || (! rp->al1.IsReverseStrand() && ! rp->al2.IsReverseStrand()) ){
+    sameStrand = true;
+  }
+  
+  if( abs(rp->al1.InsertSize) > *high){
+    if(sameStrand){
+      deviantInsertSize(rp, 'M', SM);
     }
-    if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
-       || (! rp->al1.IsReverseStrand() && ! rp->al2.IsReverseStrand()) ){
-      sameStrand = true;
-    }
-    if( abs(rp->al1.InsertSize) > *high){
-      //      cerr << rp->al1.Name << " H " << rp->al1.InsertSize << endl;
-      if(sameStrand){
-	deviantInsertSize(rp, 'M', SM);
-      }
-      else{
-	deviantInsertSize(rp, 'H', SM);
-      }
-    }
-    if( abs(rp->al1.InsertSize) < *low ){
-      //      cerr << rp->al1.Name << " L " << rp->al1.InsertSize << endl;
-      if(sameStrand){
-	deviantInsertSize(rp, 'R', SM);
-      }
-      else{
-	deviantInsertSize(rp, 'L', SM);
-      }
+    else{
+      deviantInsertSize(rp, 'H', SM);
     }
   }
-  // one is not mapped
-  else{
-    //   mateNotMapped(rp, 'K');
+
+  if(abs(rp->al1.InsertSize) < *low ){
+    if(sameStrand){
+      deviantInsertSize(rp, 'R', SM);
+    }
+    else{
+      deviantInsertSize(rp, 'L', SM);
+    }
   }
+  // put the split reads in the graph
   if(rp->al1.GetTag(  globalOpts.saT, sa1)){
     vector<saTag> parsedSa1;
-    parseSA(parsedSa1, sa1, globalOpts.saT, il);
+    parseSA(parsedSa1, sa1, globalOpts.saT, inverse_lookup);
     splitToGraph(rp->al1, parsedSa1, SM);
   }
   if(rp->al2.GetTag(  globalOpts.saT, sa2)){
     vector<saTag> parsedSa2;
-    parseSA(parsedSa2, sa2, globalOpts.saT, il);
+    parseSA(parsedSa2, sa2, globalOpts.saT, inverse_lookup);
     splitToGraph(rp->al2, parsedSa2, SM);
   }
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -1511,37 +1437,28 @@ bool runRegion(string filename,
 	       int start,
 	       int end,
 	       vector< RefData > seqNames,
-	       map<string, readPair *> & globalPairStore,
-	       map<string, int> & seqInverseLookup, string & SM){
+	       string & SM){
 
+  if(seqidIndex > 4){
+    return true;
+  }
 
 #ifdef DEBUG
-  cerr << "running region: " << seqidIndex << ":" << start << "-" << end << endl;
+  cerr << "running region: " << seqidIndex 
+       << ":" << start << "-" << end << endl;
 #endif
-
-  map<string, int> localInverseLookUp;
-
-  omp_set_lock(&lock);
-  for(map<string, int>::iterator itt = seqInverseLookup.begin();
-      itt !=  seqInverseLookup.end(); itt++){
-    localInverseLookUp[itt->first] = itt->second;
-  }
-  libraryStats localDists  = insertDists;
-  omp_unset_lock(&lock);
-
+  
   // local graph;
   graph localGraph;
-
   // local read pair store
+  map<string, readPair *>pairStoreLocal;
 
-  double high = localDists.mus[filename] + (2.5 * localDists.sds[filename]);
-  double low  = localDists.mus[filename] - (2.5 * localDists.sds[filename]);
+  double high = insertDists.mus[filename] + (2.5 * insertDists.sds[filename]);
+  double low  = insertDists.mus[filename] - (2.5 * insertDists.sds[filename]);
 
   if(low < 0){
     low = 100;
   }
-
-  map<string, readPair *>pairStoreLocal;
 
   BamReader br;
   br.Open(filename);
@@ -1567,7 +1484,6 @@ bool runRegion(string filename,
     if(! al.IsPaired()){
       continue;
     }
-
     if(! al.IsMapped() && ! al.IsMateMapped()){
       continue;
     }
@@ -1589,7 +1505,7 @@ bool runRegion(string filename,
       else{
 	pairStoreLocal[al.Name]->al2 = al;
       }
-      processPair(pairStoreLocal[al.Name], localInverseLookUp, &low, &high, SM);
+      processPair(pairStoreLocal[al.Name], &low, &high, SM);
       delete pairStoreLocal[al.Name];
       pairStoreLocal.erase(al.Name);
     }
@@ -1628,14 +1544,13 @@ bool runRegion(string filename,
       if(globalPairStore[rps->first]->flag == 2 && (*rps->second).flag == 2){
 	continue;
       }
-
       if(globalPairStore[rps->first]->flag == 1){
 	(*globalPairStore[rps->first]).al2 = (*rps->second).al2;
       }
       else{
       	(*globalPairStore[rps->first]).al1 = (*rps->second).al1;
       }
-      processPair(globalPairStore[rps->first], localInverseLookUp, &low, &high, SM);
+      processPair(globalPairStore[rps->first], &low, &high, SM);
       delete globalPairStore[rps->first];
       delete pairStoreLocal[rps->first];
       globalPairStore.erase(rps->first);
@@ -1644,7 +1559,6 @@ bool runRegion(string filename,
       globalPairStore[rps->first] = pairStoreLocal[rps->first];
     }
   }
-
   omp_unset_lock(&lock);
   return true;
 }
@@ -1736,22 +1650,15 @@ void loadBam(string & bamFile){
   //chunking up the genome
 
   vector< regionDat* > regions;
-
-  // inverse lookup for split reads
-  map<string,int> seqIndexLookup;
-
   int seqidIndex = 0;
-  for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
-      seqIndexLookup[sequences[seqidIndex].RefName] = seqidIndex;
-      seqidIndex += 1;
-  }
+
   if(region){
 
     int p = start;
     int e = 0;
     for(; (p+1000000) <= end; p += 1000000){
       regionDat * regionInfo = new regionDat;
-      regionInfo->seqidIndex = seqIndexLookup[regionSID];
+      regionInfo->seqidIndex = inverse_lookup[regionSID];
       regionInfo->start      = p                      ;
       regionInfo->end        = 1000000 + p            ;
       regions.push_back(regionInfo);
@@ -1759,21 +1666,20 @@ void loadBam(string & bamFile){
     }
     if(e < end){
       regionDat * regionInfo = new regionDat;
-      regionInfo->seqidIndex = seqIndexLookup[regionSID];
+      regionInfo->seqidIndex = inverse_lookup[regionSID];
       regionInfo->start      = p                        ;
       regionInfo->end        = end                      ;
       regions.push_back(regionInfo);
     }
-
   }
   else{
-
     seqidIndex = 0;
 
-    for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
+    for(vector< RefData >::iterator sit = sequences.begin(); 
+	sit != sequences.end(); sit++){
       int start = 0;
 
-      if(globalOpts.toSkip.find( (*sit).RefName ) 
+      if(globalOpts.toSkip.find( (*sit).RefName )
 	 == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
 	for(;start < (*sit).RefLength ; start += 1000000){
 	  regionDat * chunk = new regionDat;
@@ -1801,8 +1707,6 @@ void loadBam(string & bamFile){
   // closing the bam reader before running regions
   br.Close();
 
-  // global read pair store
-  map<string, readPair*> pairStore;
 
   int Mb = 0;
 
@@ -1810,13 +1714,12 @@ void loadBam(string & bamFile){
 #pragma omp parallel for schedule(dynamic, 3)
 
   for(unsigned int re = 0; re < regions.size(); re++){
-    if(! runRegion(bamFile,
+    if(! runRegion(bamFile                ,
 		   regions[re]->seqidIndex,
-		   regions[re]->start,
-		   regions[re]->end,
-		   sequences,
-		   pairStore,
-		   seqIndexLookup, SM)){
+		   regions[re]->start     ,
+		   regions[re]->end       ,
+		   sequences              ,
+		   SM                      )){
       omp_set_lock(&lock);
       cerr << "WARNING: region failed to run properly: "
 	   << sequences[regions[re]->seqidIndex].RefName
@@ -1838,17 +1741,17 @@ void loadBam(string & bamFile){
     }
   }
   cerr << "INFO: " << bamFile << " had "
-       << pairStore.size()
+       << globalPairStore.size()
        << " reads that were not processed"
        << endl;
 
-  // cleaning up
-  for(map<string, readPair *>::iterator rp = pairStore.begin();
-      rp != pairStore.end(); rp++){
-    delete rp->second;
+  // cleanup remaining reads
+  for(map<string, readPair*>::iterator rps = globalPairStore.begin();
+      rps != globalPairStore.end(); rps++){
+    delete rps->second;
   }
-
 }
+
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
 {
@@ -2042,8 +1945,6 @@ string dotviz(vector<node *> & ns){
 	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
 	}
       }
-
-
 
       if((*iz)->support['V'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
@@ -2418,7 +2319,9 @@ void collapseTree(vector<node *> & tree){
 	continue;
       }
 
-      if(abs( (*tr)->pos - (*tt)->pos ) < 20 && ! connectedNode((*tr), (*tt))){
+      if(abs( (*tr)->pos - (*tt)->pos ) < 20 
+	 && ! connectedNode((*tr), (*tt))
+	 && ( (*tr)->seqid == (*tt)->seqid ) ){
 	joinNodes((*tr), (*tt), tree);
       }
     }
@@ -3073,11 +2976,11 @@ void callBreaks(vector<node *> & tree,
   node * nr;
 
   bp = new breakpoints;
-  bp->fail    = false;
-  bp->two     = false;
-  bp->refined = 0;
-  bp->lalt = 0;
-  bp->lref = 0;
+  bp->fail      = false;
+  bp->two       = false;
+  bp->refined   = 0;
+  bp->lalt      = 0;
+  bp->lref      = 0;
   bp->collapsed = 0;
 
   bp->posCIL = -10;
@@ -3117,19 +3020,14 @@ void callBreaks(vector<node *> & tree,
   }
   else{
     delete bp;
-
   }
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : processes trees
-
  Function does   : tries to define type and breakpoints
-
  Function returns: NA
-
 */
 
 void gatherTrees(vector<vector<node *> > & globalTrees){
@@ -3840,8 +3738,6 @@ int main( int argc, char** argv)
   // gather stats for each bam (depth, insert l, ...)
   allStats();
 
-
-
  RefVector sequences;
 
  BamMultiReader mr;
@@ -3854,7 +3750,6 @@ int main( int argc, char** argv)
    mr.Close();
  }
 
- map<string, int> inverse_lookup;
  int s = 0;
 
  for(vector<RefData>::iterator it = sequences.begin();
@@ -3903,7 +3798,7 @@ int main( int argc, char** argv)
 
  if(! globalOpts.svs.empty()){
    cerr << "INFO: loading external SV calls" << endl;
-   loadExternal(allBreakpoints, inverse_lookup);
+   loadExternal(allBreakpoints);
  }
 
  processAlleles(allBreakpoints, sequences);
@@ -3951,12 +3846,15 @@ int main( int argc, char** argv)
    }
  }
 
-
  printVCF(allBreakpoints, sequences);
-
 
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
+ }
+
+ for(vector<breakpoints*>::iterator bks = allBreakpoints.begin();
+     bks != allBreakpoints.end(); bks++){
+   delete (*bks);
  }
 
  cerr << "INFO: WHAM finished normally, goodbye! " << endl;
