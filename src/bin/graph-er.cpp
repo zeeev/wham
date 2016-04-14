@@ -41,8 +41,14 @@ THE SOFTWARE.
 #include <unistd.h>
 
 #include "split.h"
+#include "join.hpp"
+#include "cigar.hpp"
+#include "stats.hpp"
+#include "dataStructures.hpp"
+
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
+
 
 // openMP - swing that hammer
 #include <omp.h>
@@ -58,10 +64,6 @@ THE SOFTWARE.
 #include "phredUtils.h"
 #include "alignHMM.h"
 
-
-#define BAM_CIGAR_SHIFT 4
-#define BAM_CIGAR_MASK  ((1 << BAM_CIGAR_SHIFT) - 1)
-
 using namespace std;
 using namespace BamTools;
 
@@ -70,6 +72,7 @@ struct options{
   bool statsOnly                ;
   bool skipGeno                 ;
   bool keepTrying               ;
+
   bool vcf                      ;
   int MQ                        ;
   int nthreads                  ;
@@ -85,106 +88,21 @@ struct options{
   string saT                    ;
 }globalOpts;
 
-struct regionDat{
-  int seqidIndex ;
-  int start      ;
-  int end        ;
-};
-
-struct readPair{
-  int          flag;
-  int          count;
-  BamAlignment al1;
-  BamAlignment al2;
-};
 
 
-struct cigDat{
-  int  Length;
-  char Type;
-};
+//GLOBAL STRUCTS
+// the forest of graphs
+graph        globalGraph;
+// library stats (insertsize ...)
+libraryStats insertDists;
+// global read pair store                                                                              
+map<string, readPair*> globalPairStore;
 
-struct saTag{
-  int seqid;
-  int pos;
-  bool strand;
-  vector<cigDat> cig;
-};
-
-struct node;
-struct edge;
-
-struct edge{
-  node * L;
-  node * R;
-  map<char,int> support;
-};
-
-struct node{
-  int   seqid          ;
-  int   pos            ;
-  int   endSupport     ;
-  int   beginSupport   ;
-  bool  collapsed      ;
-  vector <edge *> eds  ;
-  map<string,int> sm   ;
-};
-
-struct graph{
-  map< int, map<int, node *> > nodes;
-  vector<edge *>   edges;
-}globalGraph;
-
-struct insertDat{
-  map<string, double> mus ; // mean of insert length for each indvdual across 1e6 reads
-  map<string, double> sds ;  // standard deviation
-  map<string, double> lq  ;  // 25% of data
-  map<string, double> up  ;  // 75% of the data
-  map<string, double> swm ;
-  map<string, double> sws ;
-  map<string, double> avgD;
-  double overallDepth;
-} insertDists;
+ 
 
 // options
 
-struct breakpoints{
-  bool fail              ;
-  bool two               ;
-  char type              ;
-  string refBase         ;
-  int seqidIndexL        ;
-  int seqidIndexR        ;
-  string seqid           ;
-  int merged             ;
-  int refined            ;
-  int five               ;
-  int three              ;
-  int svlen              ;
-  int collapsed          ;
-  int totalSupport       ;
-  string id              ;
-  string fives           ;
-  string threes          ;
-  vector<string> alleles ;
-  vector<int>    supports;
-  vector<vector<double> > genotypeLikelhoods ;
-  vector<int>             genotypeIndex      ;
-  vector<int>             nref               ;
-  vector<int>             nalt               ;
-  vector<string>          sml                ;
-  vector<string>          smr                ;
-  int posCIL;
-  int posCIH;
-  int endCIL;
-  int endCIH;
-
-  double lref;
-  double lalt;
-
-};
-
-static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskvz";
+static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
 
 // omp lock
 
@@ -195,19 +113,16 @@ omp_lock_t glock;
 
 uint MAXREADDEPTH = 0;
 
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : p = prob successs, q prob fail, m = success, n = failure;
-
- Function does   : adds soft clip length to end of read to see if it overlaps
-                   end pos
-
+ Function input  : a vector of breakpoint pointers and inverse chr->index
+ Function does   : loads an external vcf file for genotyping into the
+		   breakpoint vector
  Function returns: bool
-
 */
 
-bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup){
+bool loadExternal(vector<breakpoints *> & br,
+		  map<string, int> & inverse_lookup){
 
   ifstream featureFile (globalOpts.svs.c_str());
 
@@ -227,7 +142,8 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 
       map<string, string> infoDat;
 
-      for(vector<string>::iterator iz = info.begin(); iz != info.end(); iz++){
+      for(vector<string>::iterator iz = info.begin();
+	  iz != info.end(); iz++){
 
 	vector<string> kv = split(*iz, "=");
 
@@ -236,7 +152,9 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
       }
 
 
-      if( (infoDat["SVTYPE"].compare("DEL") == 0) || (infoDat["SVTYPE"].compare("DUP") == 0) || (infoDat["SVTYPE"].compare("INV") == 0) ){
+      if( (infoDat["SVTYPE"].compare("DEL") == 0)
+	  || (infoDat["SVTYPE"].compare("DUP") == 0)
+	  || (infoDat["SVTYPE"].compare("INV") == 0) ){
 
 	breakpoints * bk = new breakpoints;
 
@@ -249,10 +167,11 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	  bk->type = 'U';
 	}
 	if((infoDat["SVTYPE"].compare("INV") == 0)){
-          bk->type = 'V';
-        }
+	  bk->type = 'V';
+	}
 	if(inverse_lookup.find(SV[0]) == inverse_lookup.end() ){
-	  cerr << "FATAL: could not find seqid in inverse lookup: " << SV[0] << endl;
+	  cerr << "FATAL: could not find seqid in inverse lookup: "
+	       << SV[0] << endl;
 	  exit(1);
 	}
 
@@ -271,14 +190,13 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	bk->three       = atoi(POS[1].c_str()) - 1;
 
 	// use ID field if present
-	bk->id           = (SV[2] == "" || SV[2] == ".") ? infoDat["ID"] : SV[2];
-	bk->collapsed    = atoi(infoDat["COLLAPSED"].c_str());
-	bk->lalt = 0;
-	bk->lref = 0;
+	bk->id         = (SV[2] == "" || SV[2] == ".") ? infoDat["ID"] : SV[2];
+	bk->collapsed  = atoi(infoDat["COLLAPSED"].c_str());
+	bk->lalt       = 0;
+	bk->lref       = 0;
 
 	bk->sml = split(infoDat["LID"], ",");
 	bk->smr = split(infoDat["RID"], ",");
-
 
 	vector<string> cipos = split(infoDat["CIPOS"], ",");
 	vector<string> ciend = split(infoDat["CIEND"], ",");
@@ -296,17 +214,14 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 	  cerr << "FATAL: SV starts before it ends: " << line << endl;
 	  exit(1);
 	}
-
 	bk->svlen = (bk->three - bk->five);
-
 	br.push_back(bk);
-
       }
       else{
-	cerr << "FATAL: loading external breakpoints: unknown type: " << infoDat["SVTYPE"] << endl;
+	cerr << "FATAL: loading external breakpoints: unknown type: "
+	     << infoDat["SVTYPE"] << endl;
 	exit(1);
       }
-
     }
   }
   featureFile.close();
@@ -315,34 +230,10 @@ bool loadExternal(vector<breakpoints *> & br, map<string, int> & inverse_lookup)
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : p = prob successs, q prob fail, m = success, n = failure;
-
+ Function input  : bam alignment, pos
  Function does   : adds soft clip length to end of read to see if it overlaps
-                   end pos
-
+		   end pos
  Function returns: bool
-
-*/
-
-
-double ldbinomial(double p, double q, int m, int n)
-{
-  double temp = lgamma(m + n + 1.0);
-  temp -=  lgamma(n + 1.0) + lgamma(m + 1.0);
-  temp += m*log(p) + n*log(q);
-  return temp;
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : bam alignemnt, pos
-
- Function does   : adds soft clip length to end of read to see if it overlaps
-                   end pos
-
- Function returns: bool
-
 */
 
 inline bool endsBefore(BamAlignment & r, int & pos, int b){
@@ -365,12 +256,9 @@ inline bool endsBefore(BamAlignment & r, int & pos, int b){
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : bam alignemnt, pos
-
  Function does   : substracts soft clip length from start to see if it overlaps
-                   start pos
-
- Function returns: bool
-
+		   start pos
+ Function returns: bool=
 */
 
 inline bool startsAfter(BamAlignment & r, int & pos, int b){
@@ -390,50 +278,13 @@ inline bool startsAfter(BamAlignment & r, int & pos, int b){
   }
 }
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of strings and separator
-
- Function does   : joins vector with separator
-
- Function returns: string
-
-*/
-
-string join(vector<string> & strings, string sep){
-
-  string joined = *(strings.begin());
-
-  for(vector<string>::iterator sit = strings.begin()+1; sit != strings.end();
-      sit++){
-
-    joined = joined + sep + (*sit) ;
-  }
-  return joined;
-}
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : vector of doubles and a seperator
-
- Function does   : joins vector with separator
-
- Function returns: string
-
+ Function input  : reads and a breakpoint
+ Function does   : aligns the reads to the breakpoint to get the sum of SW
+ Function returns: double
 */
-
-string join(vector<double> & ints, string sep){
-
-  stringstream ss;
-
-  for(vector<double>::iterator sit = ints.begin(); sit != ints.end(); sit++){
-    ss << *sit << sep;
-  }
-  return ss.str();
-}
-
-
 
 double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
 			   breakpoints * br){
@@ -466,12 +317,10 @@ double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
 	  continue;
 	}
       }
-
       n += 1;
 
       aligner.Align((*r).QueryBases.c_str(), br->alleles.back().c_str(),
 		    br->alleles.back().size(),  filter, &alignment);
-
       sum +=  alignment.sw_score;
     }
   }
@@ -486,11 +335,8 @@ double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : breakpoint pointer
-
  Function does   : loads up the reads
-
  Function returns: total number of reads
-
 */
 
 int getPopAlignments(vector<string> & bamFiles,
@@ -519,7 +365,8 @@ int getPopAlignments(vector<string> & bamFiles,
       string indexName = join(fileName, ".");
       if(! bamR.OpenIndex(indexName) ){
 	cerr << "FATAL: cannot find bam index." << endl;
-	cerr << "INFO: If you have a large number of files, check ulimit: NCPU*NBAM " << endl;
+	cerr << "INFO: If you have a large number of files, check ulimit: NCPU*NBAM "
+	     << endl;
       }
     }
 
@@ -555,7 +402,10 @@ int getPopAlignments(vector<string> & bamFiles,
       nreads += 1;
     }
     if(br->two){
-      if(!bamR.SetRegion(br->seqidIndexL, br->three-buffer, br->seqidIndexL, br->three+buffer)){
+      if(!bamR.SetRegion(br->seqidIndexL,
+			 br->three-buffer,
+			 br->seqidIndexL,
+			 br->three+buffer)){
 	cerr << "FATAL: cannot set region for genotyping." << endl;
 	exit(1);
       }
@@ -567,13 +417,13 @@ int getPopAlignments(vector<string> & bamFiles,
 	  continue;
 	}
 	if(! al.IsMapped() && ! al.IsMateMapped()){
-        continue;
+	continue;
 	}
 	if(al.IsDuplicate()){
-        continue;
+	continue;
 	}
 	if(! al.IsPrimaryAlignment()){
-        continue;
+	continue;
 	}
 	if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
 	  continue;
@@ -593,9 +443,7 @@ int getPopAlignments(vector<string> & bamFiles,
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : string reference
-
  Function does   : revcomp
-
  Function returns: string
 
 */
@@ -637,35 +485,11 @@ inline void Comp(string & seq){
 }
 
 
-inline int phred(double v){
-
-  double s = (-10 * log10(v) );
-
-  if(int(s) == 0){
-    return 1;
-  }
-  else{
-    return int(s);
-  }
-
-}
-
-inline double unPhred(int v){
-
-  return pow(10.0,(-1*double(v)/10));
-
-}
-
-
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : nothing
-
  Function does   : prints help
-
  Function returns: NA
-
 */
 
 void printVersion(void){
@@ -679,52 +503,50 @@ void printVersion(void){
 void printHelp(void){
 //------------------------------- XXXXXXXXXX --------------------------------
   cerr << " Usage:  " << endl;
-  cerr << "       WHAM-GRAPHENING -f my.bam -a my.fasta \\ " << endl;
-  cerr << "       -g my.graph.out.txt -e M,GL000207.1 2> wham.err > wham.out" << endl;
+  cerr << "       WHAM-GRAPHENING -k -f my.bam -a my.fasta \\ " << endl;
+  cerr << "       -g my.graph.out.txt -e M,GL000207.1 2> wham.err > wham.vcf"
+       << endl;
   cerr << endl;
   cerr << " Required:  " << endl;
 //------------------------------- XXXXXXXXXX --------------------------------
 
-  cerr << "          -f - <STRING> - A sorted and indexed bam file or a list" << endl;
-  cerr << "                          of bams: a.bam,b.bam,..." << endl;
-  cerr << "          -a - <STRING> - The reference genome (indexed fasta).  " << endl;
+  cerr << "          -f  <STRING>  A sorted and indexed bam file or a list            " << endl;
+  cerr << "                          of bams: a.bam,b.bam,...                         " << endl;
+  cerr << "          -a  <STRING>  The reference genome (indexed fasta).              " << endl;
   cerr << endl;
-  cerr << " Optional:  Recommended flags are noted with : *                             " << endl;
-  cerr << "          -v - <FLAG>   - Print BEDPE instead of VCF4.2. [false]             " << endl;
-  cerr << "          -s - <FLAG>   - Exits the program after the stats are              " << endl;
-  cerr << "                          gathered. [false]                                  " << endl;
-  cerr << "  *       -k - <FLAG>   - Skip genotyping (much faster). [false]             " << endl;
-  cerr << "          -g - <STRING> - File to write graph to (very large output). [false]" << endl;
-  cerr << "  *|-c    -e - <STRING> - Comma sep. list of seqids to skip [false].         " << endl;
-  cerr << "  *|-e    -c - <STRING> - Comma sep. list of seqids to keep [false].         " << endl;
-  cerr << "          -r - <STRING> - Region in format: seqid:start-end [whole genome]   " << endl;
-  cerr << "  *       -x - <INT>    - Number of CPUs to use [all cores].                 " << endl;
-  cerr << "          -m - <INT>    - Mapping quality filter [20].                       " << endl;
-  cerr << "          -b - <STRING> - External file to genotype [false].                 " << endl;
-  cerr << "          -i - <STRING> - non standard split read tag [SA]                   " << endl;
-  cerr << "          -z - <FLAG>   - Sample reads until success. [false]                " << endl;
+  cerr << " Optional:  Recommended flags are noted with : *                           " << endl;
+  cerr << "          -s  <FLAG>    Exits the program after the stats are              " << endl;
+  cerr << "                        gathered. [false]                                  " << endl;
+  cerr << "  *       -k  <FLAG>    Skip genotyping (much faster). [false]             " << endl;
+  cerr << "          -g  <STRING>  File to write graph to (very large output). [false]" << endl;
+  cerr << "  *|-c    -e  <STRING>  Comma sep. list of seqids to skip [false].         " << endl;
+  cerr << "  *|-e    -c  <STRING>  Comma sep. list of seqids to keep [false].         " << endl;
+  cerr << "          -r  <STRING>  Region in format: seqid:start-end [whole genome]   " << endl;
+  cerr << "  *       -x  <INT>     Number of CPUs to use [all cores].                 " << endl;
+  cerr << "          -m  <INT>     Mapping quality filter [20].                       " << endl;
+  cerr << "          -b  <STRING>  External file to genotype [false].                 " << endl;
+  cerr << "          -i  <STRING>  non standard split read tag [SA]                   " << endl;
+  cerr << "          -z  <FLAG>    Sample reads until success. [false]                " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
   cerr << "        STDERR: Run statistics and bam stats                        " << endl;
   cerr << "        STOUT : SV calls in VCF or BEDPE format                     " << endl;
   cerr << endl;
-
-  cerr << endl;
   cerr << " Details:  " << endl;
-  cerr << "        -z - <FLAG>   WHAM-GRAPHENING can fail if does not sample        " << endl;
+  cerr << "        -z  <FLAG>    WHAM-GRAPHENING can fail if does not sample        " << endl;
   cerr << "                      enough reads. This flag prevents WHAM-GRAPHENING   " << endl;
   cerr << "                      from exiting. If your bam header has seqids not in " << endl;
   cerr << "                      the bam (e.g. split by region) use -z.             " << endl;
-  cerr << "        -k - <FLAG>   The WHAM-GRAPHENING pipeline can genotype after    " << endl;
+  cerr << "        -k  <FLAG>    The WHAM-GRAPHENING pipeline can genotype after    " << endl;
   cerr << "                      samples are merged (-b).  This will save time for  " << endl;
   cerr << "                      population level calling.                          " << endl;
-  cerr << "        -b - <STRING> The VCF output of WHAM-GRAPHENING for genotyping.  " << endl;
+  cerr << "        -b  <STRING>  The VCF output of WHAM-GRAPHENING for genotyping.  " << endl;
   cerr << "                      WHAM-GRAPHENING will genotype any BAM file at the  " << endl;
   cerr << "                      positions in the -b file.                          " << endl;
-  cerr << "        -i - <STRING> WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
+  cerr << "        -i  <STRING>  WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
   cerr << "                      Older version of bwa-mem used XP.                  " << endl;
-  cerr << "    -e|-c  - <STRING> A list of seqids to include or exclude while       " << endl;
+  cerr << "     -e|-c  <STRING>  A list of seqids to include or exclude while       " << endl;
   cerr << "                      sampling insert and depth.  For humans you should  " << endl;
   cerr << "                      use the standard chromosomes 1,2,3...X,Y.          " << endl;
   cerr << endl;
@@ -732,114 +554,12 @@ void printHelp(void){
   printVersion();
 }
 
-
-int  getSupport(node * N){
-
-  int support = 0;
-
-  for(vector<edge *>::iterator ed = N->eds.begin() ;
-      ed != N->eds.end(); ed++){
-    support += (*ed)->support['L'];
-    support += (*ed)->support['H'];
-    support += (*ed)->support['S'];
-    support += (*ed)->support['I'];
-    support += (*ed)->support['D'];
-    support += (*ed)->support['V'];
-    support += (*ed)->support['M'];
-    support += (*ed)->support['R'];
-    support += (*ed)->support['X'];
-
-}
-  return support;
-}
-
-bool sortNodesByPos(node * L, node * R){
-  return (L->pos < R->pos);
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of breakpoint calls
-
- Function does   : return true if the left is less than the right
-
- Function returns: bool
-
-*/
-
-bool sortNodesBySupport(node * L, node * R){
-
-  int totalSL = 0;
-  int totalSR = 0;
-
-  for(vector<edge *>::iterator ed = L->eds.begin() ;
-      ed != L->eds.end(); ed++){
-      totalSL += (*ed)->support['L'];
-      totalSL += (*ed)->support['H'];
-      totalSL += (*ed)->support['S'];
-      totalSL += (*ed)->support['I'];
-      totalSL += (*ed)->support['D'];
-      totalSL += (*ed)->support['V'];
-      totalSL += (*ed)->support['M'];
-      totalSL += (*ed)->support['R'];
-      totalSL += (*ed)->support['X'];
-  }
-
-
-  for(vector<edge *>::iterator ed = R->eds.begin() ;
-      ed != R->eds.end(); ed++){
-    totalSR += (*ed)->support['L'];
-    totalSR += (*ed)->support['H'];
-    totalSR += (*ed)->support['S'];
-    totalSR += (*ed)->support['I'];
-    totalSR += (*ed)->support['D'];
-    totalSR += (*ed)->support['V'];
-    totalSR += (*ed)->support['M'];
-    totalSR += (*ed)->support['R'];
-    totalSR += (*ed)->support['X'];
-  }
-
-
-  return (totalSL > totalSR) ;
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of breakpoint calls
-
- Function does   : return true if the left is less than the right
-
- Function returns: bool
-
-*/
-
-bool sortBreak(breakpoints * L, breakpoints * R){
-
-  if(L->seqidIndexL == R->seqidIndexL ){
-    if(L->five < R->five){
-
-      return true;
-    }
-  }
-  else{
-    if(L->seqidIndexL < R->seqidIndexL){
-
-      return true;
-    }
-  }
-  return false;
-}
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of pointers to breakpoints and a bamtools RefVector
-
  Function does   : prints a vcf format
-
  Function returns: nada
-
 */
-
 
 void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
@@ -874,7 +594,8 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   header << "##FORMAT=<ID=RS,Number=1,Type=Integer,Description=\"Number of reads that align better to REF allele\">" << endl;
   header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
 
-  for(vector<string>::iterator iz = globalOpts.targetBams.begin(); iz !=  globalOpts.targetBams.end(); iz++){
+  for(vector<string>::iterator iz = globalOpts.targetBams.begin();
+      iz !=  globalOpts.targetBams.end(); iz++){
 
     if(globalOpts.SMTAGS.find(*iz) == globalOpts.SMTAGS.end()){
       cerr << "FATAL: could not find SM tag for: " << *iz << endl;
@@ -1026,259 +747,12 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   }
 }
 
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of pointers to breakpoints and a bamtools RefVector
-
- Function does   : prints a bedbe format
-
- Function returns: nada
-
-*/
-
-
-void printBEDPE(vector<breakpoints *> & calls, RefVector & seqs){
-
-  int index = 0;
-
-   sort(calls.begin(), calls.end(), sortBreak);
-
-
-  for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
-
-    int svlen = (*c)->svlen;
-
-    if(svlen < 5){
-      (*c)->fail = true;
-    }
-
-    if((*c)->fail){
-      continue;
-    }
-
-    index += 1;
-
-
-    stringstream ss;
-
-    string type = "NONE";
-    switch((*c)->type){
-    case 'D':
-      type = "DEL";
-      svlen = -svlen;
-      break;
-    case 'U':
-      type = "DUP";
-      break;
-    case 'I':
-      type = "INR";
-      break;
-    case 'V':
-      type = "INV";
-      break;
-    default:
-      break;
-    }
-
-    ss << seqs[(*c)->seqidIndexL].RefName
-       << "\t"
-       << ((*c)->five - 10)
-       << "\t"
-       << ((*c)->five + 10)
-       << "\t"
-       << seqs[(*c)->seqidIndexL].RefName
-       << "\t"
-       << ((*c)->three - 10)
-       << "\t"
-       << ((*c)->three + 10)
-       << "\t"
-       << "WG:" << type << ":" << (*c)->id
-       << "\t"
-       << "."
-       << "\t"
-       << "."
-       << "\t"
-       << ".";
-
-    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << (*c)->id << ";"
-       << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";"
-       << "MERGED=" << (*c)->merged << ";"
-       << "REFINED=" << (*c)->refined << ";"
-       << "END=" << (*c)->three << ";"
-       << "POS=" << (*c)->five << "," << (*c)->three << ";" ;
-
-    string SML = ".";
-    string SMR = ".";
-
-    if((*c)->sml.size() > 1){
-      SML = join((*c)->sml, ",");
-    }
-    else{
-      SML = (*c)->sml.front();
-    }
-
-    if((*c)->smr.size() > 1){
-      SMR = join((*c)->smr, ",");
-    }
-    else{
-      SMR = (*c)->smr.front();
-    }
-
-    ss << "LID=" << SML << ";" ;
-    ss << "RID=" << SMR << ";" ;
-    ss << "CIPOS=-10,10;CIEND=-10,10;";
-    ss << "COLLAPSED=" << (*c)->collapsed ;
-    ss << "\tGT:GL:AS:RS";
-
-    for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
-      if((*c)->genotypeIndex[i] == -1){
-	ss << "\t" << "./.:" << "."
-           << "," << "."
-           << "," << "."
-           << ":" << (*c)->nalt[i]
-           << ":" << (*c)->nref[i];
-      }
-      else if((*c)->genotypeIndex[i] == 0){
-	ss << "\t" << "0/0:" << (*c)->genotypeLikelhoods[i][0]
-	   << "," << (*c)->genotypeLikelhoods[i][1]
-	   << "," << (*c)->genotypeLikelhoods[i][2]
-	   << ":" << (*c)->nalt[i]
-	   << ":" << (*c)->nref[i];
-      }
-      else if((*c)->genotypeIndex[i] == 1){
-	ss << "\t" << "0/1:" << (*c)->genotypeLikelhoods[i][0]
-	   << "," << (*c)->genotypeLikelhoods[i][1]
-	   << "," << (*c)->genotypeLikelhoods[i][2]
-	   << ":" << (*c)->nalt[i]
-	   << ":" << (*c)->nref[i];
-      }
-      else if((*c)->genotypeIndex[i] == 2){
-	ss << "\t" << "1/1:" << (*c)->genotypeLikelhoods[i][0]
-	   << "," << (*c)->genotypeLikelhoods[i][1]
-	   << "," << (*c)->genotypeLikelhoods[i][2]
-	   << ":" << (*c)->nalt[i]
-           << ":" << (*c)->nref[i];
-      }
-      else{
-	cerr << "FATAL: printBEDPE: unknown genotype." << endl;
-	exit(1);
-      }
-    }
-    ss << endl;
-    cout << ss.str();
-  }
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of ints
-
- Function does   : calculates the mean
-
- Function returns: double
-
-*/
-
-inline double mean(vector<int> & data){
-
-  double sum = 0;
-
-  for(vector<int>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-  }
-  return sum / data.size();
-}
-
-inline double mean(vector<double> & data){
-
-  double sum = 0;
-
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-  }
-  return sum / data.size();
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of doubles
-
- Function does   : calculates the var
-
- Function returns: double
-
-*/
-
-inline double var(vector<double> & data, double mu){
-  double variance = 0;
-
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    variance += pow((*it) - mu,2);
-  }
-
-  return variance / (data.size() - 1);
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : int pointer, vector cigDat
-
- Function does   : finds end position
-
- Function returns: void
-
-*/
-inline void endPos(vector<cigDat> & cigs, int * pos){
-
-  for(vector<cigDat>::iterator it = cigs.begin();
-      it != cigs.end(); it++){
-
-    switch( (*it).Type ){
-    case 'M':
-      {
-        *pos += (*it).Length;
-        break;
-      }
-    case 'X':
-      {
-        *pos += (*it).Length;
-        break;
-      }
-    case 'D':
-      {
-        *pos += (*it).Length;
-        break;
-      }
-    case '=':
-      {
-        *pos += (*it).Length;
-        break;
-      }
-    case 'N':
-      {
-	*pos += (*it).Length;
-        break;
-      }
-    default:
-      break;
-    }
-  }
-  // WARNING: this needs to be double checked
-   *pos -= 1;
-}
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : node pointer, vector of node pointers
-
  Function does   : populates a vector for a sub graph
-
  Function returns: void
-
 */
-
 
 void getTree(node * n, vector<node *> & ns){
 
@@ -1299,16 +773,22 @@ void getTree(node * n, vector<node *> & ns){
 
      uint hit = 0;
 
-     if(seen.find(edges.back()->L->pos) != seen.end() && seen.find(edges.back()->R->pos) != seen.end() ){
+     if(seen.find(edges.back()->L->pos) != seen.end() 
+	&& seen.find(edges.back()->R->pos) != seen.end() ){
        hit = 1;
      }
-     else if(seen.find(edges.back()->L->pos) == seen.end() && seen.find(edges.back()->R->pos) == seen.end()){
+     else if(seen.find(edges.back()->L->pos) == seen.end() 
+	     && seen.find(edges.back()->R->pos) == seen.end()){
        seen[edges.back()->L->pos] = 1;
        seen[edges.back()->R->pos] = 1;
        ns.push_back(edges.back()->L);
        ns.push_back(edges.back()->R);
-       edges.insert(edges.end(), edges.back()->L->eds.begin(), edges.back()->L->eds.end());
-       edges.insert(edges.end(), edges.back()->R->eds.begin(), edges.back()->R->eds.end());
+       edges.insert(edges.end(), 
+		    edges.back()->L->eds.begin(), 
+		    edges.back()->L->eds.end());
+       edges.insert(edges.end(), 
+		    edges.back()->R->eds.begin(), 
+		    edges.back()->R->eds.end());
      }
      else if(seen.find(edges.back()->L->pos) == seen.end()){
 
@@ -1316,31 +796,30 @@ void getTree(node * n, vector<node *> & ns){
 
        ns.push_back(edges.back()->L);
 
-       edges.insert(edges.end(), edges.back()->L->eds.begin(), edges.back()->L->eds.end());
-
+       edges.insert(edges.end(), 
+		    edges.back()->L->eds.begin(), 
+		    edges.back()->L->eds.end() );
      }
      else{
        seen[edges.back()->R->pos] = 1;
        ns.push_back(edges.back()->R);
-
-       edges.insert(edges.end(), edges.back()->R->eds.begin(), edges.back()->R->eds.end());
+       
+       edges.insert(edges.end(), 
+		    edges.back()->R->eds.begin(), 
+		    edges.back()->R->eds.end());
      }
-
-    if(hit == 1){
-      edges.pop_back();
-    }
+     
+     if(hit == 1){
+       edges.pop_back();
+     }
   }
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : breakpoints *, RefSeq
-
  Function does   : provides ref and alt
-
  Function returns: bool
-
 */
 
 bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
@@ -1376,9 +855,8 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
     cerr << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 5, 5)
 	 << " -- "
 	 << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1,  5)
-         << endl;
+	 << endl;
     #endif
-
 
   }
     //duplication;
@@ -1453,81 +931,6 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : edge pointer
-
- Function does   : init
-
- Function returns: void
-
-*/
-
-void initEdge(edge * e){
-  e->L = NULL;
-  e->R = NULL;
-
-
-  e->support['L'] = 0;
-  e->support['H'] = 0;
-  e->support['S'] = 0;
-  e->support['I'] = 0;
-  e->support['D'] = 0;
-  e->support['V'] = 0;
-  e->support['M'] = 0;
-  e->support['R'] = 0;
-  e->support['X'] = 0;
-  e->support['K'] = 0;
-
-}
-
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of ints and separator
-
- Function does   : joins vector with separator
-
- Function returns: string
-
-*/
-
-string join(vector<int> & ints, string sep){
-
-  stringstream ss;
-
-  for(vector<int>::iterator sit = ints.begin(); sit != ints.end(); sit++){
-    ss << *sit << sep;
-  }
-  return ss.str();
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of strings
-
- Function does   : joins vector with returns;
-
- Function returns: string
-
-*/
-
-string joinReturn(vector<string> strings){
-
-  string joined = "";
-
-  for(vector<string>::iterator sit = strings.begin(); sit != strings.end();
-      sit++){
-    joined = joined + " " + (*sit) + "\n";
-  }
-  return joined;
-}
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
  Function input  : read pair pointer
 
  Function does   : -->s s<-- tests if pairs suggests insertion
@@ -1562,31 +965,6 @@ inline bool isPointIn(readPair * rp){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : refID (int), left position (int), graph
-
- Function does   : determine if a node is in the graph
-
- Function returns: bool
-
-*/
-
-
-inline bool isInGraph(int refID, int pos, graph & lc){
-
-  if(lc.nodes.find(refID) == lc.nodes.end()){
-    return false;
-  }
-
-  if(lc.nodes[refID].find(pos) != lc.nodes[refID].end()){
-    return true;
-  }
-  return false;
-}
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
  Function input  : left position, right position, local graph
 
  Function does   : adds nodes or builds connections
@@ -1601,8 +979,6 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
 
   if( ! isInGraph(refID, l, globalGraph)
       &&  ! isInGraph(refID, r, globalGraph) ){
-
-    //cerr << "addIndelToGraph: neither node found" << endl;
 
     node * nodeL;
     node * nodeR;
@@ -1670,7 +1046,8 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
      nodeR->sm[SM] += 1;
    }
 
-   if(globalGraph.nodes[refID][l]->sm.find("SM") == globalGraph.nodes[refID][l]->sm.end()){
+   if(globalGraph.nodes[refID][l]->sm.find("SM")
+      == globalGraph.nodes[refID][l]->sm.end()){
      globalGraph.nodes[refID][l]->sm[SM] = 0;
    }
    else{
@@ -1680,7 +1057,7 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    nodeR->collapsed = false;
 
    nodeR->beginSupport = 0;
-   nodeR->endSupport = 0;
+   nodeR->endSupport   = 0;
 
    initEdge(ed);
    ed->support[s] += 1;
@@ -1699,8 +1076,6 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
  else if(! isInGraph(refID, l, globalGraph)
 	 &&  isInGraph(refID, r, globalGraph)){
 
-   //cerr << "addIndelToGraph: right node found" << endl;
-
    node * nodeL;
    edge * ed;
 
@@ -1714,7 +1089,8 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
      nodeL->sm[SM] += 1;
    }
 
-   if(globalGraph.nodes[refID][r]->sm.find("SM") == globalGraph.nodes[refID][r]->sm.end()){
+   if(globalGraph.nodes[refID][r]->sm.find("SM")
+      == globalGraph.nodes[refID][r]->sm.end()){
      globalGraph.nodes[refID][r]->sm[SM] = 0;
    }
    else{
@@ -1734,8 +1110,6 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
    ed->R = globalGraph.nodes[refID][r];
    ed->L = nodeL;
 
-   //   cerr << "LPD RP: " << ed->R->pos << endl;
-
    nodeL->eds.push_back(ed);
 
    globalGraph.nodes[refID][r]->eds.push_back(ed);
@@ -1744,20 +1118,20 @@ void addIndelToGraph(int refID, int l, int r, char s, string & SM){
  else{
    uint hit = 0;
 
-   if(globalGraph.nodes[refID][l]->sm.find(SM) != globalGraph.nodes[refID][l]->sm.end()){
+   if(globalGraph.nodes[refID][l]->sm.find(SM)
+      != globalGraph.nodes[refID][l]->sm.end()){
      globalGraph.nodes[refID][l]->sm[SM] = 0;
    }
    else{
      globalGraph.nodes[refID][l]->sm[SM] += 1;
    }
-   if(globalGraph.nodes[refID][r]->sm.find(SM) != globalGraph.nodes[refID][r]->sm.end()){
+   if(globalGraph.nodes[refID][r]->sm.find(SM)
+      != globalGraph.nodes[refID][r]->sm.end()){
      globalGraph.nodes[refID][r]->sm[SM] = 0;
    }
    else{
      globalGraph.nodes[refID][r]->sm[SM] += 1;
    }
-
-
 
    for(vector<edge *>::iterator ite
 	 = globalGraph.nodes[refID][l]->eds.begin();
@@ -1818,13 +1192,13 @@ bool indelToGraph(BamAlignment & ba, string & SM){
       }
     case '=':
       {
-        p += ci->Length;
-        break;
+	p += ci->Length;
+	break;
       }
     case 'N':
       {
-        p += ci->Length;
-        break;
+	p += ci->Length;
+	break;
       }
     case 'X':
       {
@@ -1853,101 +1227,11 @@ bool indelToGraph(BamAlignment & ba, string & SM){
   return hit;
 }
 
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of BamTools::CigarOp
-
- Function does   : joins vector " ";
-
- Function returns: string
-
-*/
-
-string joinCig(vector<CigarOp> strings){
-
-  stringstream joined ;
-
-  for(vector<CigarOp>::iterator sit = strings.begin();
-      sit != strings.end(); sit++){
-    joined  << (*sit).Length << (*sit).Type;
-  }
-  return joined.str();
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of BamTools::CigarOp, int length
-
- Function does   : looks for clips greater than or equal to length
-
- Function returns: bool
-
-*/
-
-inline bool areBothClipped(vector<CigarOp> & ci){
-
-  if(ci.front().Type == 'S' && ci.back().Type == 'S'){
-    return true;
-  }
-  return false;
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of BamTools::CigarOp, int length
-
- Function does   : looks for clips greater than or equal to length
-
- Function returns: bool
-
-*/
-
-inline bool IsLongClip(vector<CigarOp> & ci, unsigned int len){
-
-  if(ci.front().Type == 'S' && ci.front().Length >= len){
-    return true;
-  }
-  if(ci.back().Type == 'S' && ci.back().Length >= len){
-    return true;
-  }
-  return false;
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector<CigarOp>
-
- Function does   : calculates the number of matching bases
-
- Function returns: unsigned int, total number of matching bases
-
-*/
-
-inline int match(vector<CigarOp> & co){
-
-  int m = 0;
-
-  for(vector<CigarOp>::iterator it = co.begin();
-      it != co.end(); it++){
-    if(it->Type == 'M'){
-      m += it->Length;
-    }
-  }
-  return m;
-}
-
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : read pair to filter
-
  Function does   : fails poor quality or non-sv read pairs
-
  Function returns: true = bad, false = good;
-
 */
 
 inline bool pairFailed(readPair * rp){
@@ -1959,7 +1243,8 @@ inline bool pairFailed(readPair * rp){
        && rp->al2.CigarData[0].Type == 'M' ){
       return true;
     }
-    if(rp->al1.MapQuality < globalOpts.MQ && rp->al2.MapQuality < globalOpts.MQ){
+    if(rp->al1.MapQuality < globalOpts.MQ
+       && rp->al2.MapQuality < globalOpts.MQ){
       return true;
     }
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 75){
@@ -1971,102 +1256,20 @@ inline bool pairFailed(readPair * rp){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : vector<cigDat>, string
-
- Function does   : loads cigar data into a string
-
- Function returns: NA
-
-*/
-
-void parseCigar(vector<cigDat> & parsedCigar, string cigar){
-
-  unsigned int spot = 0;
-
-  for(unsigned int i = 0; i < cigar.size(); i++){
-    if(int(cigar[i] > 57)){
-      cigDat tup;
-      tup.Length = atoi(cigar.substr(spot, i-spot).c_str());
-      tup.Type  = cigar[i];
-      parsedCigar.push_back(tup);
-    }
-  }
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : SA tag string, and vector of saTag
-
- Function does   : parses string and converts positions to BAM
-
- Function returns: NA
-
-*/
-
-void parseSA(vector<saTag> & parsed, string tag, map<string, int> & il){
-
-  vector<string> sas = split(tag, ';');
-
-  for(unsigned int i = 0 ; i < sas.size() -1 ; i++){
-
-    saTag sDat;
-
-    vector<string> sat = split (sas[i], ',');
-
-    if(sat.size() != 6 && globalOpts.saT == "SA"){
-      cerr << "FATAL: failure to parse SA optional tag" << endl;
-      exit(1);
-    }
-
-    sDat.seqid = il[sat[0]];
-
-    if(globalOpts.saT == "SA"){
-      sDat.pos   = atoi(sat[1].c_str()) - 1;
-      if(sat[2].compare("-") == 0){
-	sDat.strand = true;
-      }
-      else{
-	sDat.strand = false;
-      }
-      parseCigar(sDat.cig, sat[3]);
-    }
-    else if(globalOpts.saT == "XP"){
-      char strand = sat[1][0];
-      sat[1].erase(0,1);
-      sDat.pos   = atoi(sat[1].c_str()) - 1;
-      if(strand == '-'){
-	sDat.strand = true;
-      }
-      else{
-	sDat.strand = false;
-      }
-      parseCigar(sDat.cig, sat[2]);
-    }
-
-    parsed.push_back(sDat);
-
-  }
-
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
  Function input  : bam alignment, vector<saTag>
-
  Function does   : finds links for splitter to put in graph
-
  Function returns: NA
-
 */
 
-void splitToGraph(BamAlignment & al, vector<saTag> & sa, string & SM){
+void splitToGraph(BamAlignment & al ,
+		  vector<saTag> & sa,
+		  string & SM){
 
   if(!al.IsMapped()){
     return;
   }
 
+  // too many chimeras ... for me
   if(sa.size() > 1){
     return;
   }
@@ -2077,7 +1280,8 @@ void splitToGraph(BamAlignment & al, vector<saTag> & sa, string & SM){
 
   char support = 'S';
 
-  if((sa[0].strand && ! al.IsReverseStrand()) || (! sa[0].strand && al.IsReverseStrand() )){
+  if((sa[0].strand && ! al.IsReverseStrand())
+     || (! sa[0].strand && al.IsReverseStrand() )){
     support = 'V';
   }
 
@@ -2135,7 +1339,7 @@ void splitToGraph(BamAlignment & al, vector<saTag> & sa, string & SM){
  Function input  : pointer to readPair;
 
  Function does   : adds high and low insert sizes to graph. both pairs are
-                   treated as mapped
+		   treated as mapped
 
  Function returns: NA
 
@@ -2189,19 +1393,13 @@ void deviantInsertSize(readPair * rp, char supportType, string & SM){
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : pointer to readPair ; seqid to index
-
  Function does   : processes Pair
-
  Function returns: NA
 
 */
 
 void processPair(readPair * rp,  map<string, int> & il,
 		 double   * low, double * high, string & SM){
-
-#ifdef DEBUG
-  cerr << "processing pair" << endl;
-#endif
 
   string sa1;
   string sa2;
@@ -2214,8 +1412,40 @@ void processPair(readPair * rp,  map<string, int> & il,
 
   // not doing translocations
 
-  if(rp->al1.RefID != rp->al2.RefID){
-    return;
+  if(rp->al1.RefID != rp->al2.RefID
+     && rp->al1.MapQuality > 20
+     && rp->al2.MapQuality > 20){
+    //    return;
+
+    string nada = ".";
+
+    rp->al1.GetTag(  globalOpts.saT, nada);
+
+    std::cerr << rp->al1.RefID
+	      << " "
+	      << rp->al1.Position
+	      << " "
+	      << joinCig(rp->al1.CigarData)
+	      << " "
+	      << nada
+	      << " p1 "
+	      << "  -- " ;
+
+    nada = ".";
+    rp->al2.GetTag(  globalOpts.saT, nada);
+
+
+    std::cerr << rp->al2.RefID
+	      << " "
+	      << rp->al2.Position
+	      << " "
+	      << joinCig(rp->al2.CigarData)
+	      << " p2 "
+	      << "  "
+	      << nada
+
+	      << std::endl;
+
   }
 
   indelToGraph(rp->al1, SM);
@@ -2253,45 +1483,36 @@ void processPair(readPair * rp,  map<string, int> & il,
   else{
     //   mateNotMapped(rp, 'K');
   }
-
   if(rp->al1.GetTag(  globalOpts.saT, sa1)){
     vector<saTag> parsedSa1;
-    parseSA(parsedSa1, sa1, il);
-    //    cerr << sa1 << endl;
+    parseSA(parsedSa1, sa1, globalOpts.saT, il);
     splitToGraph(rp->al1, parsedSa1, SM);
-    //    cerr << "s1 processed " << endl;
   }
   if(rp->al2.GetTag(  globalOpts.saT, sa2)){
     vector<saTag> parsedSa2;
-    parseSA(parsedSa2, sa2, il);
-    //    cerr << sa2 << endl;
+    parseSA(parsedSa2, sa2, globalOpts.saT, il);
     splitToGraph(rp->al2, parsedSa2, SM);
-    //    cerr << "s2 processed " << endl;
   }
-
 }
 
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : filename, seqid, start, end, refSeqs (bamtools object),
-                   paired end store.
-
+		   paired end store.
  Function does   : Matches paired ends so they can be processed together.
-                   The global pair store is loaded for the missing mates
-
+		   The global pair store is loaded for the missing mates
  Function returns: NA
 
 */
 
 bool runRegion(string filename,
 	       int seqidIndex,
-               int start,
-               int end,
+	       int start,
+	       int end,
 	       vector< RefData > seqNames,
 	       map<string, readPair *> & globalPairStore,
 	       map<string, int> & seqInverseLookup, string & SM){
-
 
 
 #ifdef DEBUG
@@ -2305,7 +1526,7 @@ bool runRegion(string filename,
       itt !=  seqInverseLookup.end(); itt++){
     localInverseLookUp[itt->first] = itt->second;
   }
-  insertDat localDists  = insertDists;
+  libraryStats localDists  = insertDists;
   omp_unset_lock(&lock);
 
   // local graph;
@@ -2320,7 +1541,7 @@ bool runRegion(string filename,
     low = 100;
   }
 
-  map<string, readPair *>pairStore;
+  map<string, readPair *>pairStoreLocal;
 
   BamReader br;
   br.Open(filename);
@@ -2360,17 +1581,17 @@ bool runRegion(string filename,
     // dna and read name
     al.BuildCharData();
 
-    if(pairStore.find(al.Name) != pairStore.end()){
-      pairStore[al.Name]->count += 1;
-      if(pairStore[al.Name]->flag == 2){
-	pairStore[al.Name]->al1 = al;
+    if(pairStoreLocal.find(al.Name) != pairStoreLocal.end()){
+      pairStoreLocal[al.Name]->count += 1;
+      if(pairStoreLocal[al.Name]->flag == 2){
+	pairStoreLocal[al.Name]->al1 = al;
       }
       else{
-	pairStore[al.Name]->al2 = al;
+	pairStoreLocal[al.Name]->al2 = al;
       }
-      processPair(pairStore[al.Name], localInverseLookUp, &low, &high, SM);
-      delete pairStore[al.Name];
-      pairStore.erase(al.Name);
+      processPair(pairStoreLocal[al.Name], localInverseLookUp, &low, &high, SM);
+      delete pairStoreLocal[al.Name];
+      pairStoreLocal.erase(al.Name);
     }
     else{
       readPair * rp;
@@ -2384,7 +1605,7 @@ bool runRegion(string filename,
 	rp->flag = 2 ;
 	rp->al2  = al;
       }
-      pairStore[al.Name] = rp;
+      pairStoreLocal[al.Name] = rp;
     }
   }
 
@@ -2395,8 +1616,8 @@ bool runRegion(string filename,
   // if it finds a mate in the global store it processes and deletes
   omp_set_lock(&lock);
 
-  for(map<string, readPair *>::iterator rps = pairStore.begin();
-      rps != pairStore.end(); rps++){
+  for(map<string, readPair *>::iterator rps = pairStoreLocal.begin();
+      rps != pairStoreLocal.end(); rps++){
 
     if(globalPairStore.find(rps->first) != globalPairStore.end()){
       globalPairStore[rps->first]->count += 1;
@@ -2416,11 +1637,11 @@ bool runRegion(string filename,
       }
       processPair(globalPairStore[rps->first], localInverseLookUp, &low, &high, SM);
       delete globalPairStore[rps->first];
-      delete pairStore[rps->first];
+      delete pairStoreLocal[rps->first];
       globalPairStore.erase(rps->first);
     }
     else{
-      globalPairStore[rps->first] = pairStore[rps->first];
+      globalPairStore[rps->first] = pairStoreLocal[rps->first];
     }
   }
 
@@ -2431,9 +1652,7 @@ bool runRegion(string filename,
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : string
-
  Function does   : reads bam into graph
-
  Function returns: NA
 
 */
@@ -2448,7 +1667,7 @@ void loadBam(string & bamFile){
   omp_set_lock(&lock);
 
   if(!globalOpts.seqid.empty()){
-    region = true;
+    region    = true;
     regionSID = globalOpts.seqid;
     start = globalOpts.region.front();
     end   = globalOpts.region.back();
@@ -2554,7 +1773,8 @@ void loadBam(string & bamFile){
     for(vector< RefData >::iterator sit = sequences.begin(); sit != sequences.end(); sit++){
       int start = 0;
 
-      if(globalOpts.toSkip.find( (*sit).RefName ) == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
+      if(globalOpts.toSkip.find( (*sit).RefName ) 
+	 == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
 	for(;start < (*sit).RefLength ; start += 1000000){
 	  regionDat * chunk = new regionDat;
 
@@ -2599,10 +1819,10 @@ void loadBam(string & bamFile){
 		   seqIndexLookup, SM)){
       omp_set_lock(&lock);
       cerr << "WARNING: region failed to run properly: "
-           << sequences[regions[re]->seqidIndex].RefName
-           << ":"  << regions[re]->start << "-"
-           << regions[re]->end
-           <<  endl;
+	   << sequences[regions[re]->seqidIndex].RefName
+	   << ":"  << regions[re]->start << "-"
+	   << regions[re]->end
+	   <<  endl;
       omp_unset_lock(&lock);
     }
     else{
@@ -2663,12 +1883,6 @@ int parseOpts(int argc, char** argv)
 	cerr << "INFO: WHAM-GRAPHENING will not give up sampling reads: -z set" << globalOpts.svs << endl;
 	break;
       }
-    case 'v':
-      {
-	globalOpts.vcf = false;
-	cerr << "INFO: WHAM-GRAPHENING will print BEDPE to STDOUT: -v set" << globalOpts.svs << endl;
-	break;
-      }
     case 'k':
       {
 	globalOpts.skipGeno = true;
@@ -2709,12 +1923,12 @@ int parseOpts(int argc, char** argv)
       }
     case 'c':
       {
-        vector<string> seqidsToInclude = split(optarg, ",");
-        for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
-          globalOpts.toInclude[seqidsToInclude[i]] = 1;
-          cerr << "INFO: WHAM will only sample seqid: " << seqidsToInclude[i] << endl;
+	vector<string> seqidsToInclude = split(optarg, ",");
+	for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
+	  globalOpts.toInclude[seqidsToInclude[i]] = 1;
+	  cerr << "INFO: WHAM will only sample seqid: " << seqidsToInclude[i] << endl;
 	}
-        break;
+	break;
       }
 
     case 'f':
@@ -2802,20 +2016,14 @@ string dotviz(vector<node *> & ns){
     for(vector<edge *>:: iterator iz = (*it)->eds.begin();
 	iz != (*it)->eds.end(); iz++){
 
-
-
       if((*iz)->support['X'] > 0){
-        if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
-        }
-        if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
-        }
+	if((*it)->pos != (*iz)->L->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
+	}
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [style=dashed,penwidth=" << (*iz)->support['X'] << "];\n";
+	}
       }
-
-
-
-
 
       if((*iz)->support['R'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
@@ -2827,41 +2035,41 @@ string dotviz(vector<node *> & ns){
       }
 
       if((*iz)->support['M'] > 0){
-        if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
-        }
-        if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
-        }
+	if((*it)->pos != (*iz)->L->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
+	}
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=magenta,penwidth=" << (*iz)->support['M'] << "];\n";
+	}
       }
 
 
 
       if((*iz)->support['V'] > 0){
-        if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [colo\
+	if((*it)->pos != (*iz)->L->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [colo\
 r=green,penwidth=" << (*iz)->support['V'] << "];\n";
-        }
-        if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [colo\
+	}
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [colo\
 r=green,penwidth=" << (*iz)->support['V'] << "];\n";
-        }
+	}
       }
 
       if((*iz)->support['L'] > 0){
 	if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
 	}
-        if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=brown,penwidth=" << (*iz)->support['L'] << "];\n";
 	}
       }
       if((*iz)->support['H'] > 0){
-        if((*it)->pos != (*iz)->L->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
-        }
-        if((*it)->pos != (*iz)->R->pos){
-          ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
+	if((*it)->pos != (*iz)->L->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->L->seqid << "." << (*iz)->L->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
+	}
+	if((*it)->pos != (*iz)->R->pos){
+	  ss << "     " << (*it)->seqid << "." << (*it)->pos << " -- " << (*iz)->R->seqid << "." << (*iz)->R->pos << " [color=purple,penwidth=" << (*iz)->support['H'] << "];\n";
 	}
       }
 
@@ -2898,79 +2106,11 @@ r=green,penwidth=" << (*iz)->support['V'] << "];\n";
   return ss.str();
 }
 
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : purges poorly supported trees in forest
-
- Function does   : dumps and shrinks graph
-
- Function returns: NA
-
-*/
-
-    void thin(){
-
-  map<int, map<int, int> > lookup;
-
-  map<int, map<int, int> > toDelete;
-
-
-  for(map<int, map<int, node* > >::iterator it = globalGraph.nodes.begin();it != globalGraph.nodes.end(); it++){
-    for(map<int, node*>::iterator itt = it->second.begin(); itt != it->second.end(); itt++){
-
-      if(lookup[it->first].find(itt->first) != lookup[it->first].end() ){
-      }
-      else{
-	lookup[it->first][itt->first] = 1;
-
-	vector<node *> tree;
-
-	getTree(globalGraph.nodes[it->first][itt->first], tree);
-
-	int flag = 0;
-
-	for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-	  lookup[(*ir)->seqid][(*ir)->pos] = 1;
-	  for(vector<edge *>::iterator iz = (*ir)->eds.begin();
-	      iz != (*ir)->eds.end(); iz++){
-	    if((*iz)->support['I'] > 2 || (*iz)->support['D'] > 2 || (*iz)->support['S'] > 2 || (*iz)->support['L'] > 2 || (*iz)->support['R'] > 2 ){
-	      flag = 1;
-	    }
-	  }
-	}
-
-	if(flag == 0){
-	  for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-	    toDelete[(*ir)->seqid][(*ir)->pos] = 1;
-	  }
-	}
-      }
-    }
-  }
-
-  for(map< int, map<int, int> >::iterator td = toDelete.begin(); td != toDelete.end(); td++){
-    for(map<int, int>::iterator tdz = toDelete[td->first].begin(); tdz != toDelete[td->first].end(); tdz++){
-
-      for(vector<edge *>::iterator etd = globalGraph.nodes[td->first][tdz->first]->eds.begin();
-	  etd != globalGraph.nodes[td->first][tdz->first]->eds.end(); etd++){
-	//	delete (*etd);
-      }
-
-      delete globalGraph.nodes[td->first][tdz->first];
-      globalGraph.nodes[td->first].erase(tdz->first);
-    }
-  }
-}
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of node pointers
-
  Function does   : tries to resolve a deletion
-
  Function returns: NA
-
 */
 
 bool detectInsertion(vector<node *> tree, breakpoints * bp){
@@ -2986,7 +2126,7 @@ bool detectInsertion(vector<node *> tree, breakpoints * bp){
       int insertion   = 0;
 
       for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-        tooClose  += (*es)->support['H'];
+	tooClose  += (*es)->support['H'];
 	splitR    += (*es)->support['S'];
 	insertion += (*es)->support['I'];
       }
@@ -3005,18 +2145,18 @@ bool detectInsertion(vector<node *> tree, breakpoints * bp){
     int lhit = 0 ; int rhit = 0;
 
     for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-        ed != putative.front()->eds.end(); ed++){
+	ed != putative.front()->eds.end(); ed++){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-        lhit = 1;
-        break;
+	lhit = 1;
+	break;
       }
     }
 
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-        ed != putative.back()->eds.end(); ed++){
+	ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
 	rhit = 1;
-        break;
+	break;
       }
     }
 
@@ -3207,10 +2347,10 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
     for(map<string,int>::iterator iz = R->sm.begin(); iz != R->sm.end(); iz++){
 
       if(L->sm.find(iz->first) != L->sm.end()){
-        L->sm[iz->first] += iz->second;
+	L->sm[iz->first] += iz->second;
       }
       else{
-        L->sm[iz->first] = iz->second;
+	L->sm[iz->first] = iz->second;
       }
     }
 
@@ -3226,9 +2366,9 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 	otherP = (*lc)->R->pos;
       }
       if(findEdge(L->eds, &e,  otherP)){
-        e->support['I'] += (*lc)->support['I'];
-        e->support['D'] += (*lc)->support['D'];
-        e->support['S'] += (*lc)->support['S'];
+	e->support['I'] += (*lc)->support['I'];
+	e->support['D'] += (*lc)->support['D'];
+	e->support['S'] += (*lc)->support['S'];
 	e->support['H'] += (*lc)->support['H'];
 	e->support['L'] += (*lc)->support['L'];
 	e->support['M'] += (*lc)->support['M'];
@@ -3236,13 +2376,13 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 	e->support['V'] += (*lc)->support['V'];
       }
       else{
-        if((*lc)->L->pos == otherP){
-          (*lc)->R = L;
+	if((*lc)->L->pos == otherP){
+	  (*lc)->R = L;
 	}
-        else{
-          (*lc)->L = L;
-        }
-        L->eds.push_back(*lc);
+	else{
+	  (*lc)->L = L;
+	}
+	L->eds.push_back(*lc);
 
       }
     }
@@ -3256,11 +2396,8 @@ void joinNodes(node * L, node * R, vector<node *> & tree){
 //------------------------------- SUBROUTINE --------------------------------
 /*
   Function input  : a vector of node pointers
-
   Function does   : does a tree terversal and joins nodes
-
   Function returns: NA
-
 */
 
 void collapseTree(vector<node *> & tree){
@@ -3271,24 +2408,18 @@ void collapseTree(vector<node *> & tree){
 
   for(vector<node *>::iterator tr = tree.begin(); tr != tree.end(); tr++){
     if((*tr)->collapsed){
-//      cerr << "ci" << endl;
       continue;
     }
     for(vector<node *>::iterator tt = tree.begin(); tt != tree.end(); tt++){
       if((*tt)->collapsed){
-	//      cerr << "cii" << endl;
-        continue;
+	continue;
       }
       if( (*tr)->pos == (*tt)->pos ){
-	//      cerr << "ciii" << endl;
-        continue;
+	continue;
       }
-      //      cerr << "N1: " << (*tr)->pos << " N2: " << (*tt)->pos << endl;
 
       if(abs( (*tr)->pos - (*tt)->pos ) < 20 && ! connectedNode((*tr), (*tt))){
-
 	joinNodes((*tr), (*tt), tree);
-
       }
     }
   }
@@ -3306,14 +2437,10 @@ void collapseTree(vector<node *> & tree){
 
 }
 
-
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of node pointers
-
  Function does   : tries to resolve an inversion
-
  Function returns: NA
 
 */
@@ -3328,7 +2455,6 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     int tooFar           = 0;
     int splitR           = 0;
     int del              = 0;
-
 
 
     for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
@@ -3357,9 +2483,9 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     int totalS = 0;
 
     for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-        ed != putative.front()->eds.end(); ed++){
+	ed != putative.front()->eds.end(); ed++){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-        lhit = 1;
+	lhit = 1;
 	totalS += (*ed)->support['L'];
 	totalS += (*ed)->support['H'];
 	totalS += (*ed)->support['S'];
@@ -3369,15 +2495,15 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
 	totalS += (*ed)->support['M'];
 	totalS += (*ed)->support['R'];
 	totalS += (*ed)->support['X'];
-        break;
+	break;
       }
     }
 
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-        ed != putative.back()->eds.end(); ed++){
+	ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-        rhit = 1;
-        break;
+	rhit = 1;
+	break;
       }
     }
 
@@ -3398,12 +2524,12 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
       bp->svlen         = rPos - lPos            ;
       bp->totalSupport  = totalS                 ;
       for(map<string, int>::iterator iz = putative.front()->sm.begin()
-            ; iz != putative.front()->sm.end(); iz++){
-        bp->sml.push_back(iz->first);
+	    ; iz != putative.front()->sm.end(); iz++){
+	bp->sml.push_back(iz->first);
       }
       for(map<string, int>::iterator iz = putative.back()->sm.begin()
-            ; iz != putative.back()->sm.end(); iz++){
-        bp->smr.push_back(iz->first);
+	    ; iz != putative.back()->sm.end(); iz++){
+	bp->smr.push_back(iz->first);
       }
 
       bp->supports.push_back(getSupport(putative.front()));
@@ -3436,21 +2562,21 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     int totalS = 0;
 
     for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
-        ed != putative[0]->eds.end(); ed++){
+	ed != putative[0]->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
 
-        totalS += (*ed)->support['L'];
-        totalS += (*ed)->support['H'];
-        totalS += (*ed)->support['S'];
-        totalS += (*ed)->support['I'];
-        totalS += (*ed)->support['D'];
-        totalS += (*ed)->support['V'];
-        totalS += (*ed)->support['M'];
-        totalS += (*ed)->support['R'];
-        totalS += (*ed)->support['X'];
+	totalS += (*ed)->support['L'];
+	totalS += (*ed)->support['H'];
+	totalS += (*ed)->support['S'];
+	totalS += (*ed)->support['I'];
+	totalS += (*ed)->support['D'];
+	totalS += (*ed)->support['V'];
+	totalS += (*ed)->support['M'];
+	totalS += (*ed)->support['R'];
+	totalS += (*ed)->support['X'];
 
-        nhit += 1;
-        break;
+	nhit += 1;
+	break;
       }
     }
 
@@ -3465,9 +2591,9 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
     if(nhit == 2){
 
       if((rPos - lPos) > 1500000 ){
-        if(totalS < 5){
-          return  false;
-        }
+	if(totalS < 5){
+	  return  false;
+	}
       }
       bp->two           = true                   ;
       bp->type          = 'V'                    ;
@@ -3481,11 +2607,11 @@ bool detectInversion(vector<node *> & tree, breakpoints * bp){
 
       for(map<string, int>::iterator iz = putative.front()->sm.begin()
 	    ; iz != putative.front()->sm.end(); iz++){
-        bp->sml.push_back(iz->first);
+	bp->sml.push_back(iz->first);
       }
       for(map<string, int>::iterator iz = putative.back()->sm.begin()
-            ; iz != putative.back()->sm.end(); iz++){
-        bp->smr.push_back(iz->first);
+	    ; iz != putative.back()->sm.end(); iz++){
+	bp->smr.push_back(iz->first);
       }
 
       bp->supports.push_back(getSupport(putative.front()));
@@ -3542,28 +2668,28 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
     int totalS = 0;
 
     for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-        ed != putative.front()->eds.end(); ed++){
+	ed != putative.front()->eds.end(); ed++){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-        lhit = 1;
+	lhit = 1;
 	totalS += (*ed)->support['L'];
-        totalS += (*ed)->support['H'];
-        totalS += (*ed)->support['S'];
-        totalS += (*ed)->support['I'];
-        totalS += (*ed)->support['D'];
-        totalS += (*ed)->support['V'];
-        totalS += (*ed)->support['M'];
-        totalS += (*ed)->support['R'];
-        totalS += (*ed)->support['X'];
+	totalS += (*ed)->support['H'];
+	totalS += (*ed)->support['S'];
+	totalS += (*ed)->support['I'];
+	totalS += (*ed)->support['D'];
+	totalS += (*ed)->support['V'];
+	totalS += (*ed)->support['M'];
+	totalS += (*ed)->support['R'];
+	totalS += (*ed)->support['X'];
 
-        break;
+	break;
       }
     }
 
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-        ed != putative.back()->eds.end(); ed++){
+	ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-        rhit = 1;
-        break;
+	rhit = 1;
+	break;
       }
     }
 
@@ -3589,7 +2715,7 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
 	bp->sml.push_back(iz->first);
       }
       for(map<string, int>::iterator iz = putative.back()->sm.begin()
-            ; iz != putative.back()->sm.end(); iz++){
+	    ; iz != putative.back()->sm.end(); iz++){
 	bp->smr.push_back(iz->first);
       }
 
@@ -3662,12 +2788,12 @@ bool detectDuplication(vector<node *> tree, breakpoints * bp){
       bp->totalSupport  = totalS               ;
 
       for(map<string, int>::iterator iz = putative.front()->sm.begin()
-            ; iz != putative.front()->sm.end(); iz++){
-        bp->sml.push_back(iz->first);
+	    ; iz != putative.front()->sm.end(); iz++){
+	bp->sml.push_back(iz->first);
       }
       for(map<string, int>::iterator iz = putative.back()->sm.begin()
-            ; iz != putative.back()->sm.end(); iz++){
-        bp->smr.push_back(iz->first);
+	    ; iz != putative.back()->sm.end(); iz++){
+	bp->smr.push_back(iz->first);
       }
 
       bp->supports.push_back(getSupport(putative.front()));
@@ -3794,23 +2920,23 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
 	lhit = 1;
 	totalS += (*ed)->support['L'];
-        totalS += (*ed)->support['H'];
-        totalS += (*ed)->support['S'];
-        totalS += (*ed)->support['I'];
-        totalS += (*ed)->support['D'];
-        totalS += (*ed)->support['V'];
-        totalS += (*ed)->support['M'];
-        totalS += (*ed)->support['R'];
-        totalS += (*ed)->support['X'];
+	totalS += (*ed)->support['H'];
+	totalS += (*ed)->support['S'];
+	totalS += (*ed)->support['I'];
+	totalS += (*ed)->support['D'];
+	totalS += (*ed)->support['V'];
+	totalS += (*ed)->support['M'];
+	totalS += (*ed)->support['R'];
+	totalS += (*ed)->support['X'];
 
 	break;
       }
     }
 
     for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-        ed != putative.back()->eds.end(); ed++){
+	ed != putative.back()->eds.end(); ed++){
       if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-        rhit = 1;
+	rhit = 1;
 	break;
       }
     }
@@ -3833,12 +2959,12 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
       bp->svlen       = rPos - lPos            ;
       bp->totalSupport = totalS                ;
       for(map<string, int>::iterator iz = putative.front()->sm.begin()
-            ; iz != putative.front()->sm.end(); iz++){
-        bp->sml.push_back(iz->first);
+	    ; iz != putative.front()->sm.end(); iz++){
+	bp->sml.push_back(iz->first);
       }
       for(map<string, int>::iterator iz = putative.back()->sm.begin()
-            ; iz != putative.back()->sm.end(); iz++){
-        bp->smr.push_back(iz->first);
+	    ; iz != putative.back()->sm.end(); iz++){
+	bp->smr.push_back(iz->first);
       }
 
       bp->supports.push_back(getSupport(putative.front()));
@@ -3889,11 +3015,11 @@ bool detectDeletion(vector<node *> tree, breakpoints * bp){
        }
 
        for(vector<edge *>::iterator ed = putative[1]->eds.begin() ;
-           ed != putative[1]->eds.end(); ed++){
-         if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-           nhit += 1;
-           break;
-         }
+	   ed != putative[1]->eds.end(); ed++){
+	 if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
+	   nhit += 1;
+	   break;
+	 }
        }
 
        if(nhit == 2){
@@ -4020,8 +3146,8 @@ void gatherTrees(vector<vector<node *> > & globalTrees){
 	vector<node *> tree;
 	getTree(globalGraph.nodes[it->first][itt->first], tree);
 	for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-          lookup[(*ir)->seqid][(*ir)->pos] = 1;
-        }
+	  lookup[(*ir)->seqid][(*ir)->pos] = 1;
+	}
 	globalTrees.push_back(tree);
       }
     }
@@ -4345,14 +3471,14 @@ void gatherBamStats(string & targetfile){
     readPileUp allPileUp;
     while(bamR.GetNextAlignment(al)){
       if(!al.IsMapped() || ! al.IsProperPair()){
-        continue;
+	continue;
       }
       string any;
       if(al.GetTag("XA", any)){
-        continue;
+	continue;
       }
       if(al.GetTag(  globalOpts.saT, any)){
-        continue;
+	continue;
       }
       if(al.IsDuplicate()){
 	continue;
@@ -4365,36 +3491,36 @@ void gatherBamStats(string & targetfile){
       // summing base qualities (quals is the lookup)
 
       for(unsigned int q = 0 ; q < squals.size(); q++){
-        qsum += quals[ int(squals[q]) ];
-        qnum += 1;
+	qsum += quals[ int(squals[q]) ];
+	qnum += 1;
 
-        if(quals[int(squals[q])] < 0){
-          omp_set_lock(&lock);
-          cerr << endl;
-          cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
-          cerr << "INFO : offending qual string   : " << squals << endl;
-          cerr << "INFO : offending qual char     : " << squals[q] << endl;
-          cerr << "INFO : -1 qual ; qual ; qual +1: " << quals[ int(squals[q]) -1 ] << " " << quals[ int(squals[q])  ] << " " << quals[ int(squals[q]) +1 ] << endl;
-          cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
-          cerr << endl;
-          omp_unset_lock(&lock);
-          exit(1);
-        }
+	if(quals[int(squals[q])] < 0){
+	  omp_set_lock(&lock);
+	  cerr << endl;
+	  cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
+	  cerr << "INFO : offending qual string   : " << squals << endl;
+	  cerr << "INFO : offending qual char     : " << squals[q] << endl;
+	  cerr << "INFO : -1 qual ; qual ; qual +1: " << quals[ int(squals[q]) -1 ] << " " << quals[ int(squals[q])  ] << " " << quals[ int(squals[q]) +1 ] << endl;
+	  cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
+	  cerr << endl;
+	  omp_unset_lock(&lock);
+	  exit(1);
+	}
       }
 
       if(al.Position > cp){
-        allPileUp.purgePast(&cp);
-        cp = al.GetEndPosition(false,true);
-        nReads.push_back(allPileUp.currentData.size());
+	allPileUp.purgePast(&cp);
+	cp = al.GetEndPosition(false,true);
+	nReads.push_back(allPileUp.currentData.size());
       }
       if(al.IsMapped()
-         && al.IsMateMapped()
-         && abs(double(al.InsertSize)) < 10000
-         && al.RefID == al.MateRefID
-         ){
-        allPileUp.processAlignment(al);
-        alIns.push_back(abs(double(al.InsertSize)));
-        n++;
+	 && al.IsMateMapped()
+	 && abs(double(al.InsertSize)) < 10000
+	 && al.RefID == al.MateRefID
+	 ){
+	allPileUp.processAlignment(al);
+	alIns.push_back(abs(double(al.InsertSize)));
+	n++;
       }
     }
   }
@@ -4783,12 +3909,8 @@ int main( int argc, char** argv)
  processAlleles(allBreakpoints, sequences);
 
  if(globalOpts.skipGeno){
-   if(globalOpts.vcf){
-     printVCF(allBreakpoints, sequences);
-   }
-   else{
-     printBEDPE(allBreakpoints, sequences);
-   }
+
+   printVCF(allBreakpoints, sequences);
    cerr << "INFO: Skipping genotyping: -k set" << endl;
    cerr << "INFO: WHAM finished normally, goodbye! " << endl;
    return 0;
@@ -4829,12 +3951,9 @@ int main( int argc, char** argv)
    }
  }
 
- if(globalOpts.vcf){
-   printVCF(allBreakpoints, sequences);
- }
- else{
-   printBEDPE(allBreakpoints, sequences);
- }
+
+ printVCF(allBreakpoints, sequences);
+
 
  if(!globalOpts.graphOut.empty()){
    dump(globalTrees);
