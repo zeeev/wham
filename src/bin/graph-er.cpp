@@ -95,8 +95,6 @@ map<string, readPair*> globalPairStore;
 // seqid->int index
 map<string, int> inverse_lookup;
 
-
-
 // options
 
 static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
@@ -971,18 +969,15 @@ inline bool isPointIn(readPair * rp){
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : left position, right position, local graph
-
  Function does   : adds nodes or builds connections
-
  Function returns: void
-
 */
 
-void addIndelToGraph(int refIDL, 
+void addIndelToGraph(int refIDL,
 		     int refIDR,
-		     int l, 
-		     int r, 
-		     char s, 
+		     int l,
+		     int r,
+		     char s,
 		     string & SM){
 
   omp_set_lock(&glock);
@@ -1038,7 +1033,7 @@ void addIndelToGraph(int refIDL,
    ed    = new edge;
 
    nodeR->sm[SM] = 1;
-  
+
    nodeR->collapsed = false;
 
    nodeR->beginSupport = 0;
@@ -1057,7 +1052,7 @@ void addIndelToGraph(int refIDL,
    globalGraph.nodes[refIDL][l]->eds.push_back(ed);
    globalGraph.nodes[refIDR][r] = nodeR;
 
-   if(globalGraph.nodes[refIDL][l]->sm.find(SM) == 
+   if(globalGraph.nodes[refIDL][l]->sm.find(SM) ==
       globalGraph.nodes[refIDL][l]->sm.end()){
 
      globalGraph.nodes[refIDL][l]->sm[SM] =  1;
@@ -1172,6 +1167,11 @@ bool indelToGraph(BamAlignment & ba, string & SM){
   for(vector<CigarOp>::iterator ci = ba.CigarData.begin();
       ci != ba.CigarData.end(); ci++){
 
+      // 10bp seems reasonable
+      if(ci->Length < 10){
+          continue;
+      }
+
     switch(ci->Type){
     case 'M':
       {
@@ -1239,6 +1239,8 @@ inline bool pairFailed(readPair * rp){
       return true;
     }
   }
+
+
   return false;
 }
 
@@ -1252,10 +1254,6 @@ inline bool pairFailed(readPair * rp){
 void splitToGraph(BamAlignment  & al,
 		  vector<saTag> & sa,
 		  string & SM       ){
-
-  if(!al.IsMapped()){
-    return;
-  }
 
   // too many chimeras ... for me
   if(sa.size() > 1){
@@ -1281,7 +1279,6 @@ void splitToGraph(BamAlignment  & al,
      || (! sa[0].strand && al.IsReverseStrand() )){
     support = 'V';
   }
-
 
   int start = al.Position    ;
   int end   = sa.front().pos ;
@@ -1318,7 +1315,7 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
   if(! rp->al1.IsMapped() || ! rp->al2.IsMapped() ){
     return false;
   }
-  
+
   //
   if(rp->al1.RefID != rp->al2.RefID){
     return false;
@@ -1329,7 +1326,7 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
      && ! IsLongClip(rp->al2.CigarData, 1)){
     return false;
   }
-  
+
   int start = rp->al1.Position;
   int end   = rp->al2.Position;
 
@@ -1351,7 +1348,7 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
       start = rp->al2.GetEndPosition(false,true);
     }
   }
-  
+
   addIndelToGraph(rp->al2.RefID, rp->al2.RefID, start, end, supportType, SM);
 
   return true;
@@ -1365,9 +1362,9 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
 
 */
 
-void processPair(readPair * rp, 
-		 double   * low, 
-		 double * high, 
+void processPair(readPair * rp,
+		 double   * low,
+		 double * high,
 		 string & SM){
 
   string sa1;
@@ -1379,19 +1376,32 @@ void processPair(readPair * rp,
     return;
   }
 
+ /* filter cross seqid pairs by NM */
+  if(rp->al1.RefID != rp->al2.RefID){
+    string t1, t2;
+
+      if(rp->al1.GetTag("NM", t1) &&
+         rp->al2.GetTag("NM", t1)){
+
+          if(atoi(t1.c_str()) > 3 || atoi(t2.c_str()) > 3){
+              return;
+          }
+      }
+  }
+
   indelToGraph(rp->al1, SM);
   indelToGraph(rp->al2, SM);
 
   if( ! IsLongClip(rp->al1.CigarData, 5)
       && ! IsLongClip(rp->al2.CigarData, 5)){
-    return;
+      return;
   }
 
   if((rp->al1.IsReverseStrand() && rp->al2.IsReverseStrand())
      || (! rp->al1.IsReverseStrand() && ! rp->al2.IsReverseStrand()) ){
     sameStrand = true;
   }
-  
+
   if( abs(rp->al1.InsertSize) > *high){
     if(sameStrand){
       deviantInsertSize(rp, 'M', SM);
@@ -1439,26 +1449,20 @@ bool runRegion(string filename,
 	       vector< RefData > seqNames,
 	       string & SM){
 
-  if(seqidIndex > 4){
+  if(seqidIndex > 3){
     return true;
   }
 
 #ifdef DEBUG
-  cerr << "running region: " << seqidIndex 
+  cerr << "running region: " << seqidIndex
        << ":" << start << "-" << end << endl;
 #endif
-  
-  // local graph;
-  graph localGraph;
+
   // local read pair store
   map<string, readPair *>pairStoreLocal;
 
-  double high = insertDists.mus[filename] + (2.5 * insertDists.sds[filename]);
-  double low  = insertDists.mus[filename] - (2.5 * insertDists.sds[filename]);
-
-  if(low < 0){
-    low = 100;
-  }
+  double high = insertDists.upr[filename] ;
+  double low  = insertDists.low[filename] ;
 
   BamReader br;
   br.Open(filename);
@@ -1675,7 +1679,7 @@ void loadBam(string & bamFile){
   else{
     seqidIndex = 0;
 
-    for(vector< RefData >::iterator sit = sequences.begin(); 
+    for(vector< RefData >::iterator sit = sequences.begin();
 	sit != sequences.end(); sit++){
       int start = 0;
 
@@ -1829,7 +1833,7 @@ int parseOpts(int argc, char** argv)
 	vector<string> seqidsToInclude = split(optarg, ",");
 	for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
 	  globalOpts.toInclude[seqidsToInclude[i]] = 1;
-	  cerr << "INFO: WHAM will only sample seqid: " << seqidsToInclude[i] << endl;
+	  cerr << "INFO: WHAM will analyze seqid: " << seqidsToInclude[i] << endl;
 	}
 	break;
       }
@@ -2075,952 +2079,75 @@ bool detectInsertion(vector<node *> tree, breakpoints * bp){
 }
 
 
+void centrality(vector<node*> & tree,
+                vector<breakpoints *> & allBreakpoints,
+                map < int , map <int, node *> > & hb){
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : two node pointer
-
- Function does   : finds if nodes are directly connected
-
- Function returns: bool
-
-*/
-
-bool connectedNode(node * left, node * right){
-
-  for(vector<edge *>::iterator l = left->eds.begin(); l != left->eds.end(); l++){
-
-    if((*l)->L->pos == right->pos || (*l)->R->pos == right->pos){
-      return true;
+    if(tree.size() < 2){
+        return;
     }
-  }
-  return false;
-}
 
+    int lmax = 0;
+    int rmax = 0;
+    int tmax = 0;
+    int edsn = 0;
 
-/*
-  Function input  : a vector of edge pointers
+    node * finalL = NULL;
+    node * finalR = NULL;
 
-  Function does   : does a tree terversal and joins nodes
+    for(vector<node *>::iterator lit = tree.begin();
+        lit != tree.end(); lit++){
 
-  Function returns: NA
+      for(vector<node *>::iterator rit = tree.begin();
+          rit != tree.end(); rit++){
 
-*/
+          if(*lit == *rit){
+              continue;
+          }
 
+          if(!connectedNode(*lit, *rit)){
+              continue;
+          }
+          int lmaxTmp = getSupport(*lit);
+          int rmaxTmp = getSupport(*rit);
+          int tmaxTmp = lmaxTmp + rmaxTmp;
+          int edsnTmp = ((*lit)->eds.size() + (*rit)->eds.size());
 
-bool findEdge(vector<edge *> & eds, edge ** e, int pos){
-
-  //  cerr << "finding edge" << endl;
-
-  for(vector<edge *>::iterator it = eds.begin(); it != eds.end(); it++){
-    if((*it)->L->pos == pos || (*it)->R->pos == pos ){
-      (*e) = (*it);
-      // cerr << "found edge: " << (*e)->L->pos  << endl;
-      return true;
-    }
-  }
-
-  return false;
-}
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
-  Function input  : a vector of node pointers, and a postion
-
-  Function does   : removes edges that contain a position
-
-  Function returns: NA
-
-*/
-
-
-void removeEdges(vector<node *> & tree, int pos){
-
-  //  cerr << "removing edges" << endl;
-
-  for(vector<node *>::iterator rm = tree.begin(); rm != tree.end(); rm++){
-
-    vector<edge *> tmp;
-
-    for(vector<edge *>::iterator e = (*rm)->eds.begin(); e != (*rm)->eds.end(); e++){
-      if( (*e)->L->pos != pos && (*e)->R->pos != pos  ){
-	tmp.push_back((*e));
-      }
-      else{
-	// delete the edge
-
-      }
-    }
-    (*rm)->eds.clear();
-    (*rm)->eds.insert((*rm)->eds.end(), tmp.begin(), tmp.end());
-  }
-}
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
-  Function input  : a vector of node pointers
-
-  Function does   : does a tree terversal and joins nodes
-
-  Function returns: NA
-
-*/
-
-void joinNodes(node * L, node * R, vector<node *> & tree){
-
-
-  // quantifying which node has more support
-
-  int lSupport = 0;
-  int rSupport = 0;
-
-  for(vector<edge *>::iterator le = L->eds.begin(); le != L->eds.end(); le++){
-    lSupport += (*le)->support['D'] + (*le)->support['S'] + (*le)->support['I']
-      +  (*le)->support['H'] +  (*le)->support['L'] + (*le)->support['X']
-      + (*le)->support['M'] + (*le)->support['R'] + (*le)->support['V'] ;
-  }
-  for(vector<edge *>::iterator re = R->eds.begin(); re != R->eds.end(); re++){
-    lSupport += (*re)->support['D'] + (*re)->support['S'] + (*re)->support['I']
-      +  (*re)->support['H'] +  (*re)->support['L'] +  (*re)->support['X']
-      +  (*re)->support['M'] +  (*re)->support['R'] +  (*re)->support['V'] ;
-  }
-
-  if(lSupport <= rSupport){
-
-    L->collapsed = true;
-
-
-    for(map<string,int>::iterator iz = L->sm.begin(); iz != L->sm.end(); iz++){
-
-      if(R->sm.find(iz->first) != R->sm.end()){
-	R->sm[iz->first] += iz->second;
-      }
-      else{
-	R->sm[iz->first] = iz->second;
+          if(tmaxTmp > tmax){
+              finalL  = *lit;
+              finalR  = *rit;
+              lmax    = lmaxTmp;
+              rmax    = rmaxTmp;
+              tmax    = tmaxTmp;
+              edsn    = edsnTmp;
+          }
       }
     }
 
-    for(vector<edge *>::iterator lc =  L->eds.begin(); lc != L->eds.end(); lc++){
+    double delCount = 0;
+    double insCount = 0;
+    double dupCount = 0;
 
+    for(std::vector<edge *>::iterator ed = L->eds.begin() ;
+        ed != L->eds.end(); ed++){
 
-      edge * e;
-
-      int otherP = (*lc)->L->pos;
-
-      if(L->pos  == otherP){
-	otherP = (*lc)->R->pos;
-      }
-      if(findEdge(R->eds, &e,  otherP)){
-
-	e->support['I'] += (*lc)->support['I'];
-	e->support['D'] += (*lc)->support['D'];
-	e->support['S'] += (*lc)->support['S'];
-	e->support['H'] += (*lc)->support['H'];
-	e->support['L'] += (*lc)->support['L'];
-	e->support['R'] += (*lc)->support['R'];
-	e->support['M'] += (*lc)->support['M'];
-	e->support['V'] += (*lc)->support['V'];
-	e->support['X'] += (*lc)->support['X'];
-      }
-      else{
-	if((*lc)->L->pos == otherP){
-	  (*lc)->R = R;
-	}
-	else{
-	  (*lc)->L = R;
-	}
-
-	R->eds.push_back(*lc);
-      }
-
-    }
-    removeEdges(tree, L->pos);
-
-  }
-  else{
-
-    //    cerr << "Joining right" << endl;
-    R->collapsed = true;
-
-    for(map<string,int>::iterator iz = R->sm.begin(); iz != R->sm.end(); iz++){
-
-      if(L->sm.find(iz->first) != L->sm.end()){
-	L->sm[iz->first] += iz->second;
-      }
-      else{
-	L->sm[iz->first] = iz->second;
-      }
-    }
-
-
-
-    for(vector<edge *>::iterator lc =  R->eds.begin(); lc != R->eds.end(); lc++){
-
-      edge * e;
-
-      int otherP = (*lc)->L->pos;
-
-      if(R->pos  == otherP){
-	otherP = (*lc)->R->pos;
-      }
-      if(findEdge(L->eds, &e,  otherP)){
-	e->support['I'] += (*lc)->support['I'];
-	e->support['D'] += (*lc)->support['D'];
-	e->support['S'] += (*lc)->support['S'];
-	e->support['H'] += (*lc)->support['H'];
-	e->support['L'] += (*lc)->support['L'];
-	e->support['M'] += (*lc)->support['M'];
-	e->support['X'] += (*lc)->support['X'];
-	e->support['V'] += (*lc)->support['V'];
-      }
-      else{
-	if((*lc)->L->pos == otherP){
-	  (*lc)->R = L;
-	}
-	else{
-	  (*lc)->L = L;
-	}
-	L->eds.push_back(*lc);
-
-      }
-    }
-    removeEdges(tree, R->pos);
-  }
-
-}
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
-  Function input  : a vector of node pointers
-  Function does   : does a tree terversal and joins nodes
-  Function returns: NA
-*/
-
-void collapseTree(vector<node *> & tree){
-
-  //  cerr << "Collapsing" << endl;
-
-  vector<node *> tmp;
-
-  for(vector<node *>::iterator tr = tree.begin(); tr != tree.end(); tr++){
-    if((*tr)->collapsed){
-      continue;
-    }
-    for(vector<node *>::iterator tt = tree.begin(); tt != tree.end(); tt++){
-      if((*tt)->collapsed){
-	continue;
-      }
-      if( (*tr)->pos == (*tt)->pos ){
-	continue;
-      }
-
-      if(abs( (*tr)->pos - (*tt)->pos ) < 20 
-	 && ! connectedNode((*tr), (*tt))
-	 && ( (*tr)->seqid == (*tt)->seqid ) ){
-	joinNodes((*tr), (*tt), tree);
-      }
-    }
-  }
-
-  for(vector<node *>::iterator tr = tree.begin(); tr != tree.end(); tr++){
-    if((*tr)->collapsed){
-    }
-    else{
-      tmp.push_back((*tr));
-    }
-  }
-
-  tree.clear();
-  tree.insert(tree.end(), tmp.begin(), tmp.end());
-
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of node pointers
- Function does   : tries to resolve an inversion
- Function returns: NA
-
-*/
-
-bool detectInversion(vector<node *> & tree, breakpoints * bp){
-
-  vector <node *> putative;
-
-  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
-
-
-    int tooFar           = 0;
-    int splitR           = 0;
-    int del              = 0;
-
-
-    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-
-      tooFar += (*es)->support['M'] + (*es)->support['H'];
-      splitR += (*es)->support['V'];
-      del    += (*es)->support['D'];
+        delCount += (*ed)->support[H];
+        delCount += (*ed)->support[D];
+        delCount += (*ed)->support[S];
+        insCount += (*ed)->support[I];
 
     }
 
-    if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
-      putative.push_back((*t));
+
+    if(tmax > 3){
+        std::cout << "gp: " << finalL->seqid
+                  << " "    << finalL->pos
+                  << " "    << finalR->seqid
+                  << " "    << finalR->pos
+                  << std::endl;
+
+        std::cout << dotviz(tree) << std::endl;
     }
-  }
-
-  if(putative.size() == 2){
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos ;
-
-    int lhit = 0 ;
-    int rhit = 0;
-
-    int totalS = 0;
-
-    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-	ed != putative.front()->eds.end(); ed++){
-      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-	lhit = 1;
-	totalS += (*ed)->support['L'];
-	totalS += (*ed)->support['H'];
-	totalS += (*ed)->support['S'];
-	totalS += (*ed)->support['I'];
-	totalS += (*ed)->support['D'];
-	totalS += (*ed)->support['V'];
-	totalS += (*ed)->support['M'];
-	totalS += (*ed)->support['R'];
-	totalS += (*ed)->support['X'];
-	break;
-      }
-    }
-
-    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-	ed != putative.back()->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-	rhit = 1;
-	break;
-      }
-    }
-
-    if((rPos - lPos) > 1500000 ){
-      if(totalS < 5){
-	return  false;
-      }
-    }
-
-    if(lhit == 1 && rhit == 1){
-      bp->two           = true                   ;
-      bp->type          = 'V'                    ;
-      bp->merged        =  0                     ;
-      bp->seqidIndexL   = putative.front()->seqid;
-      bp->seqidIndexR   = putative.front()->seqid;
-      bp->five          = lPos                   ;
-      bp->three         = rPos                   ;
-      bp->svlen         = rPos - lPos            ;
-      bp->totalSupport  = totalS                 ;
-      for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	    ; iz != putative.front()->sm.end(); iz++){
-	bp->sml.push_back(iz->first);
-      }
-      for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	    ; iz != putative.back()->sm.end(); iz++){
-	bp->smr.push_back(iz->first);
-      }
-
-      bp->supports.push_back(getSupport(putative.front()));
-      bp->supports.push_back(getSupport(putative.back()));
-      return true;
-    }
-    else{
-      cerr << "no linked putative breakpoints" << endl;
-    }
-  }
-  else if(putative.size() > 2){
-
-    vector <node *> putativeTwo;
-
-
-    sort(putative.begin(), putative.end(), sortNodesBySupport);
-
-    while(putative.size() > 2){
-      putative.pop_back();
-    }
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos;
-
-    // cerr << lPos << " " << rPos << endl;
-
-    int nhit   = 0;
-    int totalS = 0;
-
-    for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
-	ed != putative[0]->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-
-	totalS += (*ed)->support['L'];
-	totalS += (*ed)->support['H'];
-	totalS += (*ed)->support['S'];
-	totalS += (*ed)->support['I'];
-	totalS += (*ed)->support['D'];
-	totalS += (*ed)->support['V'];
-	totalS += (*ed)->support['M'];
-	totalS += (*ed)->support['R'];
-	totalS += (*ed)->support['X'];
-
-	nhit += 1;
-	break;
-      }
-    }
-
-    for(vector<edge *>::iterator ed = putative[1]->eds.begin() ;
-	ed != putative[1]->eds.end(); ed++){
-      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-	nhit += 1;
-	break;
-      }
-    }
-
-    if(nhit == 2){
-
-      if((rPos - lPos) > 1500000 ){
-	if(totalS < 5){
-	  return  false;
-	}
-      }
-      bp->two           = true                   ;
-      bp->type          = 'V'                    ;
-      bp->merged        =  0                     ;
-      bp->seqidIndexL   = putative.front()->seqid;
-      bp->seqidIndexR   = putative.front()->seqid;
-      bp->five          = lPos                   ;
-      bp->three         = rPos                   ;
-      bp->svlen         = rPos - lPos            ;
-      bp->totalSupport  = totalS                 ;
-
-      for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	    ; iz != putative.front()->sm.end(); iz++){
-	bp->sml.push_back(iz->first);
-      }
-      for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	    ; iz != putative.back()->sm.end(); iz++){
-	bp->smr.push_back(iz->first);
-      }
-
-      bp->supports.push_back(getSupport(putative.front()));
-      bp->supports.push_back(getSupport(putative.back()));
-      return true;
-    }
-  }
-  return false;
-}
-
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of node pointers
-
- Function does   : tries to resolve a duplication
-
- Function returns: NA
-
-*/
-
-bool detectDuplication(vector<node *> tree, breakpoints * bp){
-
-  vector <node *> putative;
-
-  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
-
-    int tooFar   = 0;
-    int tooClose = 0;
-    int FlippedS = 0;
-
-    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-
-      tooFar   += (*es)->support['H'];
-      tooClose += (*es)->support['L'];
-      FlippedS += (*es)->support['X'];
-
-    }
-    if( (tooFar > 0 && FlippedS  > 1) || FlippedS  > 1 || (tooClose  > 0 && FlippedS  > 1) ){
-      putative.push_back((*t));
-    }
-  }
-  if(putative.size() == 2){
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos ;
-
-    int lhit = 0 ; int rhit = 0;
-
-    int totalS = 0;
-
-    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-	ed != putative.front()->eds.end(); ed++){
-      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-	lhit = 1;
-	totalS += (*ed)->support['L'];
-	totalS += (*ed)->support['H'];
-	totalS += (*ed)->support['S'];
-	totalS += (*ed)->support['I'];
-	totalS += (*ed)->support['D'];
-	totalS += (*ed)->support['V'];
-	totalS += (*ed)->support['M'];
-	totalS += (*ed)->support['R'];
-	totalS += (*ed)->support['X'];
-
-	break;
-      }
-    }
-
-    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-	ed != putative.back()->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-	rhit = 1;
-	break;
-      }
-    }
-
-    if((rPos - lPos) > 1500000 ){
-      if(totalS < 5){
-	return  false;
-      }
-    }
-
-    if(lhit == 1 && rhit == 1){
-      bp->two         = true                   ;
-      bp->type        = 'U'                    ;
-      bp->merged      = 0                      ;
-      bp->seqidIndexL = putative.front()->seqid;
-      bp->seqidIndexR = putative.front()->seqid;
-      bp->five        = lPos                   ;
-      bp->three       = rPos                   ;
-      bp->svlen       = rPos - lPos            ;
-      bp->totalSupport  = totalS               ;
-
-      for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	    ; iz != putative.front()->sm.end(); iz++){
-	bp->sml.push_back(iz->first);
-      }
-      for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	    ; iz != putative.back()->sm.end(); iz++){
-	bp->smr.push_back(iz->first);
-      }
-
-      bp->supports.push_back(getSupport(putative.front()));
-      bp->supports.push_back(getSupport(putative.back()));
-
-      return true;
-    }
-    else{
-      cerr << "no linked putative breakpoints" << endl;
-    }
-
-  }
-  else if(putative.size() > 2){
-
-    vector <node *> putativeTwo;
-
-
-    sort(putative.begin(), putative.end(), sortNodesBySupport);
-
-    while(putative.size() > 2){
-      putative.pop_back();
-    }
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos;
-
-
-    int nhit   = 0;
-    int totalS = 0;
-
-    for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
-	ed != putative[0]->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-
-	totalS += (*ed)->support['L'];
-	totalS += (*ed)->support['H'];
-	totalS += (*ed)->support['S'];
-	totalS += (*ed)->support['I'];
-	totalS += (*ed)->support['D'];
-	totalS += (*ed)->support['V'];
-	totalS += (*ed)->support['M'];
-	totalS += (*ed)->support['R'];
-	totalS += (*ed)->support['X'];
-
-
-	nhit += 1;
-	break;
-      }
-    }
-
-    if(nhit == 2){
-      if((rPos - lPos) > 1500000 ){
-	if(totalS < 5){
-	  return  false;
-	}
-      }
-
-      bp->two         = true                   ;
-      bp->type        = 'U'                    ;
-      bp->merged      = 0                      ;
-      bp->seqidIndexL = putative.front()->seqid;
-      bp->seqidIndexR = putative.front()->seqid;
-      bp->five        = lPos                   ;
-      bp->three       = rPos                   ;
-      bp->svlen       = rPos - lPos            ;
-      bp->totalSupport  = totalS               ;
-
-      for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	    ; iz != putative.front()->sm.end(); iz++){
-	bp->sml.push_back(iz->first);
-      }
-      for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	    ; iz != putative.back()->sm.end(); iz++){
-	bp->smr.push_back(iz->first);
-      }
-
-      bp->supports.push_back(getSupport(putative.front()));
-      bp->supports.push_back(getSupport(putative.back()));
-      return true;
-    }
-
-  }
-  else{
-    // leaf node
-  }
-
-  return false;
-}
-
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of node pointers
-
- Function does   : tries to resolve a deletion with no links
-
- Function returns: NA
-
-*/
-
-bool detectHalfDeletion(vector<node *> & tree, breakpoints * bp, node ** n){
-
-  vector <node *> putative;
-  vector <int>    support ;
-
-  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
-
-    int tooFar  = 0;
-    int splitR  = 0;
-    int del     = 0;
-
-    for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-      tooFar += (*es)->support['H'];
-      splitR += (*es)->support['S'];
-      del    += (*es)->support['D'];
-    }
-
-
-    if( tooFar > 2 || (splitR > 0 && tooFar > 0)){
-      putative.push_back((*t));
-      support.push_back(tooFar);
-    }
-  }
-
-
-
-  if(putative.size() >= 1){
-
-    int max   = support.front();
-    int index = 0;
-    int maxi  = 0;
-
-    for(vector<int>::iterator it = support.begin();
-	it != support.end();  it++){
-
-      if(*it > max){
-	max = *it;
-	maxi = index;
-      }
-      index+=1;
-    }
-
-    bp->seqidIndexL = putative[maxi]->seqid;
-    bp->five        = putative[maxi]->pos  ;
-    *n = putative[maxi];
-
-    return true;
-  }
-
-  return false;
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of node pointers
-
- Function does   : tries to resolve a deletion
-
- Function returns: NA
-
-*/
-
-
-bool detectDeletion(vector<node *> tree, breakpoints * bp){
-
-  vector <node *> putative;
-
-  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
-
-      int tooFar  = 0;
-      int splitR  = 0;
-      int del     = 0;
-
-      for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-	tooFar += (*es)->support['H'];
-	splitR += (*es)->support['S'];
-	del    += (*es)->support['D'];
-      }
-      if( (tooFar > 0 && splitR > 1) || (del > 1 && splitR > 0) || splitR > 1){
-	putative.push_back((*t));
-      }
-  }
-
-  if(putative.size() == 2){
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos ;
-
-    int lhit = 0 ; int rhit = 0;
-
-    int totalS = 0;
-
-    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-	ed != putative.front()->eds.end(); ed++){
-      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-	lhit = 1;
-	totalS += (*ed)->support['L'];
-	totalS += (*ed)->support['H'];
-	totalS += (*ed)->support['S'];
-	totalS += (*ed)->support['I'];
-	totalS += (*ed)->support['D'];
-	totalS += (*ed)->support['V'];
-	totalS += (*ed)->support['M'];
-	totalS += (*ed)->support['R'];
-	totalS += (*ed)->support['X'];
-
-	break;
-      }
-    }
-
-    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-	ed != putative.back()->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-	rhit = 1;
-	break;
-      }
-    }
-
-    if((rPos - lPos) > 1500000 ){
-      if(totalS < 5){
-	return  false;
-      }
-    }
-
-
-    if(lhit == 1 && rhit == 1){
-      bp->two         = true                   ;
-      bp->type        = 'D'                    ;
-      bp->seqidIndexL = putative.front()->seqid;
-      bp->seqidIndexR = putative.front()->seqid;
-      bp->merged      = 0                      ;
-      bp->five        = lPos + 1               ;  // always starts after last node
-      bp->three       = rPos - 1               ;
-      bp->svlen       = rPos - lPos            ;
-      bp->totalSupport = totalS                ;
-      for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	    ; iz != putative.front()->sm.end(); iz++){
-	bp->sml.push_back(iz->first);
-      }
-      for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	    ; iz != putative.back()->sm.end(); iz++){
-	bp->smr.push_back(iz->first);
-      }
-
-      bp->supports.push_back(getSupport(putative.front()));
-      bp->supports.push_back(getSupport(putative.back()));
-      return true;
-    }
-    else{
-      cerr << "no linked putative breakpoints" << endl;
-    }
-
-  }
-  else if(putative.size() > 2){
-
-    vector <node *> putativeTwo;
-
-       sort(putative.begin(), putative.end(), sortNodesBySupport);
-
-       while(putative.size() > 2){
-	 putative.pop_back();
-       }
-
-       sort(putative.begin(), putative.end(), sortNodesByPos);
-
-       int lPos = putative.front()->pos;
-       int rPos = putative.back()->pos;
-
-       int nhit   = 0;
-       int totalS = 0;
-
-       for(vector<edge *>::iterator ed = putative[0]->eds.begin() ;
-	   ed != putative[0]->eds.end(); ed++){
-	 if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-
-	   totalS += (*ed)->support['L'];
-	   totalS += (*ed)->support['H'];
-	   totalS += (*ed)->support['S'];
-	   totalS += (*ed)->support['I'];
-	   totalS += (*ed)->support['D'];
-	   totalS += (*ed)->support['V'];
-	   totalS += (*ed)->support['M'];
-	   totalS += (*ed)->support['R'];
-	   totalS += (*ed)->support['X'];
-
-
-	   nhit += 1;
-	   break;
-	 }
-       }
-
-       for(vector<edge *>::iterator ed = putative[1]->eds.begin() ;
-	   ed != putative[1]->eds.end(); ed++){
-	 if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-	   nhit += 1;
-	   break;
-	 }
-       }
-
-       if(nhit == 2){
-
-	 if((rPos - lPos) > 1500000 ){
-	   if(totalS < 5){
-	     return  false;
-	   }
-	 }
-	 bp->two         = true                   ;
-	 bp->type        = 'D'                    ;
-	 bp->seqidIndexL = putative.front()->seqid;
-	 bp->seqidIndexR = putative.front()->seqid;
-	 bp->merged      = 0                      ;
-	 bp->five        = lPos + 1               ;  // always starts after last node
-	 bp->three       = rPos - 1               ;
-	 bp->svlen       = rPos - lPos            ;
-	 bp->totalSupport = totalS                ;
-	 for(map<string, int>::iterator iz = putative.front()->sm.begin()
-	       ; iz != putative.front()->sm.end(); iz++){
-	   bp->sml.push_back(iz->first);
-	 }
-	 for(map<string, int>::iterator iz = putative.back()->sm.begin()
-	       ; iz != putative.back()->sm.end(); iz++){
-	   bp->smr.push_back(iz->first);
-	 }
-	 bp->supports.push_back(getSupport(putative.front()));
-	 bp->supports.push_back(getSupport(putative.back()));
-	 return true;
-
-
-       }
-
-
-  }
-  else{
-    // leaf node
-  }
-
-  return false;
-}
-
-void callBreaks(vector<node *> & tree,
-		vector<breakpoints *> & allBreakpoints,
-		map < int , map <int, node *> > & hb){
-
-  collapseTree(tree);
-
-  breakpoints * bp;
-
-  node * nr;
-
-  bp = new breakpoints;
-  bp->fail      = false;
-  bp->two       = false;
-  bp->refined   = 0;
-  bp->lalt      = 0;
-  bp->lref      = 0;
-  bp->collapsed = 0;
-
-  bp->posCIL = -10;
-  bp->posCIH =  10;
-  bp->endCIL = -10;
-  bp->endCIH =  10;
-
-  char hex[8 + 1];
-  for(int i = 0; i < 8; i++) {
-    sprintf(hex + i, "%x", rand() % 16);
-  }
-
-  stringstream xx ;
-  xx << hex;
-  bp->id = xx.str();
-
-  if(detectDeletion(tree, bp)){
-    omp_set_lock(&lock);
-    allBreakpoints.push_back(bp);
-    omp_unset_lock(&lock);
-  }
-  else if(detectDuplication(tree, bp)){
-    omp_set_lock(&lock);
-    allBreakpoints.push_back(bp);
-    omp_unset_lock(&lock);
-  }
-  else if(detectInversion(tree, bp)){
-    omp_set_lock(&lock);
-    allBreakpoints.push_back(bp);
-    omp_unset_lock(&lock);
-  }
-  else if(detectHalfDeletion(tree, bp, &nr)){
-    omp_set_lock(&lock);
-    hb[bp->seqidIndexL][bp->five] = nr;
-    delete bp;
-    omp_unset_lock(&lock);
-  }
-  else{
-    delete bp;
-  }
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -3448,6 +2575,18 @@ void gatherBamStats(string & targetfile){
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
 
+ insertDists.low[ targetfile ] = insertDists.mus[targetfile]
+   - (2.5*insertDists.sds[targetfile]);
+
+ if(insertDists.low[ targetfile ] < 0 ){
+   insertDists.low[ targetfile ] = 0;
+ }
+
+
+ insertDists.upr[ targetfile ] = insertDists.mus[targetfile]
+   + (2.5*insertDists.sds[targetfile]);
+
+
  stringstream whereTo;
 
  whereTo << "INFO: for file:" << targetfile << endl
@@ -3456,11 +2595,10 @@ void gatherBamStats(string & targetfile){
       << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
       << "      " << targetfile << ": median insert length. " << median                      << endl
       << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
-      << "      " << targetfile << ": lower insert length . " << insertDists.mus[targetfile] - (2.5*insertDists.sds[targetfile])   << endl
-      << "      " << targetfile << ": upper insert length . " << insertDists.mus[targetfile] + (2.5*insertDists.sds[targetfile])   << endl
+      << "      " << targetfile << ": lower insert length . " << insertDists.low[targetfile]   << endl
+      << "      " << targetfile << ": upper insert length . " << insertDists.upr[targetfile]   << endl
       << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << endl
       << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
-
 
 
  if(globalOpts.statsOnly){
@@ -3787,8 +2925,13 @@ int main( int argc, char** argv)
        omp_unset_lock(&glock);
        continue;
      }
-     callBreaks(globalTrees[i], allBreakpoints, delBreak);
+     centrality(globalTrees[i], allBreakpoints, delBreak);
    }
+
+   if(!globalOpts.graphOut.empty()){
+     dump(globalTrees);
+   }
+
 
  cerr << "INFO: Trying to merge deletion breakpoints: "
       << delBreak.size() << endl;

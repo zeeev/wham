@@ -98,8 +98,8 @@ struct graph{
 struct libraryStats{
   std::map<std::string, double> mus ; // mean of insert length for each indvdual across 1e6 reads
   std::map<std::string, double> sds ;  // standard deviation
-  std::map<std::string, double> lq  ;  // 25% of data
-  std::map<std::string, double> up  ;  // 75% of the data
+  std::map<std::string, double> low ;  // 25% of data
+  std::map<std::string, double> upr ;  // 75% of the data
   std::map<std::string, double> swm ;
   std::map<std::string, double> sws ;
   std::map<std::string, double> avgD;
@@ -224,5 +224,255 @@ inline bool isInGraph(int refID, int pos, graph & lc){
   }
   return false;
 }
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : two node pointer
+ Function does   : finds if nodes are directly connected
+ Function returns: bool
+*/
+
+bool connectedNode(node * left, node * right){
+
+  for(std::vector<edge *>::iterator l = left->eds.begin();
+      l != left->eds.end(); l++){
+
+    if(((*l)->L->pos == right->pos
+	|| (*l)->R->pos == right->pos)
+       && (*l)->R->seqid == right->seqid ){
+      return true;
+    }
+  }
+  return false;
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+  Function input  : a vector of edge pointers
+  Function does   : does a tree terversal and joins nodes
+  Function returns: NA
+
+*/
+
+
+bool findEdge(std::vector<edge *> & eds, edge ** e, int pos){
+
+  for(std::vector<edge *>::iterator it = eds.begin(); it != eds.end(); it++){
+    if((*it)->L->pos == pos || (*it)->R->pos == pos ){
+      (*e) = (*it);
+      return true;
+    }
+  }
+  return false;
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+  Function input  : a vector of node pointers, and a postion
+  Function does   : removes edges that contain a position
+  Function returns: NA
+
+*/
+
+
+void removeEdges(std::vector<node *> & tree, int pos){
+
+    for(std::vector<node *>::iterator rm = tree.begin();
+        rm != tree.end(); rm++){
+
+      std::vector<edge *> tmp;
+
+      for(std::vector<edge *>::iterator e = (*rm)->eds.begin();
+        e != (*rm)->eds.end(); e++){
+      if( (*e)->L->pos != pos && (*e)->R->pos != pos  ){
+        tmp.push_back((*e));
+      }
+      else{
+
+      }
+    }
+    (*rm)->eds.clear();
+    (*rm)->eds.insert((*rm)->eds.end(), tmp.begin(), tmp.end());
+  }
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+  Function input  : a vector of node pointers
+  Function does   : does a tree terversal and joins nodes
+  Function returns: NA
+
+*/
+
+void joinNodes(node * L, node * R, std::vector<node *> & tree){
+
+  // quantifying which node has more support
+
+  int lSupport = 0;
+  int rSupport = 0;
+
+  for(std::vector<edge *>::iterator le = L->eds.begin(); le != L->eds.end(); le++){
+    lSupport += (*le)->support['D'] + (*le)->support['S'] + (*le)->support['I']
+      +  (*le)->support['H'] +  (*le)->support['L'] + (*le)->support['X']
+      + (*le)->support['M'] + (*le)->support['R'] + (*le)->support['V'] ;
+  }
+  for(std::vector<edge *>::iterator re = R->eds.begin(); re != R->eds.end(); re++){
+    lSupport += (*re)->support['D'] + (*re)->support['S'] + (*re)->support['I']
+      +  (*re)->support['H'] +  (*re)->support['L'] +  (*re)->support['X']
+      +  (*re)->support['M'] +  (*re)->support['R'] +  (*re)->support['V'] ;
+  }
+
+  if(lSupport <= rSupport){
+
+    L->collapsed = true;
+
+    for(std::map<std::string,int>::iterator iz = L->sm.begin();
+        iz != L->sm.end(); iz++){
+
+      if(R->sm.find(iz->first) != R->sm.end()){
+        R->sm[iz->first] += iz->second;
+      }
+      else{
+        R->sm[iz->first] = iz->second;
+      }
+    }
+
+    for(std::vector<edge *>::iterator lc =  L->eds.begin();
+        lc != L->eds.end(); lc++){
+
+
+      edge * e;
+
+      int otherP = (*lc)->L->pos;
+
+      if(L->pos  == otherP){
+        otherP = (*lc)->R->pos;
+      }
+      if(findEdge(R->eds, &e,  otherP)){
+
+        e->support['I'] += (*lc)->support['I'];
+        e->support['D'] += (*lc)->support['D'];
+        e->support['S'] += (*lc)->support['S'];
+        e->support['H'] += (*lc)->support['H'];
+        e->support['L'] += (*lc)->support['L'];
+        e->support['R'] += (*lc)->support['R'];
+        e->support['M'] += (*lc)->support['M'];
+        e->support['V'] += (*lc)->support['V'];
+        e->support['X'] += (*lc)->support['X'];
+
+      }
+      else{
+        if((*lc)->L->pos == otherP){
+          (*lc)->R = R;
+        }
+        else{
+          (*lc)->L = R;
+        }
+
+        R->eds.push_back(*lc);
+      }
+
+    }
+    removeEdges(tree, L->pos);
+
+  }
+  else{
+
+    //    cerr << "Joining right" << endl;
+    R->collapsed = true;
+
+    for(std::map<std::string,int>::iterator iz = R->sm.begin();
+        iz != R->sm.end(); iz++){
+
+      if(L->sm.find(iz->first) != L->sm.end()){
+        L->sm[iz->first] += iz->second;
+      }
+      else{
+        L->sm[iz->first] = iz->second;
+      }
+    }
+
+    for(std::vector<edge *>::iterator lc =  R->eds.begin();
+        lc != R->eds.end(); lc++){
+
+      edge * e;
+
+      int otherP = (*lc)->L->pos;
+
+      if(R->pos  == otherP){
+        otherP = (*lc)->R->pos;
+      }
+      if(findEdge(L->eds, &e,  otherP)){
+        e->support['I'] += (*lc)->support['I'];
+        e->support['D'] += (*lc)->support['D'];
+        e->support['S'] += (*lc)->support['S'];
+        e->support['H'] += (*lc)->support['H'];
+        e->support['L'] += (*lc)->support['L'];
+        e->support['M'] += (*lc)->support['M'];
+        e->support['X'] += (*lc)->support['X'];
+        e->support['V'] += (*lc)->support['V'];
+      }
+      else{
+        if((*lc)->L->pos == otherP){
+          (*lc)->R = L;
+        }
+        else{
+          (*lc)->L = L;
+        }
+        L->eds.push_back(*lc);
+
+      }
+    }
+    removeEdges(tree, R->pos);
+  }
+
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+  Function input  : a vector of node pointers
+  Function does   : does a tree terversal and joins nodes
+  Function returns: NA
+*/
+
+void collapseTree(std::vector<node *> & tree){
+
+    std::vector<node *> tmp;
+
+    for(std::vector<node *>::iterator tr = tree.begin();
+        tr != tree.end(); tr++){
+        if((*tr)->collapsed){
+            continue;
+        }
+        for(std::vector<node *>::iterator tt = tree.begin();
+        tt != tree.end(); tt++){
+            if((*tt)->collapsed){
+                continue;
+            }
+            if( (*tr)->pos == (*tt)->pos ){
+                continue;
+            }
+
+            if(abs( (*tr)->pos - (*tt)->pos ) < 20
+               && ! connectedNode((*tr), (*tt))
+               && ( (*tr)->seqid == (*tt)->seqid ) ){
+                joinNodes((*tr), (*tt), tree);
+            }
+        }
+    }
+    for(std::vector<node *>::iterator tr = tree.begin();
+        tr != tree.end(); tr++){
+        if((*tr)->collapsed){
+        }
+        else{
+            tmp.push_back((*tr));
+        }
+    }
+    tree.clear();
+    tree.insert(tree.end(), tmp.begin(), tmp.end());
+}
+
+
 
 #endif
