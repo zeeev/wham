@@ -129,6 +129,7 @@ int  getSupport(node * N){
     support += (*ed)->support['M'];
     support += (*ed)->support['R'];
     support += (*ed)->support['X'];
+    support += (*ed)->support['A'];
 
   }
   return support;
@@ -193,16 +194,28 @@ void initEdge(edge * e){
   e->L = NULL;
   e->R = NULL;
 
+  // mate too close
   e->support['L'] = 0;
+  // mate too far
   e->support['H'] = 0;
+  // split read
   e->support['S'] = 0;
-  e->support['I'] = 0;
-  e->support['D'] = 0;
+  // split read different strand (split)
   e->support['V'] = 0;
+  // insertion
+  e->support['I'] = 0;
+  // deletion
+  e->support['D'] = 0;
+  // same strand too far
   e->support['M'] = 0;
+  // same strand too close
   e->support['R'] = 0;
+
+  // everted read pairs
   e->support['X'] = 0;
   e->support['K'] = 0;
+  // same strand
+  e->support['A'] = 0;
 
 }
 
