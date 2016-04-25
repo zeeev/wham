@@ -68,8 +68,6 @@ struct options{
   bool statsOnly                ;
   bool skipGeno                 ;
   bool keepTrying               ;
-
-  bool vcf                      ;
   int MQ                        ;
   int nthreads                  ;
   int lastSeqid                 ;
@@ -94,6 +92,8 @@ libraryStats insertDists;
 map<string, readPair*> globalPairStore;
 // seqid->int index
 map<string, int> inverse_lookup;
+//int->seqid index
+map<int, string> forward_lookup;
 
 // options
 
@@ -103,124 +103,6 @@ static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
 
 omp_lock_t lock;
 omp_lock_t glock;
-
-// read depth cuttoff
-
-uint MAXREADDEPTH = 0;
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : a vector of breakpoint pointers and inverse chr->index
- Function does   : loads an external vcf file for genotyping into the
-           breakpoint vector
- Function returns: bool
-*/
-
-bool loadExternal(vector<breakpoints *> & br ){
-
-  ifstream featureFile (globalOpts.svs.c_str());
-
-  string line;
-
-  if(featureFile.is_open()){
-
-    while(getline(featureFile, line)){
-
-      vector<string> SV   = split(line, "\t");
-
-      if(SV.front()[0] == '#'){
-    continue;
-      }
-
-      vector<string> info = split(SV[7], ";");
-
-      map<string, string> infoDat;
-
-      for(vector<string>::iterator iz = info.begin();
-      iz != info.end(); iz++){
-
-    vector<string> kv = split(*iz, "=");
-
-    infoDat[kv.front()] = kv.back();
-
-      }
-
-
-      if( (infoDat["SVTYPE"].compare("DEL") == 0)
-      || (infoDat["SVTYPE"].compare("DUP") == 0)
-      || (infoDat["SVTYPE"].compare("INV") == 0) ){
-
-    breakpoints * bk = new breakpoints;
-
-    bk->fail = false;
-    bk->two  = true ;
-    bk->type = 'D';
-    bk->refBase = SV[3];
-
-    if((infoDat["SVTYPE"].compare("DUP") == 0)){
-      bk->type = 'U';
-    }
-    if((infoDat["SVTYPE"].compare("INV") == 0)){
-      bk->type = 'V';
-    }
-    if(inverse_lookup.find(SV[0]) == inverse_lookup.end() ){
-      cerr << "FATAL: could not find seqid in inverse lookup: "
-           << SV[0] << endl;
-      exit(1);
-    }
-
-    vector<string> POS   = split(infoDat["POS"], ",");
-    vector<string> SUP   = split(infoDat["SUPPORT"], ",");
-
-    bk->fives            = infoDat["FIVE"];
-    bk->threes           = infoDat["THREE"];
-    bk->seqidIndexL = inverse_lookup[SV[0]];
-    bk->seqidIndexR = inverse_lookup[SV[0]];
-    bk->seqid       = SV[0];
-    bk->merged      = false;
-    bk->refined     = false;
-
-    bk->five        = atoi(POS[0].c_str()) - 1;
-    bk->three       = atoi(POS[1].c_str()) - 1;
-
-    // use ID field if present
-    bk->id         = (SV[2] == "" || SV[2] == ".") ? infoDat["ID"] : SV[2];
-    bk->collapsed  = atoi(infoDat["COLLAPSED"].c_str());
-    bk->lalt       = 0;
-    bk->lref       = 0;
-
-    bk->sml = split(infoDat["LID"], ",");
-    bk->smr = split(infoDat["RID"], ",");
-
-    vector<string> cipos = split(infoDat["CIPOS"], ",");
-    vector<string> ciend = split(infoDat["CIEND"], ",");
-
-    bk->posCIL = atoi(cipos.front().c_str());
-    bk->posCIH = atoi(cipos.back().c_str());
-
-    bk->endCIL = atoi(ciend.front().c_str());
-    bk->endCIH = atoi(ciend.back().c_str());
-
-    bk->supports.push_back(atoi(SUP[0].c_str()));
-    bk->supports.push_back(atoi(SUP[1].c_str()));
-
-    if(bk->five > bk->three){
-      cerr << "FATAL: SV starts before it ends: " << line << endl;
-      exit(1);
-    }
-    bk->svlen = (bk->three - bk->five);
-    br.push_back(bk);
-      }
-      else{
-    cerr << "FATAL: loading external breakpoints: unknown type: "
-         << infoDat["SVTYPE"] << endl;
-    exit(1);
-      }
-    }
-  }
-  featureFile.close();
-  return true;
-}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -278,7 +160,7 @@ inline bool startsAfter(BamAlignment & r, int & pos, int b){
  Function input  : reads and a breakpoint
  Function does   : aligns the reads to the breakpoint to get the sum of SW
  Function returns: double
-*/
+
 
 double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
                breakpoints * br){
@@ -325,13 +207,12 @@ double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
     return 0;
   }
 }
-
+*/
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : breakpoint pointer
  Function does   : loads up the reads
  Function returns: total number of reads
-*/
 
 int getPopAlignments(vector<string> & bamFiles,
               breakpoints * br,
@@ -432,7 +313,7 @@ int getPopAlignments(vector<string> & bamFiles,
 
   return true;
 }
-
+*/
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -553,7 +434,6 @@ void printHelp(void){
  Function input  : vector of pointers to breakpoints and a bamtools RefVector
  Function does   : prints a vcf format
  Function returns: nada
-*/
 
 void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
@@ -741,6 +621,7 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
   }
 }
 
+*/
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : node pointer, vector of node pointers
@@ -814,7 +695,6 @@ void getTree(node * n, vector<node *> & ns){
  Function input  : breakpoints *, RefSeq
  Function does   : provides ref and alt
  Function returns: bool
-*/
 
 bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
@@ -931,7 +811,7 @@ bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
   return true;
 }
 
-
+*/
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : read pair pointer
@@ -993,14 +873,6 @@ void addIndelToGraph(int refIDL,
     nodeL->sm[SM] = 1;
     nodeR->sm[SM] = 1;
 
-    nodeL->collapsed = false;
-    nodeR->collapsed = false;
-    nodeL->beginSupport = 0;
-    nodeL->endSupport   = 0;
-
-    nodeR->beginSupport = 0;
-    nodeR->endSupport   = 0;
-
     initEdge(ed);
 
     ed->support[s] +=1;
@@ -1030,11 +902,6 @@ void addIndelToGraph(int refIDL,
    ed    = new edge;
 
    nodeR->sm[SM] = 1;
-
-   nodeR->collapsed = false;
-
-   nodeR->beginSupport = 0;
-   nodeR->endSupport   = 0;
 
    initEdge(ed);
    ed->support[s] += 1;
@@ -1068,10 +935,6 @@ void addIndelToGraph(int refIDL,
 
    nodeL = new node;
    ed    = new edge;
-
-   nodeL->collapsed    = false;
-   nodeL->beginSupport = 0;
-   nodeL->endSupport   = 0;
 
    initEdge(ed);
    ed->support[s] += 1;
@@ -1149,10 +1012,6 @@ void addIndelToGraph(int refIDL,
 
 bool indelToGraph(BamAlignment & ba, string & SM){
 
-  if(!ba.IsMapped()){
-    return false;
-  }
-
   if(ba.MapQuality < 30){
     return false;
   }
@@ -1221,13 +1080,16 @@ bool indelToGraph(BamAlignment & ba, string & SM){
 
 inline bool pairFailed(readPair * rp){
 
-  if(rp->al1.IsMapped() && rp->al2.IsMapped()){
+    if(! rp->al1.IsMapped() || ! rp->al2.IsMapped() ){
+        return true;
+    }
     if(rp->al1.Length == rp->al1.CigarData[0].Length
        && rp->al1.CigarData[0].Type == 'M' &&
        rp->al2.Length == rp->al2.CigarData[0].Length
        && rp->al2.CigarData[0].Type == 'M' ){
-      return true;
+        return true;
     }
+
     if(rp->al1.MapQuality < globalOpts.MQ
        && rp->al2.MapQuality < globalOpts.MQ){
       return true;
@@ -1235,10 +1097,8 @@ inline bool pairFailed(readPair * rp){
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 75){
       return true;
     }
-  }
 
-
-  return false;
+    return false;
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1309,10 +1169,6 @@ void splitToGraph(BamAlignment  & al,
 
 bool deviantInsertSize(readPair * rp, char supportType, string & SM){
 
-  if(! rp->al1.IsMapped() || ! rp->al2.IsMapped() ){
-    return false;
-  }
-
   //
   if(rp->al1.RefID != rp->al2.RefID){
     return false;
@@ -1374,21 +1230,10 @@ void processPair(readPair * rp,
     return;
   }
 
- /* filter cross seqid pairs by NM */
-  if(rp->al1.RefID != rp->al2.RefID){
-    string t1, t2;
-
-      if(rp->al1.GetTag("NM", t1) &&
-         rp->al2.GetTag("NM", t1)){
-
-          if(atoi(t1.c_str()) > 3 || atoi(t2.c_str()) > 3){
-              return;
-          }
-      }
+  if(rp->al1.RefID == rp->al2.RefID){
+      indelToGraph(rp->al1, SM);
+      indelToGraph(rp->al2, SM);
   }
-
-  indelToGraph(rp->al1, SM);
-  indelToGraph(rp->al2, SM);
 
   if( ! IsLongClip(rp->al1.CigarData, 5)
       && ! IsLongClip(rp->al2.CigarData, 5)){
@@ -1423,20 +1268,22 @@ void processPair(readPair * rp,
           }
       }
   }
-  if(everted && (abs(rp->al1.InsertSize) > *high)){
+  if(everted
+     && ((abs(rp->al1.InsertSize) > *high)
+         || (abs(rp->al1.InsertSize) < *high))){
       deviantInsertSize(rp, 'X', SM);
   }
 
   // put the split reads in the graph
   if(rp->al1.GetTag(  globalOpts.saT, sa1)){
-    vector<saTag> parsedSa1;
-    parseSA(parsedSa1, sa1, globalOpts.saT, inverse_lookup);
-    splitToGraph(rp->al1, parsedSa1, SM);
+      vector<saTag> parsedSa1;
+      parseSA(parsedSa1, sa1, globalOpts.saT, inverse_lookup);
+      splitToGraph(rp->al1, parsedSa1, SM);
   }
   if(rp->al2.GetTag(  globalOpts.saT, sa2)){
-    vector<saTag> parsedSa2;
-    parseSA(parsedSa2, sa2, globalOpts.saT, inverse_lookup);
-    splitToGraph(rp->al2, parsedSa2, SM);
+      vector<saTag> parsedSa2;
+      parseSA(parsedSa2, sa2, globalOpts.saT, inverse_lookup);
+      splitToGraph(rp->al2, parsedSa2, SM);
   }
 }
 
@@ -1457,9 +1304,6 @@ bool runRegion(string filename,
            vector< RefData > seqNames,
            string & SM){
 
-  if(seqidIndex > 9){
-    return true;
-  }
 
 #ifdef DEBUG
   cerr << "running region: " << seqidIndex
@@ -1910,12 +1754,15 @@ int parseOpts(int argc, char** argv)
   return 1;
 }
 
+string style(edge * L, edge * R, char type){
+    if((*iz)->support[type] > 0){
+}
+
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector<nodes *>
-
  Function does   : dumps a graph in dot format
-
  Function returns: string
 
 */
@@ -2025,83 +1872,13 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
 
   ss << "}";
 
-
   return ss.str();
 }
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of node pointers
- Function does   : tries to resolve a deletion
- Function returns: NA
-*/
 
-bool detectInsertion(vector<node *> tree, breakpoints * bp){
+void findPairs(vector<node*> & tree, breakpoint * bp){
 
-  vector <node *> putative;
-
-  for(vector<node * >::iterator t = tree.begin(); t != tree.end(); t++){
-
-    if((*t)->eds.size() > 1 ){
-
-      int tooClose    = 0;
-      int splitR      = 0;
-      int insertion   = 0;
-
-      for(vector<edge *>::iterator es = (*t)->eds.begin(); es != (*t)->eds.end(); es++){
-    tooClose  += (*es)->support['H'];
-    splitR    += (*es)->support['S'];
-    insertion += (*es)->support['I'];
-      }
-      if( tooClose > 0 && insertion  > 0 && splitR == 0){
-    putative.push_back((*t));
-      }
-    }
-  }
-  if(putative.size() == 2){
-
-    sort(putative.begin(), putative.end(), sortNodesByPos);
-
-    int lPos = putative.front()->pos;
-    int rPos = putative.back()->pos ;
-
-    int lhit = 0 ; int rhit = 0;
-
-    for(vector<edge *>::iterator ed = putative.front()->eds.begin() ;
-    ed != putative.front()->eds.end(); ed++){
-      if(((*ed)->L->pos == rPos) || ((*ed)->R->pos == rPos)){
-    lhit = 1;
-    break;
-      }
-    }
-
-    for(vector<edge *>::iterator ed = putative.back()->eds.begin() ;
-    ed != putative.back()->eds.end(); ed++){
-      if(((*ed)->L->pos == lPos) || ((*ed)->R->pos == lPos)){
-    rhit = 1;
-    break;
-      }
-    }
-
-    if(lhit == 1 && rhit == 1){
-      //      cerr << "insertion pair: " << putative.front()->seqid  << " " <<  lPos << "\t" << rPos << endl;
-      return true;
-    }
-    else{
-      cerr << "no linked putative breakpoints" << endl;
-    }
-
-  }
-
-  return false;
-}
-
-
-void centrality(vector<node*> & tree,
-                vector<breakpoints *> & allBreakpoints,
-                map < int , map <int, node *> > & hb){
-
-    if(tree.size() < 2){
+    if(tree.size() < 2 || tree.size() > 500){
         return;
     }
 
@@ -2142,93 +1919,9 @@ void centrality(vector<node*> & tree,
       }
     }
 
-    double delCount = 0;
-    double insCount = 0;
-    double dupCount = 0;
-    double invCount = 0;
-    double traCount = 0;
+    bp->add(finalL);
+    bp->add(finalR);
 
-    for(std::vector<edge *>::iterator ed = finalL->eds.begin() ;
-        ed != finalL->eds.end(); ed++){
-        if((*ed)->L->seqid == (*ed)->R->seqid){
-            delCount += (*ed)->support['H'];
-            delCount += (*ed)->support['D'];
-            delCount += (*ed)->support['S'];
-            insCount += (*ed)->support['I'];
-            insCount += (*ed)->support['R'];
-            insCount += (*ed)->support['L'];
-            invCount += (*ed)->support['M'];
-            invCount += (*ed)->support['A'];
-            dupCount += (*ed)->support['V'];
-            dupCount += (*ed)->support['S'];
-            dupCount += (*ed)->support['X'];
-        }
-        else{
-            traCount += (*ed)->support['H'];
-            traCount += (*ed)->support['D'];
-            traCount += (*ed)->support['S'];
-            traCount += (*ed)->support['I'];
-            traCount += (*ed)->support['R'];
-            traCount += (*ed)->support['L'];
-            traCount += (*ed)->support['M'];
-            traCount += (*ed)->support['A'];
-            traCount += (*ed)->support['V'];
-            traCount += (*ed)->support['S'];
-            traCount += (*ed)->support['X'];
-        }
-
-    }
-    for(std::vector<edge *>::iterator ed = finalR->eds.begin() ;
-        ed != finalR->eds.end(); ed++){
-
-        if((*ed)->L->seqid == (*ed)->R->seqid){
-            delCount += (*ed)->support['H'];
-            delCount += (*ed)->support['D'];
-            delCount += (*ed)->support['S'];
-            insCount += (*ed)->support['I'];
-            insCount += (*ed)->support['R'];
-            insCount += (*ed)->support['L'];
-            invCount += (*ed)->support['M'];
-            invCount += (*ed)->support['A'];
-            dupCount += (*ed)->support['V'];
-            dupCount += (*ed)->support['S'];
-            dupCount += (*ed)->support['X'];
-        }
-        else{
-            traCount += (*ed)->support['H'];
-            traCount += (*ed)->support['D'];
-            traCount += (*ed)->support['S'];
-            traCount += (*ed)->support['I'];
-            traCount += (*ed)->support['R'];
-            traCount += (*ed)->support['L'];
-            traCount += (*ed)->support['M'];
-            traCount += (*ed)->support['A'];
-            traCount += (*ed)->support['V'];
-            traCount += (*ed)->support['S'];
-            traCount += (*ed)->support['X'];
-        }
-    }
-
-    double total = delCount + insCount + invCount + dupCount + traCount;
-
-    double len = abs(finalR->pos - finalL->pos);
-
-    if(tmax > 3 && len > 50 && len < 1000000 ){
-        omp_set_lock(&lock);
-        std::cout << "gp: " << finalL->seqid
-                  << " "    << finalL->pos
-                  << " "    << finalR->seqid
-                  << " "    << finalR->pos
-                  << " "    << abs(finalR->pos - finalL->pos)
-                  << std::endl;
-        std::cout << "del: " << delCount / total << std::endl;
-        std::cout << "dup: " << dupCount / total << std::endl;
-        std::cout << "inv: " << invCount / total << std::endl;
-        std::cout << "ins: " << insCount / total << std::endl;
-        std::cout << "tra: " << traCount / total << std::endl;
-        std::cout << dotviz(tree) << std::endl;
-        omp_unset_lock(&lock);
-    }
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -2288,12 +1981,9 @@ void dump(vector< vector< node *> > & allTrees){
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector of reads for an individual
-
  Function does   : genotype the individual with pairHMM
-
  Function returns: NA
 
-*/
 
 void genotype(vector<BamAlignment> & reads,
           string & bamF, breakpoints * br){
@@ -2421,13 +2111,11 @@ void genotype(vector<BamAlignment> & reads,
   br->lref += aal + (abl/2);
   br->lalt += bbl + (abl/2);
 }
-
+*/
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : bam file
-
- Function does   : dumps and shrinks graph
-
+ Function does   : generates stats for bam file
  Function returns: NA
 */
 
@@ -2657,7 +2345,7 @@ void gatherBamStats(string & targetfile){
  insertDists.avgD[ targetfile ] = mud;
 
  insertDists.low[ targetfile ] = insertDists.mus[targetfile]
-   - (2.5*insertDists.sds[targetfile]);
+   - (2.0*insertDists.sds[targetfile]);
 
  if(insertDists.low[ targetfile ] < 0 ){
    insertDists.low[ targetfile ] = 0;
@@ -2752,84 +2440,6 @@ void loadReads(std::vector<RefData> & sequences){
   }
 }
 
-void processAlleles(vector<breakpoints*> & allBreakpoints,
-            vector<RefData> & sequences){
-
-  cerr << "INFO: Gathering alleles." << endl;
-
-  int nAlleles = 0;
-
-#pragma omp parallel for
-  for(unsigned  int z = 0; z < allBreakpoints.size(); z++){
-
-    if(allBreakpoints[z]->fail){
-      continue;
-    }
-
-    genAlleles(allBreakpoints[z], globalOpts.fasta, sequences);
-    omp_set_lock(&glock);
-    nAlleles += 1;
-    if((nAlleles % 100) == 0){
-      cerr << "INFO: generated " << nAlleles
-       << " alleles / " << allBreakpoints.size()  << endl;
-    }
-    omp_unset_lock(&glock);
-  }
-}
-
-void refineBreakpoint(int nReads,
-              breakpoints * br,
-              map<string, vector< BamAlignment > > & ReadsPerPerson,
-              vector<RefData> & sequences){
-
-
-  if(nReads > (MAXREADDEPTH * 3)){
-    return;
-  }
-
-  double startingScore = totalAlignmentScore(ReadsPerPerson, br);
-  int oldStart     = br->five ;
-  int oldEnd       = br->three;
-  int flag         = 0;
-
-  breakpoints * secondary = new breakpoints;
-  secondary->fail = false;
-
-  for(int f = -2; f <= 2; f++){
-    *secondary = *br;
-    secondary->five = oldStart;
-    secondary->five += f;
-    if(secondary->five >= secondary->three){
-      continue;
-    }
-    for(int t = -2; t <= 2; t++){
-      secondary->three  = oldEnd;
-      secondary->three  += t;
-      if(secondary->three  <= secondary->five){
-    continue;
-      }
-      secondary->svlen = (secondary->three - secondary->five);
-      genAlleles(secondary, globalOpts.fasta, sequences);
-      double newScore = totalAlignmentScore(ReadsPerPerson, secondary);
-
-      if(newScore > startingScore){
-    startingScore = newScore;
-    br->five = secondary->five;
-    br->three = secondary->three;
-    br->svlen = br->three - br->five;
-    genAlleles(br, globalOpts.fasta, sequences);
-    flag = 1;
-    br->refined = 1;
-      }
-    }
-  }
-
-  delete secondary;
-
-  if(flag == 1){
-    br->svlen = br->three - br->five;
-  }
-}
 
 //-------------------------------    MAIN     --------------------------------
 /*
@@ -2845,7 +2455,6 @@ int main( int argc, char** argv)
   globalOpts.keepTrying = false;
   globalOpts.statsOnly  = false;
   globalOpts.skipGeno   = false;
-  globalOpts.vcf        = true ;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -2882,103 +2491,52 @@ int main( int argc, char** argv)
   for(vector<RefData>::iterator it = sequences.begin();
       it != sequences.end(); it++){
       inverse_lookup[(*it).RefName] = s;
+      forward_lookup[s] = (*it).RefName;
       s+= 1;
   }
 
   loadReads(sequences);
 
-  vector<breakpoints*> allBreakpoints ;
-  vector<vector<node*> > globalTrees  ;
+  vector<breakpoint*> allBreakpoints ;
+  vector<vector<node*> > globalTrees ;
 
   if(globalOpts.svs.empty()){
       cerr << "INFO: Finding trees within forest." << endl;
 
       gatherTrees(globalTrees);
 
-      map<int, map <int, node*> > delBreak;
+      for(unsigned int i = 0 ; i < globalTrees.size(); i++){
+          breakpoint * tmp = new breakpoint;
+          allBreakpoints.push_back(tmp);
+      }
 
       cerr << "INFO: Finding breakpoints in trees." << endl;
 #pragma omp parallel for schedule(dynamic, 3)
       for(unsigned int i = 0 ; i < globalTrees.size(); i++){
 
-          if((i % 100000) == 0){
+          if((i % 10000) == 0){
               omp_set_lock(&glock);
               cerr << "INFO: Processed " << i
                    << "/" << globalTrees.size() << " trees" << endl;
               omp_unset_lock(&glock);
           }
-
-          if(globalTrees[i].size() > 200){
-              omp_set_lock(&glock);
-              cerr << "WARNING: Skipping tree, too many putative breaks." << endl;
-              omp_unset_lock(&glock);
-              continue;
-          }
-          centrality(globalTrees[i], allBreakpoints, delBreak);
+          findPairs(globalTrees[i], allBreakpoints[i]);
       }
+
+      std::cerr << "done processing trees" << std::endl;
 
       if(!globalOpts.graphOut.empty()){
           dump(globalTrees);
       }
-
   }
 
-  if(! globalOpts.svs.empty()){
-      cerr << "INFO: loading external SV calls" << endl;
-      loadExternal(allBreakpoints);
-  }
-
-  processAlleles(allBreakpoints, sequences);
-
-  if(globalOpts.skipGeno){
-      printVCF(allBreakpoints, sequences);
-      cerr << "INFO: Skipping genotyping: -k set" << endl;
-      cerr << "INFO: WHAM finished normally, goodbye! " << endl;
-      return 0;
-  }
-
-  int count = 0;
-
-#pragma omp parallel for schedule(dynamic, 3)
-  for(unsigned int z = 0; z < allBreakpoints.size(); z++){
-
-      if(allBreakpoints[z]->fail) continue;
-
-      if((count % 100) == 0){
-
-          omp_set_lock(&glock);
-          cerr << "INFO: Refined and genotyped " << count
-               << "/" << allBreakpoints.size() << " breakpoints" << endl;
-          omp_unset_lock(&glock);
-
-      }
-
-      omp_set_lock(&lock);
-      count += 1;
-      omp_unset_lock(&lock);
-
-      map<string, vector< BamAlignment > > ReadsPerPerson;
-
-      int nReads = getPopAlignments(globalOpts.targetBams,
-                                    allBreakpoints[z],
-                                    ReadsPerPerson, 5);
-
-      refineBreakpoint(nReads, allBreakpoints[z],
-                       ReadsPerPerson, sequences);
-
-      for(unsigned int p = 0; p < globalOpts.targetBams.size(); p++){
-          genotype(ReadsPerPerson[ globalOpts.targetBams[p] ],
-                   globalOpts.targetBams[p], allBreakpoints[z]);
-      }
-  }
-
-  printVCF(allBreakpoints, sequences);
+  //  printVCF(allBreakpoints, sequences);
 
   if(!globalOpts.graphOut.empty()){
       dump(globalTrees);
   }
 
-  for(vector<breakpoints*>::iterator bks = allBreakpoints.begin();
+  for(vector<breakpoint*>::iterator bks = allBreakpoints.begin();
      bks != allBreakpoints.end(); bks++){
       delete (*bks);
   }

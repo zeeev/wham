@@ -32,44 +32,6 @@ struct saTag{
   std::vector<cigDat> cig;
 };
 
-
-struct breakpoints{
-  bool fail              ;
-  bool two               ;
-  char type              ;
-  std::string refBase    ;
-  int seqidIndexL        ;
-  int seqidIndexR        ;
-  std::string seqid      ;
-  int merged             ;
-  int refined            ;
-  int five               ;
-  int three              ;
-  int svlen              ;
-  int collapsed          ;
-  int totalSupport       ;
-  std::string id              ;
-  std::string fives           ;
-  std::string threes          ;
-  std::vector<std::string> alleles ;
-  std::vector<int>         supports;
-  std::vector<std::vector<double> > genotypeLikelhoods ;
-  std::vector<int>             genotypeIndex           ;
-  std::vector<int>             nref                    ;
-  std::vector<int>             nalt                    ;
-  std::vector<std::string>          sml                ;
-  std::vector<std::string>          smr                ;
-  int posCIL;
-  int posCIH;
-  int endCIL;
-  int endCIH;
-
-  double lref;
-  double lalt;
-
-};
-
-
 struct node;
 struct edge;
 
@@ -80,18 +42,131 @@ struct edge{
 };
 
 struct node{
-  int   seqid          ;
-  int   pos            ;
-  int   endSupport     ;
-  int   beginSupport   ;
-  bool  collapsed      ;
-  std::vector <edge *> eds  ;
-  std::map<std::string,int> sm   ;
+  int   seqid                  ;
+  int   pos                    ;
+  std::vector <edge *>     eds ;
+  std::map<std::string,int> sm ;
 };
 
 struct graph{
   std::map< int, std::map<int, node *> > nodes;
   std::vector<edge *>   edges;
+};
+
+
+class breakpoint{
+private:
+    bool paired;
+    bool bnd   ;
+
+    long int length;
+
+    node * nodeL;
+    node * nodeR;
+
+    double totalCount;
+    double delCount  ;
+    double insCount  ;
+    double dupCount  ;
+    double invCount  ;
+    double traCount  ;
+
+    void _count(node * n){
+        for(std::vector<edge *>::iterator ed = n->eds.begin() ;
+            ed != n->eds.end(); ed++){
+            if((*ed)->L->seqid == (*ed)->R->seqid){
+                delCount += (*ed)->support['H'];
+                delCount += (*ed)->support['D'];
+                delCount += (*ed)->support['S'];
+                insCount += (*ed)->support['I'];
+                insCount += (*ed)->support['R'];
+                insCount += (*ed)->support['L'];
+                invCount += (*ed)->support['M'];
+                invCount += (*ed)->support['A'];
+                invCount += (*ed)->support['V'];
+                dupCount += (*ed)->support['V'];
+                dupCount += (*ed)->support['S'];
+                dupCount += (*ed)->support['X'];
+            }
+            else{
+                traCount += (*ed)->support['H'];
+                traCount += (*ed)->support['D'];
+                traCount += (*ed)->support['S'];
+                traCount += (*ed)->support['I'];
+                traCount += (*ed)->support['R'];
+                traCount += (*ed)->support['L'];
+                traCount += (*ed)->support['M'];
+                traCount += (*ed)->support['A'];
+                traCount += (*ed)->support['V'];
+                traCount += (*ed)->support['S'];
+                traCount += (*ed)->support['X'];
+            }
+        }
+    }
+
+    void _processInternal(void){
+        if(nodeL->seqid != nodeR->seqid ){
+            if(nodeL->seqid > nodeR->seqid){
+                node * tmp;
+                tmp   = nodeL;
+                nodeL = nodeR;
+                nodeR = tmp;
+            }
+        }
+        else{
+            if(nodeL->pos > nodeR->pos){
+                node * tmp;
+                tmp   = nodeL;
+                nodeL = nodeR;
+                nodeR = tmp;
+            }
+            this->length = this->nodeR->pos - nodeL->pos;
+        }
+    }
+
+public:
+    breakpoint(void): paired(false)
+                    , bnd(false)
+                    , length(0)
+                    , nodeL(NULL)
+                    , nodeR(NULL)
+                    , totalCount(0)
+                    , delCount(0)
+                    , insCount(0)
+                    , dupCount(0)
+                    , invCount(0)
+                    , traCount(0){}
+
+     long int getLength(void){
+        return length;
+    }
+    void setGoodPair(bool t){
+        this->paired = t;
+    }
+    bool getGoodPair(void){
+        return this->paired;
+    }
+    bool add(node * n){
+        if(nodeL != NULL && nodeR != NULL){
+            return false;
+        }
+        if( nodeL == NULL ){
+            nodeL = n;
+            return true;
+        }
+        else{
+            nodeR = n;
+            _processInternal();
+            return true;
+        }
+    }
+    bool countSupportType(void){
+        if(nodeL == NULL || nodeR == NULL){
+            return false;
+        }
+        _count(nodeL);
+        _count(nodeR);
+    }
 };
 
 
@@ -158,28 +233,6 @@ bool sortNodesByPos(node * L, node * R){
 }
 
 //------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of breakpoint calls
- Function does   : return true if the left is less than the right
- Function returns: bool
-*/
-
-bool sortBreak(breakpoints * L, breakpoints * R){
-
-  if(L->seqidIndexL == R->seqidIndexL ){
-    if(L->five < R->five){
-
-      return true;
-    }
-  }
-  else{
-    if(L->seqidIndexL < R->seqidIndexL){
-
-      return true;
-    }
-  }
-  return false;
-}
 
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -309,183 +362,5 @@ void removeEdges(std::vector<node *> & tree, int pos){
     (*rm)->eds.insert((*rm)->eds.end(), tmp.begin(), tmp.end());
   }
 }
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
-  Function input  : a vector of node pointers
-  Function does   : does a tree terversal and joins nodes
-  Function returns: NA
-
-*/
-
-void joinNodes(node * L, node * R, std::vector<node *> & tree){
-
-  // quantifying which node has more support
-
-  int lSupport = 0;
-  int rSupport = 0;
-
-  for(std::vector<edge *>::iterator le = L->eds.begin(); le != L->eds.end(); le++){
-    lSupport += (*le)->support['D'] + (*le)->support['S'] + (*le)->support['I']
-      +  (*le)->support['H'] +  (*le)->support['L'] + (*le)->support['X']
-      + (*le)->support['M'] + (*le)->support['R'] + (*le)->support['V'] ;
-  }
-  for(std::vector<edge *>::iterator re = R->eds.begin(); re != R->eds.end(); re++){
-    lSupport += (*re)->support['D'] + (*re)->support['S'] + (*re)->support['I']
-      +  (*re)->support['H'] +  (*re)->support['L'] +  (*re)->support['X']
-      +  (*re)->support['M'] +  (*re)->support['R'] +  (*re)->support['V'] ;
-  }
-
-  if(lSupport <= rSupport){
-
-    L->collapsed = true;
-
-    for(std::map<std::string,int>::iterator iz = L->sm.begin();
-        iz != L->sm.end(); iz++){
-
-      if(R->sm.find(iz->first) != R->sm.end()){
-        R->sm[iz->first] += iz->second;
-      }
-      else{
-        R->sm[iz->first] = iz->second;
-      }
-    }
-
-    for(std::vector<edge *>::iterator lc =  L->eds.begin();
-        lc != L->eds.end(); lc++){
-
-
-      edge * e;
-
-      int otherP = (*lc)->L->pos;
-
-      if(L->pos  == otherP){
-        otherP = (*lc)->R->pos;
-      }
-      if(findEdge(R->eds, &e,  otherP)){
-
-        e->support['I'] += (*lc)->support['I'];
-        e->support['D'] += (*lc)->support['D'];
-        e->support['S'] += (*lc)->support['S'];
-        e->support['H'] += (*lc)->support['H'];
-        e->support['L'] += (*lc)->support['L'];
-        e->support['R'] += (*lc)->support['R'];
-        e->support['M'] += (*lc)->support['M'];
-        e->support['V'] += (*lc)->support['V'];
-        e->support['X'] += (*lc)->support['X'];
-
-      }
-      else{
-        if((*lc)->L->pos == otherP){
-          (*lc)->R = R;
-        }
-        else{
-          (*lc)->L = R;
-        }
-
-        R->eds.push_back(*lc);
-      }
-
-    }
-    removeEdges(tree, L->pos);
-
-  }
-  else{
-
-    //    cerr << "Joining right" << endl;
-    R->collapsed = true;
-
-    for(std::map<std::string,int>::iterator iz = R->sm.begin();
-        iz != R->sm.end(); iz++){
-
-      if(L->sm.find(iz->first) != L->sm.end()){
-        L->sm[iz->first] += iz->second;
-      }
-      else{
-        L->sm[iz->first] = iz->second;
-      }
-    }
-
-    for(std::vector<edge *>::iterator lc =  R->eds.begin();
-        lc != R->eds.end(); lc++){
-
-      edge * e;
-
-      int otherP = (*lc)->L->pos;
-
-      if(R->pos  == otherP){
-        otherP = (*lc)->R->pos;
-      }
-      if(findEdge(L->eds, &e,  otherP)){
-        e->support['I'] += (*lc)->support['I'];
-        e->support['D'] += (*lc)->support['D'];
-        e->support['S'] += (*lc)->support['S'];
-        e->support['H'] += (*lc)->support['H'];
-        e->support['L'] += (*lc)->support['L'];
-        e->support['M'] += (*lc)->support['M'];
-        e->support['X'] += (*lc)->support['X'];
-        e->support['V'] += (*lc)->support['V'];
-      }
-      else{
-        if((*lc)->L->pos == otherP){
-          (*lc)->R = L;
-        }
-        else{
-          (*lc)->L = L;
-        }
-        L->eds.push_back(*lc);
-
-      }
-    }
-    removeEdges(tree, R->pos);
-  }
-
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
-  Function input  : a vector of node pointers
-  Function does   : does a tree terversal and joins nodes
-  Function returns: NA
-*/
-
-void collapseTree(std::vector<node *> & tree){
-
-    std::vector<node *> tmp;
-
-    for(std::vector<node *>::iterator tr = tree.begin();
-        tr != tree.end(); tr++){
-        if((*tr)->collapsed){
-            continue;
-        }
-        for(std::vector<node *>::iterator tt = tree.begin();
-        tt != tree.end(); tt++){
-            if((*tt)->collapsed){
-                continue;
-            }
-            if( (*tr)->pos == (*tt)->pos ){
-                continue;
-            }
-
-            if(abs( (*tr)->pos - (*tt)->pos ) < 20
-               && ! connectedNode((*tr), (*tt))
-               && ( (*tr)->seqid == (*tt)->seqid ) ){
-                joinNodes((*tr), (*tt), tree);
-            }
-        }
-    }
-    for(std::vector<node *>::iterator tr = tree.begin();
-        tr != tree.end(); tr++){
-        if((*tr)->collapsed){
-        }
-        else{
-            tmp.push_back((*tr));
-        }
-    }
-    tree.clear();
-    tree.insert(tree.end(), tmp.begin(), tmp.end());
-}
-
-
 
 #endif
