@@ -154,7 +154,6 @@ inline bool startsAfter(BamAlignment & r, int & pos, int b){
   }
 }
 
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : reads and a breakpoint
@@ -1754,11 +1753,6 @@ int parseOpts(int argc, char** argv)
   return 1;
 }
 
-string style(edge * L, edge * R, char type){
-    if((*iz)->support[type] > 0){
-}
-
-
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector<nodes *>
@@ -1879,6 +1873,7 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
 void findPairs(vector<node*> & tree, breakpoint * bp){
 
     if(tree.size() < 2 || tree.size() > 500){
+        bp->setMasked();
         return;
     }
 
@@ -1921,6 +1916,30 @@ void findPairs(vector<node*> & tree, breakpoint * bp){
 
     bp->add(finalL);
     bp->add(finalR);
+
+    if(finalL->eds.size() == 1 || finalR->eds.size() == 1){
+
+        if(finalL->eds.front()->support['D'] < 5 &&
+           finalL->eds.front()->support['I'] < 5 &&
+           finalL->eds.front()->support['S'] < 5 &&
+           finalL->eds.front()->support['V'] < 5 &&
+           finalR->eds.front()->support['D'] < 5 &&
+           finalR->eds.front()->support['I'] < 5 &&
+           finalR->eds.front()->support['S'] < 5 &&
+           finalR->eds.front()->support['V'] < 5   ){
+            bp->setBadPair();
+        }
+    }
+
+    int totalGraphCount = 0;
+
+    for(vector<node *>::iterator lit = tree.begin();
+        lit != tree.end(); lit++){
+        totalGraphCount += getSupport(*lit);
+    }
+
+    bp->setTotalSupport(totalGraphCount);
+
 
 }
 
@@ -2124,9 +2143,6 @@ void gatherBamStats(string & targetfile){
   omp_set_lock(&lock);
   int quals [126];
   memcpy(quals, SangerLookup, 126*sizeof(int));
-
-  FastaReference RefSeq;
-  RefSeq.open(globalOpts.fasta);
 
   cerr << "INFO: gathering stats (may take some time) for bam: " << targetfile << endl;
 
@@ -2345,7 +2361,7 @@ void gatherBamStats(string & targetfile){
  insertDists.avgD[ targetfile ] = mud;
 
  insertDists.low[ targetfile ] = insertDists.mus[targetfile]
-   - (2.0*insertDists.sds[targetfile]);
+   - (1.5*insertDists.sds[targetfile]);
 
  if(insertDists.low[ targetfile ] < 0 ){
    insertDists.low[ targetfile ] = 0;
@@ -2470,6 +2486,8 @@ int main( int argc, char** argv)
     printHelp();
     exit(1);
   }
+  FastaReference RefSeq;
+  RefSeq.open(globalOpts.fasta);
 
   // gather stats for each bam (depth, insert l, ...)
   allStats();
@@ -2522,6 +2540,26 @@ int main( int argc, char** argv)
           }
           findPairs(globalTrees[i], allBreakpoints[i]);
       }
+
+      for(unsigned int i = 0; i < globalTrees.size(); i++){
+          if(allBreakpoints[i]->IsMasked() ){
+              continue;
+          }
+
+          allBreakpoints[i]->countSupportType();
+          allBreakpoints[i]->calcType();
+          allBreakpoints[i]->getRefBases(RefSeq, forward_lookup);
+
+          if(allBreakpoints[i]->IsBadPair()){
+              std::cerr <<  *allBreakpoints[i] << std::endl;
+              continue;
+          }
+          if(allBreakpoints[i]->getTotalSupport() < 3){
+              continue;
+          }
+          std::cout << *allBreakpoints[i] << std::endl;
+      }
+
 
       std::cerr << "done processing trees" << std::endl;
 

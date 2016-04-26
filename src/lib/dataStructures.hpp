@@ -4,8 +4,12 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <string>
 
 #include "api/BamMultiReader.h"
+#include "fastahack/Fasta.h"
+#include "ssw_cpp.h"
+
 
 struct regionDat{
   int seqidIndex ;
@@ -53,11 +57,49 @@ struct graph{
   std::vector<edge *>   edges;
 };
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : a node
+ Function does   : visits all the edges and counts the support
+ Function returns: int (count of support)
+*/
+
+int getSupport(node * N){
+
+    int support = 0;
+
+    for(std::vector<edge *>::iterator ed = N->eds.begin() ;
+        ed != N->eds.end(); ed++){
+        support += (*ed)->support['L'];
+        support += (*ed)->support['H'];
+        support += (*ed)->support['S'];
+        support += (*ed)->support['I'];
+        support += (*ed)->support['D'];
+        support += (*ed)->support['V'];
+        support += (*ed)->support['M'];
+        support += (*ed)->support['R'];
+        support += (*ed)->support['X'];
+        support += (*ed)->support['A'];
+    }
+    return support;
+}
+
 
 class breakpoint{
 private:
+
+    std::map<char, std::string > typeMap;
+    std::vector<std::string> refs    ;
+    std::vector<std::string> seqNames;
+
+    char type;
+    std::string typeName;
+
+    int totalGraphWeight ;
+
     bool paired;
     bool bnd   ;
+    bool masked;
 
     long int length;
 
@@ -101,6 +143,18 @@ private:
                 traCount += (*ed)->support['S'];
                 traCount += (*ed)->support['X'];
             }
+            totalCount += (*ed)->support['H'];
+            totalCount += (*ed)->support['D'];
+            totalCount += (*ed)->support['S'];
+            totalCount += (*ed)->support['I'];
+            totalCount += (*ed)->support['R'];
+            totalCount += (*ed)->support['L'];
+            totalCount += (*ed)->support['M'];
+            totalCount += (*ed)->support['A'];
+            totalCount += (*ed)->support['V'];
+            totalCount += (*ed)->support['V'];
+            totalCount += (*ed)->support['S'];
+            totalCount += (*ed)->support['X'];
         }
     }
 
@@ -125,8 +179,11 @@ private:
     }
 
 public:
-    breakpoint(void): paired(false)
+    breakpoint(void): type('D')
+                    , totalGraphWeight(0)
+                    , paired(false)
                     , bnd(false)
+                    , masked(false)
                     , length(0)
                     , nodeL(NULL)
                     , nodeR(NULL)
@@ -135,7 +192,15 @@ public:
                     , insCount(0)
                     , dupCount(0)
                     , invCount(0)
-                    , traCount(0){}
+                    , traCount(0){
+
+        typeMap['D'] = "DEL";
+        typeMap['U'] = "DUP";
+        typeMap['T'] = "BND";
+        typeMap['I'] = "INS";
+        typeMap['V'] = "INV";
+
+    }
 
      long int getLength(void){
         return length;
@@ -143,9 +208,29 @@ public:
     void setGoodPair(bool t){
         this->paired = t;
     }
-    bool getGoodPair(void){
+    bool IsMasked(void){
+        return this->masked;
+    }
+    void unsetMasked(void){
+        this->masked = false;
+    }
+    void setMasked(void){
+        this->masked = true;
+    }
+    void setBadPair(void){
+        this->paired = true;
+    }
+    void setTotalSupport(int t){
+        this->totalCount = t;
+    }
+
+    bool IsBadPair(void){
         return this->paired;
     }
+    int getTotalSupport(void){
+        return this->totalCount;
+    }
+
     bool add(node * n){
         if(nodeL != NULL && nodeR != NULL){
             return false;
@@ -166,8 +251,124 @@ public:
         }
         _count(nodeL);
         _count(nodeR);
+        return true;
     }
+    void calcType(void){
+
+        int maxN = delCount;
+
+        if(dupCount > maxN){
+            type = 'U';
+            maxN = dupCount;
+        }
+        if(invCount > maxN){
+            type = 'V';
+            maxN = invCount;
+        }
+        if(insCount > maxN){
+            type = 'I';
+            maxN = insCount;
+        }
+        if(traCount > maxN){
+            type = 'T';
+            maxN = traCount;
+        }
+        typeName = typeMap[type];
+    }
+
+    void getRefBases(FastaReference & rs, std::map<int, string> & lookup){
+        refs.push_back(rs.getSubSequence(lookup[nodeL->seqid],
+                                          nodeL->pos,  1));
+        if(nodeL->seqid != nodeR->seqid){
+            refs.push_back(rs.getSubSequence(lookup[nodeR->seqid],
+                                              nodeR->pos,  1));
+        }
+
+        seqNames.push_back(lookup[nodeL->seqid]);
+        seqNames.push_back(lookup[nodeR->seqid]);
+
+    }
+
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const breakpoint& foo);
 };
+
+std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
+
+
+    long int start = foo.nodeL->pos ;
+    long int end   = foo.nodeR->pos ;
+
+    long int len = foo.length;
+
+    if(foo.type == 'I'){
+        end = start;
+    }
+    if(foo.type == 'D'){
+        len = -1*len;
+    }
+
+    if(foo.type != 'T' && (foo.nodeL->seqid == foo.nodeR->seqid)){
+        out << foo.seqNames.front() << "\t"
+            << start << "\t"
+            << end   << "\t"
+            << "D="  << foo.delCount
+            << ";U=" << foo.dupCount
+            << ";V=" << foo.invCount
+            << ";I=" << foo.insCount
+            << ";T=" << foo.traCount
+            << ";REF=" << foo.refs.front();
+
+
+        out << ";" << foo.typeName << ";SVLEN=" << len ;
+        out << ";BW=" << double(getSupport(foo.nodeL)
+                                + getSupport(foo.nodeR))
+            / double(foo.totalCount);
+    }
+    else{
+        out << foo.seqNames.front() << "\t"
+            << foo.nodeL->pos   << "\t"
+            << foo.nodeL->pos   << "\t"
+            << "D="  << foo.delCount
+            << ";U=" << foo.dupCount
+            << ";V=" << foo.invCount
+            << ";I=" << foo.insCount
+            << ";T=" << foo.traCount
+            << ";REF=" << foo.refs.front();
+
+        out << ";SVTYPE=" << foo.typeName << ";SVLEN=." ;
+        out << ";BW=" << double(getSupport(foo.nodeL)
+                                + getSupport(foo.nodeR))
+            / double(foo.totalCount) ;
+
+        out << ";ALT=" << foo.refs.front() << "]"
+            << foo.seqNames.back() << ":"
+            << foo.nodeR->pos << "]";
+
+        out << std::endl;
+
+        out << foo.seqNames.back() << "\t"
+            << foo.nodeR->pos      << "\t"
+            << foo.nodeR->pos      << "\t"
+            << "D="  << foo.delCount
+            << ";U=" << foo.dupCount
+            << ";V=" << foo.invCount
+            << ";I=" << foo.insCount
+            << ";T=" << foo.traCount
+            << ";REF=" << foo.refs.back();
+
+        out << ";SVTYPE=" << foo.typeName << ";SVLEN=.";
+        out << ";BW=" << double(getSupport(foo.nodeL)
+                                + getSupport(foo.nodeR))
+            / double(foo.totalCount);
+        out << ";ALT=" << foo.refs.back() << "]"
+            << foo.seqNames.front() << ":"
+            << foo.nodeL->pos << "]";
+    }
+
+    return out;
+}
 
 
 struct libraryStats{
@@ -180,35 +381,6 @@ struct libraryStats{
   std::map<std::string, double> avgD;
   double overallDepth;
 } ;
-
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : a node
- Function does   : visits all the edges and counts the support
- Function returns: int (count of support)
-*/
-
-int  getSupport(node * N){
-
-  int support = 0;
-
-  for(std::vector<edge *>::iterator ed = N->eds.begin() ;
-      ed != N->eds.end(); ed++){
-    support += (*ed)->support['L'];
-    support += (*ed)->support['H'];
-    support += (*ed)->support['S'];
-    support += (*ed)->support['I'];
-    support += (*ed)->support['D'];
-    support += (*ed)->support['V'];
-    support += (*ed)->support['M'];
-    support += (*ed)->support['R'];
-    support += (*ed)->support['X'];
-    support += (*ed)->support['A'];
-
-  }
-  return support;
-}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -305,7 +477,7 @@ bool connectedNode(node * left, node * right){
       l != left->eds.end(); l++){
 
     if(((*l)->L->pos == right->pos
-	|| (*l)->R->pos == right->pos)
+    || (*l)->R->pos == right->pos)
        && (*l)->R->seqid == right->seqid ){
       return true;
     }
