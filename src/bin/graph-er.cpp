@@ -2548,7 +2548,7 @@ int main( int argc, char** argv)
       cerr << "INFO: Matching breakpoints." << endl;
 #pragma omp parallel for schedule(dynamic, 3)
       for(unsigned int i = 0 ; i < globalTrees.size(); i++){
-          if((i % 10000)) == 0){
+          if((i % 10000) == 0){
               omp_set_lock(&glock);
               cerr << "INFO: Processed " << i
                    << "/" << globalTrees.size() << " graphs" << endl;
