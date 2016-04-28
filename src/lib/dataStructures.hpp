@@ -25,15 +25,17 @@ struct readPair{
 };
 
 struct cigDat{
-  int  Length;
-  char Type;
+    int  Length;
+    char Type;
 };
 
 struct saTag{
-  int seqid;
-  int pos;
-  bool strand;
-  std::vector<cigDat> cig;
+    int seqid;
+    int pos;
+    bool strand;
+    int mapQ;
+    int NM;
+    std::vector<cigDat> cig;
 };
 
 struct node;
@@ -276,7 +278,12 @@ public:
         typeName = typeMap[type];
     }
 
-    void getRefBases(FastaReference & rs, std::map<int, string> & lookup){
+    void getRefBases(std::string & reffile, std::map<int, string> & lookup){
+
+
+        FastaReference rs;
+        rs.open(reffile);
+
         refs.push_back(rs.getSubSequence(lookup[nodeL->seqid],
                                           nodeL->pos,  1));
         if(nodeL->seqid != nodeR->seqid){
