@@ -64,22 +64,23 @@ using namespace std;
 using namespace BamTools;
 
 struct options{
-  std::vector<string> targetBams;
-  bool statsOnly                ;
-  bool skipGeno                 ;
-  bool keepTrying               ;
-  int MQ                        ;
-  int nthreads                  ;
-  int lastSeqid                 ;
-  string fasta                  ;
-  string graphOut               ;
-  map<string, int> toSkip       ;
-  map<string, int> toInclude    ;
-  string seqid                  ;
-  vector<int> region            ;
-  string svs                    ;
-  map<string,string> SMTAGS     ;
-  string saT                    ;
+    std::vector<string> targetBams;
+    bool statsOnly                ;
+    bool skipGeno                 ;
+    bool keepTrying               ;
+    int MQ                        ;
+    int NM                        ;
+    int nthreads                  ;
+    int lastSeqid                 ;
+    string fasta                  ;
+    string graphOut               ;
+    map<string, int> toSkip       ;
+    map<string, int> toInclude    ;
+    string seqid                  ;
+    vector<int> region            ;
+    string svs                    ;
+    map<string,string> SMTAGS     ;
+    string saT                    ;
 }globalOpts;
 
 
@@ -630,70 +631,56 @@ void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
 
 void getTree(node * n, vector<node *> & ns){
 
-  map<int, int>  seen ;
-  vector<edge *> edges;
+  map<edge *, int>  seenEdges ;
+  map<node *, int>  seenNodes ;
+  vector<edge *>        edges ;
 
-  if(!n->eds.empty()){
-    edges.insert(edges.end(), n->eds.begin(), n->eds.end());
-  }
-
-  seen[n->pos] = 1;
-
-  ns.push_back(n);
+  edges.insert(edges.end(), n->eds.begin(), n->eds.end());
 
   /* if something is pushed to the back of the vector it changes the
      positions ! be warned. */
 
   while(!edges.empty()){
 
-     uint hit = 0;
+      edge * last = edges.back();
+      edges.pop_back();
 
-     if(seen.find(edges.back()->L->pos) != seen.end()
-    && seen.find(edges.back()->R->pos) != seen.end() ){
-       hit = 1;
-     }
-     else if(seen.find(edges.back()->L->pos) == seen.end()
-         && seen.find(edges.back()->R->pos) == seen.end()){
-       seen[edges.back()->L->pos] = 1;
-       seen[edges.back()->R->pos] = 1;
-       ns.push_back(edges.back()->L);
-       ns.push_back(edges.back()->R);
-       edges.insert(edges.end(),
-            edges.back()->L->eds.begin(),
-            edges.back()->L->eds.end());
-       edges.insert(edges.end(),
-            edges.back()->R->eds.begin(),
-            edges.back()->R->eds.end());
-     }
-     else if(seen.find(edges.back()->L->pos) == seen.end()){
+      for(std::vector<edge *>::iterator it = last->L->eds.begin();
+          it != last->L->eds.end(); it++){
 
-       seen[edges.back()->L->pos] = 1;
+          if(seenEdges.find(*it) == seenEdges.end()){
+              edges.push_back(*it);
+              seenEdges[*it]      = 1;
+              seenNodes[(*it)->L] = 1;
+              seenNodes[(*it)->R] = 1;
+          }
+      }
 
-       ns.push_back(edges.back()->L);
+      for(std::vector<edge *>::iterator it = last->R->eds.begin();
+          it != last->R->eds.end(); it++){
 
-       edges.insert(edges.end(),
-            edges.back()->L->eds.begin(),
-            edges.back()->L->eds.end() );
-     }
-     else{
-       seen[edges.back()->R->pos] = 1;
-       ns.push_back(edges.back()->R);
+          if(seenEdges.find(*it) == seenEdges.end()){
+              edges.push_back(*it);
+              seenEdges[*it]      = 1;
+              seenNodes[(*it)->L] = 1;
+              seenNodes[(*it)->R] = 1;
+          }
+      }
 
-       edges.insert(edges.end(),
-            edges.back()->R->eds.begin(),
-            edges.back()->R->eds.end() );
-     }
-     if(hit == 1){
-       edges.pop_back();
-     }
   }
+
+  for(std::map<node *, int>::iterator it = seenNodes.begin();
+      it != seenNodes.end(); it++){
+      ns.push_back(it->first);
+  }
+
 }
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : breakpoints *, RefSeq
  Function does   : provides ref and alt
- Function returns: bool
+ Function reurns: bool
 
 bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
 
@@ -1115,6 +1102,14 @@ void splitToGraph(BamAlignment  & al,
   if(sa.size() > 1){
     return;
   }
+  // too many mismatches
+  if(sa.front().NM > globalOpts.NM){
+      return;
+  }
+  // map quality of zero...
+  if(sa.front().mapQ < 1){
+      return;
+  }
 
   // split read is trimmed on both side skip
   if(sa.front().cig.front().Type == 'S'
@@ -1186,7 +1181,7 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
      || rp->al1.CigarData.back().Type == 'S'){
 
     if(rp->al2.CigarData.back().Type == 'S'){
-      end = rp->al2.GetEndPosition();
+        end = rp->al2.GetEndPosition(false,true);
     }
     if(rp->al1.CigarData.back().Type == 'S'){
       start = rp->al1.GetEndPosition(false,true);
@@ -1194,7 +1189,7 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
   }
   else{
     if(rp->al1.CigarData.back().Type == 'S'){
-      end = rp->al1.GetEndPosition();
+        end = rp->al1.GetEndPosition(false,true);
     }
     if(rp->al2.CigarData.back().Type == 'S'){
       start = rp->al2.GetEndPosition(false,true);
@@ -1232,6 +1227,22 @@ void processPair(readPair * rp,
   if(rp->al1.RefID == rp->al2.RefID){
       indelToGraph(rp->al1, SM);
       indelToGraph(rp->al2, SM);
+  }
+
+  // nm filter
+
+  std::string nm;
+
+  if(rp->al1.GetTag("NM", nm)){
+      if(atoi(nm.c_str()) > globalOpts.NM){
+          return;
+      }
+  }
+
+  if(rp->al2.GetTag("NM", nm)){
+      if(atoi(nm.c_str()) > globalOpts.NM){
+          return;
+      }
   }
 
   if( ! IsLongClip(rp->al1.CigarData, 5)
@@ -1302,6 +1313,11 @@ bool runRegion(string filename,
            int end,
            vector< RefData > seqNames,
            string & SM){
+
+
+    if(seqidIndex < 3 || seqidIndex > 6){
+        return true;
+    }
 
 
 #ifdef DEBUG
@@ -1872,7 +1888,7 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
 
 void findPairs(vector<node*> & tree, breakpoint * bp){
 
-    if(tree.size() < 2 || tree.size() > 500){
+    if(tree.size() < 2 || tree.size() > 100){
         bp->setMasked();
         return;
     }
@@ -1950,23 +1966,25 @@ void findPairs(vector<node*> & tree, breakpoint * bp){
  Function returns: NA
 */
 
-void gatherTrees(vector<vector<node *> > & globalTrees){
+void gatherTrees(vector<vector<node *> > & trees){
 
   map<int, map<int, int> > lookup;
 
-  for(map<int, map<int, node* > >::iterator it = globalGraph.nodes.begin();it != globalGraph.nodes.end(); it++){
-    for(map<int, node*>::iterator itt = it->second.begin(); itt != it->second.end(); itt++){
+  for(map<int, map<int, node* > >::iterator it = globalGraph.nodes.begin();
+      it != globalGraph.nodes.end(); it++){
+    for(map<int, node*>::iterator itt = it->second.begin();
+        itt != it->second.end(); itt++){
 
       if(lookup[it->first].find(itt->first) != lookup[it->first].end() ){
       }
       else{
-    lookup[it->first][itt->first] = 1;
-    vector<node *> tree;
-    getTree(globalGraph.nodes[it->first][itt->first], tree);
-    for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
-      lookup[(*ir)->seqid][(*ir)->pos] = 1;
-    }
-    globalTrees.push_back(tree);
+          lookup[it->first][itt->first] = 1;
+          vector<node *> tree;
+          getTree(globalGraph.nodes[it->first][itt->first], tree);
+          for(vector<node *>::iterator ir = tree.begin(); ir != tree.end(); ir++){
+              lookup[(*ir)->seqid][(*ir)->pos] = 1;
+          }
+          trees.push_back(tree);
       }
     }
   }
@@ -2467,6 +2485,7 @@ int main( int argc, char** argv)
   globalOpts.nthreads   = 1    ;
   globalOpts.lastSeqid  = 0    ;
   globalOpts.MQ         = 20   ;
+  globalOpts.NM         = 5    ;
   globalOpts.saT        = "SA" ;
   globalOpts.keepTrying = false;
   globalOpts.statsOnly  = false;
@@ -2486,8 +2505,6 @@ int main( int argc, char** argv)
     printHelp();
     exit(1);
   }
-  FastaReference RefSeq;
-  RefSeq.open(globalOpts.fasta);
 
   // gather stats for each bam (depth, insert l, ...)
   allStats();
@@ -2519,7 +2536,7 @@ int main( int argc, char** argv)
   vector<vector<node*> > globalTrees ;
 
   if(globalOpts.svs.empty()){
-      cerr << "INFO: Finding trees within forest." << endl;
+      cerr << "INFO: Gathering graphs from forest." << endl;
 
       gatherTrees(globalTrees);
 
@@ -2528,30 +2545,29 @@ int main( int argc, char** argv)
           allBreakpoints.push_back(tmp);
       }
 
-      cerr << "INFO: Finding breakpoints in trees." << endl;
+      cerr << "INFO: Matching breakpoints." << endl;
 #pragma omp parallel for schedule(dynamic, 3)
       for(unsigned int i = 0 ; i < globalTrees.size(); i++){
-
-          if((i % 10000) == 0){
+          if((i % 10000)) == 0){
               omp_set_lock(&glock);
               cerr << "INFO: Processed " << i
-                   << "/" << globalTrees.size() << " trees" << endl;
+                   << "/" << globalTrees.size() << " graphs" << endl;
               omp_unset_lock(&glock);
           }
           findPairs(globalTrees[i], allBreakpoints[i]);
+          if(allBreakpoints[i]->IsMasked() ){
+              continue;
+          }
+          allBreakpoints[i]->countSupportType();
+          allBreakpoints[i]->calcType();
+          allBreakpoints[i]->getRefBases(globalOpts.fasta, forward_lookup);
       }
-
+      cerr << "INFO: Printing." << endl;
       for(unsigned int i = 0; i < globalTrees.size(); i++){
           if(allBreakpoints[i]->IsMasked() ){
               continue;
           }
-
-          allBreakpoints[i]->countSupportType();
-          allBreakpoints[i]->calcType();
-          allBreakpoints[i]->getRefBases(RefSeq, forward_lookup);
-
           if(allBreakpoints[i]->IsBadPair()){
-              std::cerr <<  *allBreakpoints[i] << std::endl;
               continue;
           }
           if(allBreakpoints[i]->getTotalSupport() < 3){
@@ -2559,7 +2575,6 @@ int main( int argc, char** argv)
           }
           std::cout << *allBreakpoints[i] << std::endl;
       }
-
 
       std::cerr << "done processing trees" << std::endl;
 

@@ -113,41 +113,41 @@ int match(std::vector<BamTools::CigarOp> & co){
 */
 void endPos(std::vector<cigDat> & cigs, int * pos){
 
-  for(std::vector<cigDat>::iterator it = cigs.begin();
-      it != cigs.end(); it++){
+    for(std::vector<cigDat>::iterator it = cigs.begin();
+        it != cigs.end(); it++){
 
-    switch( (*it).Type ){
-    case 'M':
-      {
-	*pos += (*it).Length;
-	break;
-      }
-    case 'X':
-      {
-	*pos += (*it).Length;
-	break;
-      }
-    case 'D':
-      {
-	*pos += (*it).Length;
-	break;
-      }
-    case '=':
-      {
-	*pos += (*it).Length;
-	break;
-      }
-    case 'N':
-      {
-	*pos += (*it).Length;
-	break;
-      }
-    default:
-      break;
+        switch( (*it).Type ){
+        case 'M':
+            {
+                *pos += (*it).Length;
+                break;
+            }
+        case 'X':
+            {
+                *pos += (*it).Length;
+                break;
+            }
+        case 'D':
+            {
+                *pos += (*it).Length;
+                break;
+            }
+        case '=':
+            {
+                *pos += (*it).Length;
+                break;
+            }
+        case 'N':
+            {
+                *pos += (*it).Length;
+                break;
+            }
+        default:
+            break;
+        }
+        // WARNING: this needs to be double checked
+        // *pos -= 1;
     }
-     // WARNING: this needs to be double checked
-    *pos -= 1;
-  }
 }
 
 
@@ -158,51 +158,52 @@ void endPos(std::vector<cigDat> & cigs, int * pos){
  Function returns: NA
 */
 
-void parseSA(std::vector<saTag> & parsed, 
-	     std::string tag, 
-	     std::string type,
-	     std::map<std::string, int> & il){
-  
-  std::vector<std::string> sas = split(tag, ';');
+void parseSA(std::vector<saTag> & parsed,
+             std::string tag,
+             std::string type,
+             std::map<std::string, int> & il){
+
+    std::vector<std::string> sas = split(tag, ';');
 
   for(unsigned int i = 0 ; i < sas.size() -1 ; i++){
 
-    saTag sDat;
+      saTag sDat;
 
-    std::vector<std::string> sat = split (sas[i], ',');
+      std::vector<std::string> sat = split (sas[i], ',');
 
-    if(sat.size() != 6 && type == "SA"){
-      std::cerr << "FATAL: failure to parse SA optional tag" << std::endl;
-      exit(1);
-    }
-
-    sDat.seqid = il[sat[0]];
-
-    if(type == "SA"){
-      sDat.pos   = atoi(sat[1].c_str()) - 1;
-      if(sat[2].compare("-") == 0){
-	sDat.strand = true;
+      if(sat.size() != 6 && type == "SA"){
+          std::cerr << "FATAL: failure to parse SA tag" << std::endl;
+          exit(1);
       }
-      else{
-	sDat.strand = false;
-      }
-      parseCigar(sDat.cig, sat[3]);
-    }
-    else if(type == "XP"){
-      char strand = sat[1][0];
-      sat[1].erase(0,1);
-      sDat.pos   = atoi(sat[1].c_str()) - 1;
-      if(strand == '-'){
-	sDat.strand = true;
-      }
-      else{
-	sDat.strand = false;
-      }
-      parseCigar(sDat.cig, sat[2]);
-    }
 
-    parsed.push_back(sDat);
+      sDat.seqid = il[sat[0]];
 
+      if(type == "SA"){
+          sDat.pos   = atoi(sat[1].c_str()) - 1;
+          sDat.mapQ  = atoi(sat[4].c_str());
+          sDat.NM    = atoi(sat[5].c_str());
+
+          if(sat[2].compare("-") == 0){
+          sDat.strand = true;
+          }
+          else{
+              sDat.strand = false;
+          }
+          parseCigar(sDat.cig, sat[3]);
+      }
+      else if(type == "XP"){
+          char strand = sat[1][0];
+          sat[1].erase(0,1);
+          sDat.pos   = atoi(sat[1].c_str()) - 1;
+          if(strand == '-'){
+              sDat.strand = true;
+          }
+          else{
+              sDat.strand = false;
+          }
+          parseCigar(sDat.cig, sat[2]);
+      }
+      parsed.push_back(sDat);
   }
 
 }
