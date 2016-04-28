@@ -1315,9 +1315,9 @@ bool runRegion(string filename,
            string & SM){
 
 
-    if(seqidIndex < 3 || seqidIndex > 6){
-        return true;
-    }
+//    if(seqidIndex < 3 || seqidIndex > 6){
+//        return true;
+//    }
 
 
 #ifdef DEBUG
