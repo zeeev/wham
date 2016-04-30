@@ -10,7 +10,6 @@
 #include "fastahack/Fasta.h"
 #include "ssw_cpp.h"
 
-
 struct regionDat{
   int seqidIndex ;
   int start      ;
@@ -91,17 +90,18 @@ class breakpoint{
 private:
 
     std::map<char, std::string > typeMap;
-    std::vector<std::string> refs    ;
-    std::vector<std::string> seqNames;
+    std::vector<std::string> refs       ;
+    std::vector<std::string> seqNames   ;
 
     char type;
     std::string typeName;
 
     int totalGraphWeight ;
 
-    bool paired;
-    bool bnd   ;
-    bool masked;
+    bool paired   ;
+    bool bnd      ;
+    bool masked   ;
+    bool clustered;
 
     long int length;
 
@@ -114,6 +114,8 @@ private:
     double dupCount  ;
     double invCount  ;
     double traCount  ;
+
+    double clusterFrac;
 
     void _count(node * n){
         for(std::vector<edge *>::iterator ed = n->eds.begin() ;
@@ -186,6 +188,7 @@ public:
                     , paired(false)
                     , bnd(false)
                     , masked(false)
+                    , clustered(false)
                     , length(0)
                     , nodeL(NULL)
                     , nodeR(NULL)
@@ -194,7 +197,8 @@ public:
                     , insCount(0)
                     , dupCount(0)
                     , invCount(0)
-                    , traCount(0){
+                    , traCount(0)
+                    , clusterFrac(0){
 
         typeMap['D'] = "DEL";
         typeMap['U'] = "DUP";
@@ -204,7 +208,11 @@ public:
 
     }
 
-     long int getLength(void){
+    char getType(void){
+        return this->type;
+    }
+
+    long int getLength(void){
         return length;
     }
     void setGoodPair(bool t){
@@ -299,6 +307,154 @@ public:
 
     friend std::ostream& operator<<(std::ostream& out,
                                     const breakpoint& foo);
+
+    bool invClusterCheck(void){
+        if(type != 'V'){
+            return false;
+        }
+        if(nodeL->seqid != nodeR->seqid ){
+            return false;
+        }
+
+        int countY = 0;
+        int countN = 0;
+
+        for( std::vector<edge*>::iterator it = nodeL->eds.begin();
+             it != nodeL->eds.end(); it++){
+            // same strand too far or too close
+            if((*it)->support['R'] == 0 && (*it)->support['A']){
+                continue;
+            }
+            // don't want the same node or non leaf
+            node * tmp = (*it)->L;
+            if(tmp->eds.size() > 1 || tmp == nodeL ){
+                tmp = (*it)->R;
+            }
+            if(tmp->eds.size() > 1){
+                continue;
+            }
+            // same strands need to be internal to the inversion
+
+            long int distL = abs(nodeL->pos - tmp->pos);
+            long int distR = abs(nodeR->pos - tmp->pos);
+
+            if(distR < distL){
+                countY += (*it)->support['R'];
+                countY += (*it)->support['A'];
+                countY += (*it)->support['M'];
+            }
+            else{
+                countN += (*it)->support['R'];
+                countN += (*it)->support['A'];
+                countN += (*it)->support['M'];
+            }
+        }
+        for( std::vector<edge*>::iterator it = nodeR->eds.begin();
+             it != nodeR->eds.end(); it++){
+
+            // same strand too far or too close
+            if((*it)->support['R'] == 0 && (*it)->support['A']){
+                continue;
+            }
+
+            // don't want the same node or non leaf
+            node * tmp = (*it)->L;
+            if(tmp->eds.size() > 1 || tmp == nodeL ){
+                tmp = (*it)->R;
+            }
+            if(tmp->eds.size() > 1){
+                continue;
+            }
+
+            // same strands need to be internal to the inversion
+            if(tmp->pos > nodeL->pos
+               && tmp->pos < nodeR->pos){
+
+                long int distL = abs(nodeL->pos - tmp->pos);
+                long int distR = abs(nodeR->pos - tmp->pos);
+
+                if(distR > distL){
+                    countY += (*it)->support['R'];
+                    countY += (*it)->support['A'];
+                    countY += (*it)->support['M'];
+                }
+                else{
+                    countN += (*it)->support['R'];
+                    countN += (*it)->support['A'];
+                    countN += (*it)->support['M'];
+                }
+            }
+
+        }
+        int sum = countY + countN;
+
+        if(sum > 0){
+            clusterFrac = double(countY) / double(sum);
+        }
+        return true;
+    }
+
+    bool delClusterCheck(void){
+
+        if(type != 'D'){
+            return false;
+        }
+        if(nodeL->seqid != nodeR->seqid ){
+            return false;
+        }
+
+        int countY = 0;
+        int countN = 0;
+
+        /* loop over 5' node (always sorted)
+           - check if left pos = 5' node, if yes switch pos
+           - count those nodes to the right of 3' node
+         */
+
+        for( std::vector<edge*>::iterator it = nodeL->eds.begin();
+             it != nodeL->eds.end(); it++){
+
+            if((*it)->support['H'] == 0){
+                continue;
+            }
+            long int five = (*it)->L->pos;
+            if((*it)->L == nodeL){
+                five = (*it)->R->pos;
+            }
+
+            if(five > nodeR->pos ){
+                countY += (*it)->support['H'];
+            }
+        }
+
+        /* loop over 3' node (always sorted)
+           - check if right pos = 3' node, if yes switch pos
+           - count those nodes to the left of 5' node
+        */
+
+        for( std::vector<edge*>::iterator it = nodeR->eds.begin();
+             it != nodeR->eds.end(); it++){
+
+            if((*it)->support['H']  == 0){
+                continue;
+            }
+            long int three = (*it)->L->pos;
+            if((*it)->L == nodeR){
+                three = (*it)->R->pos;
+            }
+
+            if( three < nodeL->pos ){
+                countY += (*it)->support['H'];
+            }
+        }
+
+        int sum = countY + countN;
+
+        if(sum > 0){
+            clusterFrac = double(countY) / double(sum);
+        }
+        return true;
+    }
 };
 
 std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
@@ -325,6 +481,8 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";V=" << foo.invCount
             << ";I=" << foo.insCount
             << ";T=" << foo.traCount
+            << ";A=" << foo.totalCount
+            << ";CF=" << foo.clusterFrac
             << ";REF=" << foo.refs.front();
 
 
@@ -342,6 +500,8 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";V=" << foo.invCount
             << ";I=" << foo.insCount
             << ";T=" << foo.traCount
+            << ";A=" << foo.totalCount
+            << ";CF=" << foo.clusterFrac
             << ";REF=" << foo.refs.front();
 
         out << ";SVTYPE=" << foo.typeName << ";SVLEN=." ;
@@ -363,6 +523,8 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";V=" << foo.invCount
             << ";I=" << foo.insCount
             << ";T=" << foo.traCount
+            << ";A=" << foo.totalCount
+            << ";CF=" << foo.clusterFrac
             << ";REF=" << foo.refs.back();
 
         out << ";SVTYPE=" << foo.typeName << ";SVLEN=.";

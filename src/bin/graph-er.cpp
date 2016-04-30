@@ -668,7 +668,6 @@ void getTree(node * n, vector<node *> & ns){
       }
 
   }
-
   for(std::map<node *, int>::iterator it = seenNodes.begin();
       it != seenNodes.end(); it++){
       ns.push_back(it->first);
@@ -1069,16 +1068,21 @@ inline bool pairFailed(readPair * rp){
     if(! rp->al1.IsMapped() || ! rp->al2.IsMapped() ){
         return true;
     }
-    if(rp->al1.Length == rp->al1.CigarData[0].Length
-       && rp->al1.CigarData[0].Type == 'M' &&
-       rp->al2.Length == rp->al2.CigarData[0].Length
-       && rp->al2.CigarData[0].Type == 'M' ){
+
+    if(rp->al1.MapQuality == 0
+       || rp->al2.MapQuality == 0 ){
         return true;
     }
 
     if(rp->al1.MapQuality < globalOpts.MQ
        && rp->al2.MapQuality < globalOpts.MQ){
-      return true;
+        return true;
+    }
+    if(rp->al1.Length == rp->al1.CigarData[0].Length
+       && rp->al1.CigarData[0].Type == 'M' &&
+       rp->al2.Length == rp->al2.CigarData[0].Length
+       && rp->al2.CigarData[0].Type == 'M' ){
+        return true;
     }
     if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 75){
       return true;
@@ -1107,7 +1111,7 @@ void splitToGraph(BamAlignment  & al,
       return;
   }
   // map quality of zero...
-  if(sa.front().mapQ < 1){
+  if(sa.front().mapQ < 5){
       return;
   }
 
@@ -1774,7 +1778,6 @@ int parseOpts(int argc, char** argv)
  Function input  : vector<nodes *>
  Function does   : dumps a graph in dot format
  Function returns: string
-
 */
 
 string dotviz(vector<node *> & ns){
@@ -1886,9 +1889,29 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
 }
 
 
-void findPairs(vector<node*> & tree, breakpoint * bp){
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector<nodes *>, and a breakpoint
+ Function does   : finds the best within graph link
+ Function returns: string
+*/
 
-    if(tree.size() < 2 || tree.size() > 100){
+
+
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector<nodes *>, and a breakpoint
+ Function does   : finds the best within graph link
+ Function returns: string
+*/
+
+void findPairs(vector<node*> & tree,
+               breakpoint * bp,
+               map<int, map<int, breakpoint* > > & lookup){
+
+    if(tree.size() < 2 || tree.size() > 200){
         bp->setMasked();
         return;
     }
@@ -1933,6 +1956,7 @@ void findPairs(vector<node*> & tree, breakpoint * bp){
     bp->add(finalL);
     bp->add(finalR);
 
+
     if(finalL->eds.size() == 1 || finalR->eds.size() == 1){
 
         if(finalL->eds.front()->support['D'] < 5 &&
@@ -1947,15 +1971,17 @@ void findPairs(vector<node*> & tree, breakpoint * bp){
         }
     }
 
+
     int totalGraphCount = 0;
 
     for(vector<node *>::iterator lit = tree.begin();
         lit != tree.end(); lit++){
         totalGraphCount += getSupport(*lit);
     }
-
     bp->setTotalSupport(totalGraphCount);
 
+//    lookup[finalL->seqid][finalL->pos] = bp;
+//    lookup[finalR->seqid][finalR->pos] = bp;
 
 }
 
@@ -2532,8 +2558,9 @@ int main( int argc, char** argv)
 
   loadReads(sequences);
 
-  vector<breakpoint*> allBreakpoints ;
-  vector<vector<node*> > globalTrees ;
+  vector<breakpoint*>                allBreakpoints;
+  vector<vector<node*> >                globalTrees;
+  map<int, map<int, breakpoint*> > breakpointLookup;
 
   if(globalOpts.svs.empty()){
       cerr << "INFO: Gathering graphs from forest." << endl;
@@ -2554,13 +2581,15 @@ int main( int argc, char** argv)
                    << "/" << globalTrees.size() << " graphs" << endl;
               omp_unset_lock(&glock);
           }
-          findPairs(globalTrees[i], allBreakpoints[i]);
+          findPairs(globalTrees[i], allBreakpoints[i], breakpointLookup);
           if(allBreakpoints[i]->IsMasked() ){
               continue;
           }
           allBreakpoints[i]->countSupportType();
           allBreakpoints[i]->calcType();
           allBreakpoints[i]->getRefBases(globalOpts.fasta, forward_lookup);
+          allBreakpoints[i]->delClusterCheck();
+          allBreakpoints[i]->invClusterCheck();
       }
       cerr << "INFO: Printing." << endl;
       for(unsigned int i = 0; i < globalTrees.size(); i++){
