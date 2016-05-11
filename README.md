@@ -1,5 +1,9 @@
 WHAM now is split into two programs: WHAM-BAM and WHAM-GRAPHENING.  WHAM-GRAPHENING is more accurate than WHAM, by reducing the FDR.  If you’re using WHAM for general structural variant discovery use WHAM-GRAPHENING.  WHAM-BAM should be used for associations testing and discovery of insertions or translocations.  Currently WHAM-GRAPHENING supports deletions, duplications and inversions.
 
+The WHAM paper:
+http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
+
+
 
 ### WHAM-GRAPHENING [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham) [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
