@@ -4,13 +4,11 @@ This program was created by:  Zev N. Kronenberg
 
 Contact: zev.kronenber@gmail.com
 
-Organization: Unviersity of Utah
-    School of Medicine
-    Salt Lake City, Utah
+Organization: Unviersity of Washington
 
 The MIT License (MIT)
 
-Copyright (c) <2015> <Zev N. Kronenberg>
+Copyright (c) <2016> <Zev N. Kronenberg>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -373,7 +371,6 @@ void printVersion(void){
   cerr << "Notes  : -If you find a bug, please open a report on github!" << endl;
   cerr << endl;
 }
-
 
 void printHelp(void){
 //------------------------------- XXXXXXXXXX --------------------------------
@@ -1282,9 +1279,9 @@ void processPair(readPair * rp,
           }
       }
   }
-  if(everted
-     && ((abs(rp->al1.InsertSize) > *high)
-         || (abs(rp->al1.InsertSize) < *high))){
+  if(everted){
+     //     && ((abs(rp->al1.InsertSize) > *high)
+     //    || (abs(rp->al1.InsertSize) < *high))){
       deviantInsertSize(rp, 'X', SM);
   }
 
@@ -1896,7 +1893,25 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
  Function returns: string
 */
 
+void doubleCheckDel(std::vector<breakpoint *> & bks){
 
+    for(std::vector<breakpoint *>::iterator it = bks.begin();
+        it != bks.end(); it++){
+
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if((*it)->getType() != 'D'){
+            continue;
+        }
+        if((*it)->getClustFrac() > 0.25){
+            std::cout << **it << std::endl;
+        }
+        else{
+            std::cerr << **it << std::endl;
+        }
+    }
+}
 
 
 
@@ -1911,7 +1926,7 @@ void findPairs(vector<node*> & tree,
                breakpoint * bp,
                map<int, map<int, breakpoint* > > & lookup){
 
-    if(tree.size() < 2 || tree.size() > 200){
+    if(tree.size() < 3 || tree.size() > 200){
         bp->setMasked();
         return;
     }
@@ -1956,7 +1971,6 @@ void findPairs(vector<node*> & tree,
     bp->add(finalL);
     bp->add(finalR);
 
-
     if(finalL->eds.size() == 1 || finalR->eds.size() == 1){
 
         if(finalL->eds.front()->support['D'] < 5 &&
@@ -1974,11 +1988,11 @@ void findPairs(vector<node*> & tree,
 
     int totalGraphCount = 0;
 
-    for(vector<node *>::iterator lit = tree.begin();
-        lit != tree.end(); lit++){
-        totalGraphCount += getSupport(*lit);
-    }
-    bp->setTotalSupport(totalGraphCount);
+//     for(vector<node *>::iterator lit = tree.begin();
+//         lit != tree.end(); lit++){
+//         totalGraphCount += getSupport(*lit);
+//     }
+//     bp->setTotalSupport(totalGraphCount);
 
 //    lookup[finalL->seqid][finalL->pos] = bp;
 //    lookup[finalR->seqid][finalR->pos] = bp;
@@ -2511,7 +2525,7 @@ int main( int argc, char** argv)
   globalOpts.nthreads   = 1    ;
   globalOpts.lastSeqid  = 0    ;
   globalOpts.MQ         = 20   ;
-  globalOpts.NM         = 5    ;
+  globalOpts.NM         = 10   ;
   globalOpts.saT        = "SA" ;
   globalOpts.keepTrying = false;
   globalOpts.statsOnly  = false;
@@ -2582,16 +2596,21 @@ int main( int argc, char** argv)
               omp_unset_lock(&glock);
           }
           findPairs(globalTrees[i], allBreakpoints[i], breakpointLookup);
+
           if(allBreakpoints[i]->IsMasked() ){
               continue;
           }
           allBreakpoints[i]->countSupportType();
           allBreakpoints[i]->calcType();
-          allBreakpoints[i]->getRefBases(globalOpts.fasta, forward_lookup);
           allBreakpoints[i]->delClusterCheck();
           allBreakpoints[i]->invClusterCheck();
+          allBreakpoints[i]->dupClusterCheck();
+          allBreakpoints[i]->getRefBases(globalOpts.fasta, forward_lookup);
       }
       cerr << "INFO: Printing." << endl;
+
+      doubleCheckDel(allBreakpoints);
+
       for(unsigned int i = 0; i < globalTrees.size(); i++){
           if(allBreakpoints[i]->IsMasked() ){
               continue;
@@ -2602,7 +2621,7 @@ int main( int argc, char** argv)
           if(allBreakpoints[i]->getTotalSupport() < 3){
               continue;
           }
-          std::cout << *allBreakpoints[i] << std::endl;
+          //          std::cout << *allBreakpoints[i] << std::endl;
       }
 
       std::cerr << "done processing trees" << std::endl;
@@ -2611,8 +2630,6 @@ int main( int argc, char** argv)
           dump(globalTrees);
       }
   }
-
-  //  printVCF(allBreakpoints, sequences);
 
   if(!globalOpts.graphOut.empty()){
       dump(globalTrees);

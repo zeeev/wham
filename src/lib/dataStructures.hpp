@@ -105,47 +105,50 @@ private:
 
     long int length;
 
-    node * nodeL;
-    node * nodeR;
-
-    double totalCount;
-    double delCount  ;
-    double insCount  ;
-    double dupCount  ;
-    double invCount  ;
-    double traCount  ;
-
+    double totalCount ;
+    double delCount   ;
+    double insCount   ;
+    double dupCount   ;
+    double invCount   ;
+    double traCount   ;
     double clusterFrac;
+    double avgDist    ;
 
-    void _count(node * n){
+    void _count(node * n, std::map<edge *, int> & lu){
         for(std::vector<edge *>::iterator ed = n->eds.begin() ;
             ed != n->eds.end(); ed++){
+
+            if(lu.find(*ed) != lu.end()){
+                continue;
+            }
+            lu[*ed] = 1;
+
             if((*ed)->L->seqid == (*ed)->R->seqid){
-                delCount += (*ed)->support['H'];
-                delCount += (*ed)->support['D'];
-                delCount += (*ed)->support['S'];
-                insCount += (*ed)->support['I'];
-                insCount += (*ed)->support['R'];
-                insCount += (*ed)->support['L'];
-                invCount += (*ed)->support['M'];
-                invCount += (*ed)->support['A'];
-                invCount += (*ed)->support['V'];
-                dupCount += (*ed)->support['V'];
-                dupCount += (*ed)->support['S'];
-                dupCount += (*ed)->support['X'];
+                delCount += (*ed)->support['H'] ;
+                delCount += (*ed)->support['D'] ;
+                delCount += (*ed)->support['S'] ;
+                insCount += (*ed)->support['I'] ;
+                insCount += (*ed)->support['R'] ;
+                insCount += (*ed)->support['L'] ;
+                invCount += (*ed)->support['M'] ;
+                invCount += (*ed)->support['A'] ;
+                invCount += (*ed)->support['V'] ;
+                dupCount += (*ed)->support['V'] ;
+                dupCount += (*ed)->support['S'] ;
+                dupCount += (*ed)->support['X'] ;
             }
             else{
-                traCount += (*ed)->support['H'];
-                traCount += (*ed)->support['D'];
-                traCount += (*ed)->support['S'];
-                traCount += (*ed)->support['I'];
-                traCount += (*ed)->support['R'];
-                traCount += (*ed)->support['L'];
-                traCount += (*ed)->support['M'];
-                traCount += (*ed)->support['A'];
-                traCount += (*ed)->support['V'];
-                traCount += (*ed)->support['S'];
-                traCount += (*ed)->support['X'];
+                traCount += (*ed)->support['H'] ;
+                traCount += (*ed)->support['D'] ;
+                traCount += (*ed)->support['S'] ;
+                traCount += (*ed)->support['I'] ;
+                traCount += (*ed)->support['R'] ;
+                traCount += (*ed)->support['L'] ;
+                traCount += (*ed)->support['M'] ;
+                traCount += (*ed)->support['A'] ;
+                traCount += (*ed)->support['V'] ;
+                traCount += (*ed)->support['S'] ;
+                traCount += (*ed)->support['X'] ;
             }
             totalCount += (*ed)->support['H'];
             totalCount += (*ed)->support['D'];
@@ -183,6 +186,10 @@ private:
     }
 
 public:
+
+    node * nodeL;
+    node * nodeR;
+
     breakpoint(void): type('D')
                     , totalGraphWeight(0)
                     , paired(false)
@@ -198,7 +205,8 @@ public:
                     , dupCount(0)
                     , invCount(0)
                     , traCount(0)
-                    , clusterFrac(0){
+                    , clusterFrac(0)
+                    , avgDist(0){
 
         typeMap['D'] = "DEL";
         typeMap['U'] = "DUP";
@@ -208,10 +216,15 @@ public:
 
     }
 
+    double getClustFrac(void){
+        return this->clusterFrac;
+    }
     char getType(void){
         return this->type;
     }
-
+    double getAvgDist(void){
+        return this->avgDist;
+    }
     long int getLength(void){
         return length;
     }
@@ -233,7 +246,6 @@ public:
     void setTotalSupport(int t){
         this->totalCount = t;
     }
-
     bool IsBadPair(void){
         return this->paired;
     }
@@ -259,11 +271,18 @@ public:
         if(nodeL == NULL || nodeR == NULL){
             return false;
         }
-        _count(nodeL);
-        _count(nodeR);
+        // make sure we dont double count edges
+        std::map<edge *, int> lu;
+
+        _count(nodeL, lu);
+        _count(nodeR, lu);
         return true;
     }
-    void calcType(void){
+    bool calcType(void){
+
+        if(nodeL == NULL || nodeR == NULL){
+            return false;
+        }
 
         int maxN = delCount;
 
@@ -284,6 +303,7 @@ public:
             maxN = traCount;
         }
         typeName = typeMap[type];
+        return true;
     }
 
     void getRefBases(std::string & reffile, std::map<int, string> & lookup){
@@ -308,40 +328,167 @@ public:
     friend std::ostream& operator<<(std::ostream& out,
                                     const breakpoint& foo);
 
+
+    bool dupClusterCheck(void){
+        return dupClusterCheck(nodeL, nodeR);
+    }
     bool invClusterCheck(void){
-        if(type != 'V'){
-            return false;
-        }
-        if(nodeL->seqid != nodeR->seqid ){
+        return invClusterCheck(nodeL, nodeR);
+    }
+    bool delClusterCheck(void){
+        return delClusterCheck(nodeL, nodeR);
+    }
+
+    bool dupClusterCheck(node * left, node * right){
+
+        if(left == NULL || right == NULL){
             return false;
         }
 
-        int countY = 0;
-        int countN = 0;
+        if(type != 'U'){
+            return false;
+        }
+        if(left->seqid != right->seqid ){
+            return false;
+        }
 
-        for( std::vector<edge*>::iterator it = nodeL->eds.begin();
-             it != nodeL->eds.end(); it++){
+        if(left->pos > right->pos){
+            node * tmp;
+            tmp  = left;
+            left = right;
+            right = tmp;
+        }
+
+        int countY  = 0;
+        int countN  = 0;
+        long int distSum = 0;
+        int distCount    = 0;
+
+        for( std::vector<edge*>::iterator it = left->eds.begin();
+             it != left->eds.end(); it++){
             // same strand too far or too close
-            if((*it)->support['R'] == 0 && (*it)->support['A']){
+            if( (*it)->support['X'] == 0 ){
                 continue;
             }
             // don't want the same node or non leaf
             node * tmp = (*it)->L;
-            if(tmp->eds.size() > 1 || tmp == nodeL ){
+            if(tmp->eds.size() > 1 || tmp == left ){
                 tmp = (*it)->R;
             }
             if(tmp->eds.size() > 1){
                 continue;
             }
-            // same strands need to be internal to the inversion
 
-            long int distL = abs(nodeL->pos - tmp->pos);
-            long int distR = abs(nodeR->pos - tmp->pos);
+            long int distL = abs(left->pos  - tmp->pos);
+            long int distR = abs(right->pos - tmp->pos);
+
+            if(distR < distL){
+                countY += (*it)->support['X'];
+                distSum += distR;
+                distCount += 1;
+            }
+            else{
+                countN += (*it)->support['X'];
+            }
+        }
+        for( std::vector<edge*>::iterator it = right->eds.begin();
+             it != right->eds.end(); it++){
+            // same strand too far or too close
+            if( (*it)->support['X'] == 0 ){
+                continue;
+            }
+            // don't want the same node or non leaf
+            node * tmp = (*it)->L;
+            if(tmp->eds.size() > 1 || tmp == nodeR ){
+                tmp = (*it)->R;
+            }
+            if(tmp->eds.size() > 1){
+                continue;
+            }
+
+            long int distL = abs(left->pos  - tmp->pos);
+            long int distR = abs(right->pos - tmp->pos);
+
+            if(distR < distL){
+                countY += (*it)->support['X'];
+                distSum += distR;
+                distCount += 1;
+            }
+            else{
+                countN += (*it)->support['X'];
+            }
+        }
+
+        int sum = countY + countN;
+
+        if(sum > 0){
+            clusterFrac = double(countY) / double(sum);
+            return true;
+        }
+        if(distCount > 0){
+            avgDist = double(distSum) / double(distCount);
+        }
+        if(sum > 0 && distCount > 0){
+            return true;
+        }
+        return false;
+    }
+
+    bool invClusterCheck(node * left, node * right){
+
+        if(left == NULL || right == NULL){
+            return false;
+        }
+
+        if(type != 'V'){
+            return false;
+        }
+        if(left->seqid != right->seqid ){
+            return false;
+        }
+
+        if(left->pos > right->pos){
+            node * tmp;
+            tmp = left;
+            left = right;
+            right = tmp;
+        }
+
+        int countY       = 0;
+        int countN       = 0;
+        long int distSum = 0;
+        int distCount    = 0;
+
+        for( std::vector<edge*>::iterator it = left->eds.begin();
+             it != left->eds.end(); it++){
+            // same strand too far or too close
+            if((*it)->support['R'] == 0 && (*it)->support['A']){
+                continue;
+            }
+
+            // don't want the same node or non leaf
+            node * tmp = (*it)->L;
+            if(tmp->eds.size() > 1 || tmp == left ){
+                tmp = (*it)->R;
+            }
+            if(tmp->eds.size() > 1){
+                continue;
+            }
+
+            if(tmp->pos < left->pos || tmp->pos > right->pos){
+                continue;
+            }
+
+            long int distL = abs(left->pos  - tmp->pos);
+            long int distR = abs(right->pos - tmp->pos);
 
             if(distR < distL){
                 countY += (*it)->support['R'];
                 countY += (*it)->support['A'];
                 countY += (*it)->support['M'];
+
+                distSum += distR;
+                distCount += 1;
             }
             else{
                 countN += (*it)->support['R'];
@@ -349,8 +496,8 @@ public:
                 countN += (*it)->support['M'];
             }
         }
-        for( std::vector<edge*>::iterator it = nodeR->eds.begin();
-             it != nodeR->eds.end(); it++){
+        for(std::vector<edge*>::iterator it = right->eds.begin();
+            it != right->eds.end(); it++){
 
             // same strand too far or too close
             if((*it)->support['R'] == 0 && (*it)->support['A']){
@@ -359,71 +506,98 @@ public:
 
             // don't want the same node or non leaf
             node * tmp = (*it)->L;
-            if(tmp->eds.size() > 1 || tmp == nodeL ){
+            if(tmp->eds.size() > 1 || tmp ==  left ){
                 tmp = (*it)->R;
             }
             if(tmp->eds.size() > 1){
                 continue;
             }
 
-            // same strands need to be internal to the inversion
-            if(tmp->pos > nodeL->pos
-               && tmp->pos < nodeR->pos){
+            if(tmp->pos < left->pos || tmp->pos > right->pos){
+                continue;
+            }
 
-                long int distL = abs(nodeL->pos - tmp->pos);
-                long int distR = abs(nodeR->pos - tmp->pos);
+
+            // same strands need to be internal to the inversion
+            if(tmp->pos > left->pos
+               && tmp->pos < right->pos){
+
+                long int distL = abs(left->pos - tmp->pos);
+                long int distR = abs(right->pos - tmp->pos);
 
                 if(distR > distL){
-                    countY += (*it)->support['R'];
-                    countY += (*it)->support['A'];
-                    countY += (*it)->support['M'];
-                }
+                    countY  += (*it)->support['R'];
+                    countY  += (*it)->support['A'];
+                    countY  += (*it)->support['M'];
+                    distSum += distR;
+                    distCount += 1;
+             }
                 else{
                     countN += (*it)->support['R'];
                     countN += (*it)->support['A'];
                     countN += (*it)->support['M'];
                 }
             }
-
         }
         int sum = countY + countN;
 
         if(sum > 0){
             clusterFrac = double(countY) / double(sum);
         }
-        return true;
+        if(distCount > 0){
+            avgDist = double(distSum) / double(distCount);
+        }
+        if(sum > 0 && distCount > 0){
+            return true;
+        }
+        return false;
     }
 
-    bool delClusterCheck(void){
+    bool delClusterCheck(node * left, node * right){
+
+        if(left == NULL || right == NULL){
+            return false;
+        }
 
         if(type != 'D'){
             return false;
         }
-        if(nodeL->seqid != nodeR->seqid ){
+        if(left->seqid != right->seqid ){
             return false;
         }
 
-        int countY = 0;
-        int countN = 0;
+        if(left->pos > right->pos){
+            node * tmp;
+            tmp = left;
+            left = right;
+            right = tmp;
+        }
+
+        int countY       = 0;
+        int countN       = 0;
+        long int distSum = 0;
+        int distCount    = 0;
 
         /* loop over 5' node (always sorted)
            - check if left pos = 5' node, if yes switch pos
            - count those nodes to the right of 3' node
          */
 
-        for( std::vector<edge*>::iterator it = nodeL->eds.begin();
-             it != nodeL->eds.end(); it++){
+        for( std::vector<edge*>::iterator it = left->eds.begin();
+             it != left->eds.end(); it++){
 
             if((*it)->support['H'] == 0){
                 continue;
             }
             long int five = (*it)->L->pos;
-            if((*it)->L == nodeL){
+            if((*it)->L == left){
                 five = (*it)->R->pos;
             }
 
-            if(five > nodeR->pos ){
+            if(five > right->pos ){
                 countY += (*it)->support['H'];
+                distSum += abs(five - right->pos);
+                distCount += 1;
             }
         }
 
@@ -432,19 +606,21 @@ public:
            - count those nodes to the left of 5' node
         */
 
-        for( std::vector<edge*>::iterator it = nodeR->eds.begin();
-             it != nodeR->eds.end(); it++){
+        for( std::vector<edge*>::iterator it = right->eds.begin();
+             it != right->eds.end(); it++){
 
             if((*it)->support['H']  == 0){
                 continue;
             }
             long int three = (*it)->L->pos;
-            if((*it)->L == nodeR){
+            if((*it)->L == right){
                 three = (*it)->R->pos;
             }
 
-            if( three < nodeL->pos ){
+            if( three < left->pos ){
                 countY += (*it)->support['H'];
+                distSum += abs(three - left->pos);
+                distCount += 1;
             }
         }
 
@@ -453,7 +629,14 @@ public:
         if(sum > 0){
             clusterFrac = double(countY) / double(sum);
         }
-        return true;
+        if(distCount > 0){
+            avgDist = double(distSum) / double(distCount);
+        }
+
+        if(sum > 0 && distCount > 0){
+            return true;
+        }
+        return false;
     }
 };
 
@@ -483,10 +666,13 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";T=" << foo.traCount
             << ";A=" << foo.totalCount
             << ";CF=" << foo.clusterFrac
+            << ";DI=" << foo.avgDist
             << ";REF=" << foo.refs.front();
 
 
         out << ";" << foo.typeName << ";SVLEN=" << len ;
+
+
         out << ";BW=" << double(getSupport(foo.nodeL)
                                 + getSupport(foo.nodeR))
             / double(foo.totalCount);
@@ -502,6 +688,7 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";T=" << foo.traCount
             << ";A=" << foo.totalCount
             << ";CF=" << foo.clusterFrac
+            << ";DI=" << foo.avgDist
             << ";REF=" << foo.refs.front();
 
         out << ";SVTYPE=" << foo.typeName << ";SVLEN=." ;
@@ -525,6 +712,7 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";T=" << foo.traCount
             << ";A=" << foo.totalCount
             << ";CF=" << foo.clusterFrac
+            << ";DI=" << foo.avgDist
             << ";REF=" << foo.refs.back();
 
         out << ";SVTYPE=" << foo.typeName << ";SVLEN=.";
