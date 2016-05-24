@@ -66,6 +66,7 @@ struct options{
     bool statsOnly                ;
     bool skipGeno                 ;
     bool keepTrying               ;
+    bool noInterSeqid             ;
     int MQ                        ;
     int NM                        ;
     int nthreads                  ;
@@ -1066,8 +1067,8 @@ inline bool pairFailed(readPair * rp){
         return true;
     }
 
-    if(rp->al1.MapQuality == 0
-       || rp->al2.MapQuality == 0 ){
+    if(rp->al1.MapQuality < 5
+       || rp->al2.MapQuality < 5 ){
         return true;
     }
 
@@ -1138,14 +1139,28 @@ void splitToGraph(BamAlignment  & al,
   /* since both sides are not clipped if the back is clipped we know
      the front is not */
 
+  bool readFront = true;
+
   if(al.CigarData.back().Type == 'S'){
     start = al.GetEndPosition(false,true);
+    readFront = false;
   }
 
   /* we also know that both sides of the split read are not trimmed */
 
   if(sa.front().cig.back().Type == 'S'){
     endPos(sa[0].cig, &end)  ;
+  }
+
+  if(readFront){
+      if(end > start){
+          support = 'Z';
+      }
+  }
+  else{
+      if(end < start){
+          support = 'Z';
+      }
   }
 
   addIndelToGraph(al.RefID, sa[0].seqid, start, end, support, SM);
@@ -1204,10 +1219,41 @@ bool deviantInsertSize(readPair * rp, char supportType, string & SM){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  : read pair pointer
+ Function does   : -->s s<-- tests if pairs suggests insertion
+ Function returns: bool
+*/
+
+inline bool isPointIn(readPair * rp){
+
+    if(!rp->al1.IsMapped() || !rp->al2.IsMapped()){
+        return false;
+    }
+    if(rp->al1.RefID != rp->al2.RefID){
+        return false;
+    }
+    if(rp->al1.Position <= rp->al2.Position){
+
+        if(rp->al1.CigarData.back().Type == 'S' &&
+           rp->al2.CigarData.front().Type == 'S'){
+            return true;
+        }
+    }
+    else{
+        if(rp->al1.CigarData.front().Type == 'S' &&
+           rp->al2.CigarData.back().Type == 'S'){
+            return true;
+        }
+    }
+    return false;
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
  Function input  : pointer to readPair ; seqid to index
  Function does   : processes Pair
  Function returns: NA
-
 */
 
 void processPair(readPair * rp,
@@ -1221,6 +1267,15 @@ void processPair(readPair * rp,
   bool sameStrand = false;
   bool everted    = isEverted(rp);
 
+  if(isPointIn(rp)){
+      return;
+  }
+
+
+  if(globalOpts.noInterSeqid && rp->al1.RefID != rp->al2.RefID){
+      return;
+  }
+
   if(pairFailed(rp)){
     return;
   }
@@ -1231,9 +1286,7 @@ void processPair(readPair * rp,
   }
 
   // nm filter
-
   std::string nm;
-
   if(rp->al1.GetTag("NM", nm)){
       if(atoi(nm.c_str()) > globalOpts.NM){
           return;
@@ -1885,6 +1938,65 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
   return ss.str();
 }
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector<nodes *>, and a breakpoint
+ Function does   : finds the best within graph link
+ Function returns: string
+*/
+
+void doubleCheckInv(std::vector<breakpoint *> & bks){
+
+    for(std::vector<breakpoint *>::iterator it = bks.begin();
+        it != bks.end(); it++){
+
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if((*it)->getType() != 'V'){
+            continue;
+        }
+        if((*it)->getClustFrac() > 0.1
+           && (*it)->getSameStrandCount() > 1
+           && (*it)->getInvCount() > 1 ){
+            std::cout << **it << std::endl;
+        }
+        else{
+            std::cerr << **it << std::endl;
+        }
+    }
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector<nodes *>, and a breakpoint
+ Function does   : finds the best within graph link
+ Function returns: string
+*/
+
+void doubleCheckDup(std::vector<breakpoint *> & bks){
+
+    for(std::vector<breakpoint *>::iterator it = bks.begin();
+        it != bks.end(); it++){
+
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if((*it)->getType() != 'U'){
+            continue;
+        }
+        if(((*it)->getClustFrac()   > 0.1 &&
+           (*it)->getEvertCount()  > 1
+            && (*it)->getDupCount() > 1) || ((*it)->getSplitReadCount() > 3 && (*it)->getLength() < 500)
+           ){
+            std::cout << **it << std::endl;
+        }
+        else{
+            std::cerr << **it << std::endl;
+        }
+    }
+}
+
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -1904,7 +2016,11 @@ void doubleCheckDel(std::vector<breakpoint *> & bks){
         if((*it)->getType() != 'D'){
             continue;
         }
-        if((*it)->getClustFrac() > 0.25){
+        if(((*it)->getClustFrac() > 0.1
+           && (*it)->getTooFarCount() > 1
+           && (*it)->getDelCount() > 1 )
+           || ((*it)->getInternalDelCount() > 2 && (*it)->getSplitReadCount() > 2)
+           ){
             std::cout << **it << std::endl;
         }
         else{
@@ -2522,14 +2638,15 @@ void loadReads(std::vector<RefData> & sequences){
 
 int main( int argc, char** argv)
 {
-  globalOpts.nthreads   = 1    ;
-  globalOpts.lastSeqid  = 0    ;
-  globalOpts.MQ         = 20   ;
-  globalOpts.NM         = 10   ;
-  globalOpts.saT        = "SA" ;
-  globalOpts.keepTrying = false;
-  globalOpts.statsOnly  = false;
-  globalOpts.skipGeno   = false;
+  globalOpts.nthreads     = 1    ;
+  globalOpts.lastSeqid    = 0    ;
+  globalOpts.MQ           = 20   ;
+  globalOpts.NM           = 10   ;
+  globalOpts.saT          = "SA" ;
+  globalOpts.keepTrying   = false;
+  globalOpts.statsOnly    = false;
+  globalOpts.skipGeno     = false;
+  globalOpts.noInterSeqid = true ;
 
   int parse = parseOpts(argc, argv);
   if(parse != 1){
@@ -2610,6 +2727,8 @@ int main( int argc, char** argv)
       cerr << "INFO: Printing." << endl;
 
       doubleCheckDel(allBreakpoints);
+      doubleCheckDup(allBreakpoints);
+      doubleCheckInv(allBreakpoints);
 
       for(unsigned int i = 0; i < globalTrees.size(); i++){
           if(allBreakpoints[i]->IsMasked() ){

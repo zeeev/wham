@@ -81,6 +81,7 @@ int getSupport(node * N){
         support += (*ed)->support['R'];
         support += (*ed)->support['X'];
         support += (*ed)->support['A'];
+        support += (*ed)->support['Z'];
     }
     return support;
 }
@@ -105,14 +106,20 @@ private:
 
     long int length;
 
-    double totalCount ;
-    double delCount   ;
-    double insCount   ;
-    double dupCount   ;
-    double invCount   ;
-    double traCount   ;
-    double clusterFrac;
-    double avgDist    ;
+    double totalCount    ;
+    double tooFarCount   ;
+    double tooCloseCount ;
+    double internalDCount;
+    double splitCount    ;
+    double evertCount    ;
+    double ssCount       ;
+    double delCount      ;
+    double insCount      ;
+    double dupCount      ;
+    double invCount      ;
+    double traCount      ;
+    double clusterFrac   ;
+    double avgDist       ;
 
     void _count(node * n, std::map<edge *, int> & lu){
         for(std::vector<edge *>::iterator ed = n->eds.begin() ;
@@ -124,6 +131,14 @@ private:
             lu[*ed] = 1;
 
             if((*ed)->L->seqid == (*ed)->R->seqid){
+                ssCount  += (*ed)->support['M'] ;
+                splitCount  += (*ed)->support['S'] ;
+                splitCount  += (*ed)->support['V'] ;
+                splitCount  += (*ed)->support['Z'] ;
+                tooFarCount += (*ed)->support['H'] ;
+                tooFarCount += (*ed)->support['M'] ;
+                evertCount  += (*ed)->support['X'] ;
+                internalDCount += (*ed)->support['D'] ;
                 delCount += (*ed)->support['H'] ;
                 delCount += (*ed)->support['D'] ;
                 delCount += (*ed)->support['S'] ;
@@ -133,7 +148,7 @@ private:
                 invCount += (*ed)->support['M'] ;
                 invCount += (*ed)->support['A'] ;
                 invCount += (*ed)->support['V'] ;
-                dupCount += (*ed)->support['V'] ;
+                dupCount += (*ed)->support['Z'] ;
                 dupCount += (*ed)->support['S'] ;
                 dupCount += (*ed)->support['X'] ;
             }
@@ -200,6 +215,12 @@ public:
                     , nodeL(NULL)
                     , nodeR(NULL)
                     , totalCount(0)
+                    , internalDCount(0)
+                    , tooFarCount(0)
+                    , tooCloseCount(0)
+                    , splitCount(0)
+                    , evertCount(0)
+                    , ssCount(0)
                     , delCount(0)
                     , insCount(0)
                     , dupCount(0)
@@ -215,10 +236,40 @@ public:
         typeMap['V'] = "INV";
 
     }
-
+    double getDelCount(void){
+        return this->delCount;
+    }
+    double getDupCount(void){
+        return this->dupCount;
+    }
+    double getInvCount(void){
+        return this->invCount;
+    }
+    double getTraCount(void){
+        return this->traCount;
+    }
     double getClustFrac(void){
         return this->clusterFrac;
     }
+    double getSameStrandCount(void){
+        return this->ssCount;
+    }
+    double getTooFarCount(void){
+        return this->tooFarCount;
+    }
+    double getTooCloseCount(void){
+        return this->tooCloseCount;
+    }
+    double getInternalDelCount(void){
+        return this->internalDCount;
+    }
+    double getEvertCount(void){
+        return evertCount;
+    }
+    double getSplitReadCount(void){
+        return splitCount;
+    }
+
     char getType(void){
         return this->type;
     }
@@ -664,13 +715,17 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";V=" << foo.invCount
             << ";I=" << foo.insCount
             << ";T=" << foo.traCount
+            << ";TF=" << foo.tooFarCount
+            << ";SR=" << foo.splitCount
+            << ";EV=" << foo.evertCount
+            << ";SS=" << foo.ssCount
             << ";A=" << foo.totalCount
             << ";CF=" << foo.clusterFrac
             << ";DI=" << foo.avgDist
             << ";REF=" << foo.refs.front();
 
 
-        out << ";" << foo.typeName << ";SVLEN=" << len ;
+        out << ";SVTYPE=" << foo.typeName << ";SVLEN=" << len ;
 
 
         out << ";BW=" << double(getSupport(foo.nodeL)
@@ -798,6 +853,8 @@ void initEdge(edge * e){
   e->support['K'] = 0;
   // same strand
   e->support['A'] = 0;
+  // split reads on wrong side of soft clip
+  e->support['z'] = 0;
 
 }
 
