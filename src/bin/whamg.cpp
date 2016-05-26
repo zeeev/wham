@@ -1803,7 +1803,7 @@ void doubleCheckInv(std::vector<breakpoint *> & bks){
             if((*it)->getLength()  < 500
                && ((*it)->getSameStrandCount() < 3
                    || (*it)->getInvCount() < 3
-                   || (*it)->getSplitCount() < 1)
+                   || (*it)->getSplitReadCount() < 1)
                ){
                 (*it)->unSetPrint();
             }
