@@ -1796,11 +1796,18 @@ void doubleCheckInv(std::vector<breakpoint *> & bks){
             continue;
         }
         if((*it)->getClustFrac() > 0.1
-           && (*it)->getSameStrandCount() > 1
-           && (*it)->getInvCount() > 1 ){
+           && (*it)->getSameStrandCount() > 2
+           && (*it)->getInvCount() > 2 ){
         }
         else{
-            (*it)->unSetPrint();
+            if((*it)->getLength()  < 500
+               && ((*it)->getSameStrandCount() < 3
+                   || (*it)->getInvCount() < 3
+                   || (*it)->getSplitCount() < 1)
+               ){
+                (*it)->unSetPrint();
+            }
+
         }
     }
 }
