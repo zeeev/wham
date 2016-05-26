@@ -1807,7 +1807,6 @@ void doubleCheckInv(std::vector<breakpoint *> & bks){
                ){
                 (*it)->unSetPrint();
             }
-
         }
     }
 }
