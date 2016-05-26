@@ -1,34 +1,3 @@
-/*
-This program was created at:  Thu May  7 12:10:40 2015
-This program was created by:  Zev N. Kronenberg
-
-Contact: zev.kronenber@gmail.com
-
-Organization: Unviersity of Washington
-
-The MIT License (MIT)
-
-Copyright (c) <2016> <Zev N. Kronenberg>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
 #include <string>
 #include <iostream>
 #include <math.h>
@@ -55,7 +24,6 @@ THE SOFTWARE.
 
 // phred scaling
 #include "phredUtils.h"
-
 
 using namespace std;
 using namespace BamTools;
@@ -99,8 +67,8 @@ map<int, string> forward_lookup;
 static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
 
 // omp lock
-
 omp_lock_t lock;
+// omp lock for the graph
 omp_lock_t glock;
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -600,128 +568,6 @@ void getTree(node * n, vector<node *> & ns){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : breakpoints *, RefSeq
- Function does   : provides ref and alt
- Function reurns: bool
-
-bool genAlleles(breakpoints * bp, string & fasta, RefVector & rv){
-
-  FastaReference rs;
-
-  omp_set_lock(&lock);
-  rs.open(fasta);
-  omp_unset_lock(&lock);
-
-  string ref ;
-  string alt ;
-
-  bp->seqid = rv[bp->seqidIndexL].RefName;
-
-  if(bp->type == 'D'){
-
-    if((bp->five - 500) < 0){
-      bp->fail = true;
-      return false;
-    }
-    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
-      bp->fail = true;
-      return false;
-    }
-
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
-                bp->svlen + 400 );
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
-                200) +
-      // bp->five = first base of deletion -1 last ref base + 1 for fasta
-      rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1, 200);
-    // start one after deletion ends
-
-    #ifdef DEBUG
-    cerr << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 5, 5)
-     << " -- "
-     << rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three+1,  5)
-     << endl;
-    #endif
-
-  }
-    //duplication;
-  if(bp->type == 'U'){
-    if((bp->five - 500) < 0){
-      bp->fail = true;
-      return false;
-    }
-    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
-      bp->fail = true;
-      return false;
-    }
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200,
-                bp->svlen + 400);
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five - 200,
-                bp->svlen + 200)
-      + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five , bp->svlen)
-      + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three , 200);
-
-  }
-  if(bp->type == 'V'){
-
-    if((bp->five - 500) < 0){
-      bp->fail = true;
-      return false;
-    }
-    if((bp->three + 500) > rv[bp->seqidIndexL].RefLength){
-      bp->fail = true;
-      return false;
-    }
-    string inv = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five,
-                   (bp->svlen) );
-    inv = string(inv.rbegin(), inv.rend());
-    Comp(inv);
-
-    ref = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five -200,
-                (bp->svlen + 400)) ;
-    alt = rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->five-200, 200)
-      + inv + rs.getSubSequence(rv[bp->seqidIndexL].RefName, bp->three, 200);
-
-
-  }
-
-  if(ref.size() > 800 && bp->type != 'U'){
-    ref = ref.substr(0,400) + ref.substr(ref.size()-400,  400);
-  }
-  if(alt.size() > 800 && bp->type != 'U'){
-    alt = alt.substr(0,400) + alt.substr(alt.size() -400, 400);
-  }
-
-  if(ref.size() > 1200 && bp->type == 'U'){
-    ref = ref.substr(0,400) + ref.substr(ref.size()-400,  400);
-
-  }
-  if(alt.size() > 1200 && bp->type == 'U'){
-
-    alt = alt.substr(0,400) + alt.substr(bp->svlen, 400)
-      + alt.substr(alt.size() -400, 400);
-
-  }
-
-  bp->alleles.clear();
-
-  bp->refBase = rs.getSubSequence(rv[bp->seqidIndexL].RefName, (bp->five), 1);
-
-  bp->alleles.push_back(ref) ;
-  bp->alleles.push_back(alt) ;
-
-  // upper case alleles
-  std::transform(bp->alleles.front().begin(), bp->alleles.front().end(),
-         bp->alleles.front().begin(), ::toupper);
-  std::transform(bp->alleles.back().begin(), bp->alleles.back().end(),
-         bp->alleles.back().begin(), ::toupper);
-
-  return true;
-}
-
-*/
-//------------------------------- SUBROUTINE --------------------------------
-/*
  Function input  : read pair pointer
  Function does   : returns true is reads are everted
  Function returns: bool
@@ -735,6 +581,7 @@ inline bool isEverted(readPair * rp){
     if(rp->al1.RefID != rp->al2.RefID){
         return false;
     }
+
     if(rp->al1.Position <= rp->al2.Position){
         if(rp->al1.IsReverseStrand()
            &&  (!rp->al2.IsReverseStrand()) ){
@@ -910,12 +757,9 @@ void addIndelToGraph(int refIDL,
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : bam alignment, two ints.
-
+ Function input  : bam alignment, sm tag
  Function does   : finds the positions of indels
-
  Function returns: string
-
 */
 
 bool indelToGraph(BamAlignment & ba, string & SM){
@@ -931,8 +775,8 @@ bool indelToGraph(BamAlignment & ba, string & SM){
   for(vector<CigarOp>::iterator ci = ba.CigarData.begin();
       ci != ba.CigarData.end(); ci++){
 
-      // 10bp seems reasonable
-      if(ci->Length < 10){
+      // 20bp seems reasonable
+      if(ci->Length < 20){
           continue;
       }
 
@@ -1094,17 +938,14 @@ void splitToGraph(BamAlignment  & al,
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : pointer to readPair;
-
  Function does   : adds high and low insert sizes to graph. both pairs are
-           treated as mapped
-
+                   treated as mapped
  Function returns: NA
-
 */
 
 bool deviantInsertSize(readPair * rp, char supportType, string & SM){
 
-  //
+  //can't be deviant on different seqids
   if(rp->al1.RefID != rp->al2.RefID){
     return false;
   }
@@ -1173,6 +1014,40 @@ inline bool isPointIn(readPair * rp){
     return false;
 }
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : pointer to readPair
+ Function does   : calulates if overlap is too much
+ Function returns: bool
+*/
+
+inline bool tooMuchOverlap(readPair * rp){
+
+    if(rp->al1.RefID != rp->al2.RefID){
+        return false;
+    }
+
+    if(rp->al1.Position > rp->al2.GetEndPosition(false,true) ||
+       rp->al2.Position > rp->al1.GetEndPosition(false,true)){
+        return false;
+    }
+
+    long int maxStart = std::max(rp->al1.Position, rp->al2.Position);
+    long int minEnd   = std::min(rp->al1.GetEndPosition(false,true),
+                                 rp->al1.GetEndPosition(false,true));
+
+    double perOver = double(minEnd - maxStart)
+        / double(rp->al1.Length + rp->al2.Length);
+
+    if(perOver > 0.2){
+        return true;
+    }
+
+
+    return false;
+}
+
+
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -1186,23 +1061,40 @@ void processPair(readPair * rp,
          double * high,
          string & SM){
 
-  string sa1;
-  string sa2;
-
-  bool sameStrand = false;
-  bool everted    = isEverted(rp);
-
-  if(isPointIn(rp)){
-      return;
-  }
-
-
   if(globalOpts.noInterSeqid && rp->al1.RefID != rp->al2.RefID){
       return;
   }
 
   if(pairFailed(rp)){
     return;
+  }
+  if(isPointIn(rp)){
+      return;
+  }
+  if(tooMuchOverlap(rp)){
+      return;
+  }
+
+  string sa1;
+  string sa2;
+
+  bool sameStrand = false;
+  bool everted    = isEverted(rp);
+
+  string xa;
+  std::vector<std::string> xas;
+
+  if(rp->al1.GetTag("XA", xa)){
+      xas = split(xa, ";");
+      if(xas.size() > 3){
+          return;
+      }
+  }
+  if(rp->al2.GetTag("XA", xa)){
+      xas = split(xa, ";");
+      if(xas.size() > 3){
+          return;
+      }
   }
 
   if(rp->al1.RefID == rp->al2.RefID){
@@ -1257,9 +1149,7 @@ void processPair(readPair * rp,
           }
       }
   }
-  if(everted){
-     //     && ((abs(rp->al1.InsertSize) > *high)
-     //    || (abs(rp->al1.InsertSize) < *high))){
+  else{
       deviantInsertSize(rp, 'X', SM);
   }
 
@@ -1292,17 +1182,6 @@ bool runRegion(string filename,
            int end,
            vector< RefData > seqNames,
            string & SM){
-
-
-//    if(seqidIndex < 3 || seqidIndex > 6){
-//        return true;
-//    }
-
-
-#ifdef DEBUG
-  cerr << "running region: " << seqidIndex
-       << ":" << start << "-" << end << endl;
-#endif
 
   // local read pair store
   map<string, readPair *>pairStoreLocal;
@@ -1418,7 +1297,6 @@ bool runRegion(string filename,
  Function input  : string
  Function does   : reads bam into graph
  Function returns: NA
-
 */
 
 void loadBam(string & bamFile){
@@ -1431,15 +1309,13 @@ void loadBam(string & bamFile){
   omp_set_lock(&lock);
 
   if(!globalOpts.seqid.empty()){
-    region    = true;
-    regionSID = globalOpts.seqid;
-    start = globalOpts.region.front();
-    end   = globalOpts.region.back();
+      region    = true;
+      regionSID = globalOpts.seqid;
+      start = globalOpts.region.front();
+      end   = globalOpts.region.back();
   }
 
   omp_unset_lock(&lock);
-
-  cerr << "INFO: reading bam file: " << bamFile << endl;
 
   BamReader br;
 
@@ -1471,13 +1347,6 @@ void loadBam(string & bamFile){
 
   SamReadGroupDictionary RG = SH.ReadGroups;
 
-  if(RG.Size() > 1){
-    cerr << endl;
-    cerr << "WARNING: Multiple libraries (@RG). Assuming same library prep." << endl;
-    cerr << "WARNING: Multiple libraries (@RG). Assuming same sample (SM)." << endl;
-    cerr << endl;
-  }
-
   string SM;
 
   if(!RG.Begin()->HasSample()){
@@ -1503,7 +1372,6 @@ void loadBam(string & bamFile){
   int seqidIndex = 0;
 
   if(region){
-
     int p = start;
     int e = 0;
     for(; (p+1000000) <= end; p += 1000000){
@@ -1515,80 +1383,77 @@ void loadBam(string & bamFile){
       e = p + 1000000;
     }
     if(e < end){
-      regionDat * regionInfo = new regionDat;
-      regionInfo->seqidIndex = inverse_lookup[regionSID];
-      regionInfo->start      = p                        ;
-      regionInfo->end        = end                      ;
-      regions.push_back(regionInfo);
+        regionDat * regionInfo = new regionDat;
+        regionInfo->seqidIndex = inverse_lookup[regionSID];
+        regionInfo->start      = p                        ;
+        regionInfo->end        = end                      ;
+        regions.push_back(regionInfo);
     }
   }
   else{
-    seqidIndex = 0;
+      seqidIndex = 0;
 
-    for(vector< RefData >::iterator sit = sequences.begin();
-    sit != sequences.end(); sit++){
-      int start = 0;
+      for(vector< RefData >::iterator sit = sequences.begin();
+          sit != sequences.end(); sit++){
+          int start = 0;
 
-      if(globalOpts.toSkip.find( (*sit).RefName )
-     == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
-    for(;start < (*sit).RefLength ; start += 1000000){
-      regionDat * chunk = new regionDat;
+          if(globalOpts.toSkip.find( (*sit).RefName )
+             == globalOpts.toSkip.end() && ((*sit).RefLength > 1000)){
+              for(;start < (*sit).RefLength ; start += 1000000){
+                  regionDat * chunk = new regionDat;
 
-      chunk->seqidIndex = seqidIndex;
-      chunk->start      = start;
-      chunk->end        = start + 1000000 ;
-      regions.push_back(chunk);
-    }
-    regionDat * lastChunk = new regionDat;
-    lastChunk->seqidIndex = seqidIndex;
-    lastChunk->start = start;
-    lastChunk->end   = (*sit).RefLength;
-    seqidIndex += 1;
-    if(start < (*sit).RefLength){
-      regions.push_back(lastChunk);
-    }
+                  chunk->seqidIndex = seqidIndex;
+                  chunk->start      = start;
+                  chunk->end        = start + 1000000 ;
+                  regions.push_back(chunk);
+              }
+              regionDat * lastChunk = new regionDat;
+              lastChunk->seqidIndex = seqidIndex;
+              lastChunk->start = start;
+              lastChunk->end   = (*sit).RefLength;
+              seqidIndex += 1;
+              if(start < (*sit).RefLength){
+                  regions.push_back(lastChunk);
+              }
+          }
+          else{
+              seqidIndex += 1;
+          }
       }
-      else{
-    cerr << "INFO: skipping: " << (*sit).RefName << endl;
-    seqidIndex += 1;
-      }
-    }
   }
   // closing the bam reader before running regions
   br.Close();
 
-
   int Mb = 0;
 
-  // running the regions with openMP
+// running the regions with openMP
 #pragma omp parallel for schedule(dynamic, 3)
-
   for(unsigned int re = 0; re < regions.size(); re++){
-    if(! runRegion(bamFile                ,
-           regions[re]->seqidIndex,
-           regions[re]->start     ,
-           regions[re]->end       ,
-           sequences              ,
-           SM                      )){
-      omp_set_lock(&lock);
-      cerr << "WARNING: region failed to run properly: "
-       << sequences[regions[re]->seqidIndex].RefName
-       << ":"  << regions[re]->start << "-"
-       << regions[re]->end
-       <<  endl;
-      omp_unset_lock(&lock);
-    }
-    else{
-      delete regions[re];
-      omp_set_lock(&lock);
-      Mb += 1;
-      if((Mb % 10) == 0 ){
-    cerr << "INFO: " << SM
-         << ": processed "
-         << Mb << "Mb of the genome." << endl;
+      if(! runRegion(bamFile                ,
+                     regions[re]->seqidIndex,
+                     regions[re]->start     ,
+                     regions[re]->end       ,
+                     sequences              ,
+                     SM                      )){
+          omp_set_lock(&lock);
+          cerr << "WARNING: region failed to run properly: "
+               << sequences[regions[re]->seqidIndex].RefName
+               << ":"  << regions[re]->start << "-"
+               << regions[re]->end
+               <<  endl;
+          omp_unset_lock(&lock);
       }
-      omp_unset_lock(&lock);
-    }
+      else{
+          delete regions[re];
+          omp_set_lock(&lock);
+          Mb += 1;
+          if((Mb % 100) == 0 ){
+              cerr << "INFO: " << SM
+                   << ": processed "
+                   << Mb << "Mb of the genome." << endl;
+          }
+          omp_unset_lock(&lock);
+      }
   }
   cerr << "INFO: " << bamFile << " had "
        << globalPairStore.size()
@@ -1598,10 +1463,9 @@ void loadBam(string & bamFile){
   // cleanup remaining reads
   for(map<string, readPair*>::iterator rps = globalPairStore.begin();
       rps != globalPairStore.end(); rps++){
-    delete rps->second;
+      delete rps->second;
   }
 }
-
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
 {
@@ -1619,8 +1483,6 @@ int parseOpts(int argc, char** argv)
     }
 
     cerr << "INFO: You are using a non standard split-read tag: " << globalOpts.saT << endl;
-
-
     break;
       }
     case 'u':
@@ -1667,12 +1529,12 @@ int parseOpts(int argc, char** argv)
       }
     case 'e':
       {
-    vector<string> seqidsToSkip = split(optarg, ",");
-    for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
-      globalOpts.toSkip[seqidsToSkip[i]] = 1;
-      cerr << "INFO: WHAM will skip seqid: " << seqidsToSkip[i] << endl;
-    }
-    break;
+          vector<string> seqidsToSkip = split(optarg, ",");
+          cerr << "INFO: WHAM will skip seqid: " << optarg << endl;
+          for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
+              globalOpts.toSkip[seqidsToSkip[i]] = 1;
+          }
+          break;
       }
     case 'c':
       {
@@ -1862,12 +1724,38 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
 
   return ss.str();
 }
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : vector<nodes *>, and a breakpoint
+ Function does   : checks if inversion meets basic requirements
+ Function returns: NA
+*/
+
+void doubleCheckIns(std::vector<breakpoint *> & bks){
+
+    for(std::vector<breakpoint *>::iterator it = bks.begin();
+        it != bks.end(); it++){
+
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if((*it)->getType() != 'I'){
+            continue;
+        }
+        if((*it)->getTooCloseCount() > 2
+           &&  (*it)->getInsCount()  > 2){
+        }
+        else{
+            (*it)->unSetPrint();
+        }
+    }
+}
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : vector<nodes *>, and a breakpoint
- Function does   : finds the best within graph link
- Function returns: string
+ Function does   : checks if inversion meets basic requirements
+ Function returns: NA
 */
 
 void doubleCheckInv(std::vector<breakpoint *> & bks){
@@ -2275,13 +2163,6 @@ void gatherBamStats(string & targetfile){
 
   SamReadGroupDictionary RG = SH.ReadGroups;
 
-  if(RG.Size() > 1){
-    cerr << endl;
-    cerr << "WARNING: Multiple libraries (@RG). Assuming same library prep." << endl;
-    cerr << "WARNING: Multiple libraries (@RG). Assuming same sample (SM)." << endl;
-    cerr << endl;
-  }
-
   string SM;
 
   if(!RG.Begin()->HasSample()){
@@ -2468,17 +2349,16 @@ void gatherBamStats(string & targetfile){
 
  stringstream whereTo;
 
- whereTo << "INFO: for file:" << targetfile << endl
-      << "      " << targetfile << ": mean depth: ......... " << mud << endl
-      << "      " << targetfile << ": sd depth: ........... " << sdd << endl
-      << "      " << targetfile << ": mean insert length: . " << insertDists.mus[targetfile] << endl
-      << "      " << targetfile << ": median insert length. " << median                      << endl
-      << "      " << targetfile << ": sd insert length .... " << insertDists.sds[targetfile] << endl
-      << "      " << targetfile << ": lower insert length . " << insertDists.low[targetfile]   << endl
-      << "      " << targetfile << ": upper insert length . " << insertDists.upr[targetfile]   << endl
-      << "      " << targetfile << ": average base quality: " << double(qsum)/double(qnum) << endl
-      << "      " << targetfile << ": number of reads used: " << n  << endl << endl;
-
+ whereTo << "INFO: for Sample:" << SM << endl
+      << "  STATS:    " << SM << ": mean depth ...........: " << mud << endl
+      << "  STATS:    " << SM << ": sd depth .............: " << sdd << endl
+      << "  STATS:    " << SM << ": mean insert length: ..: " << insertDists.mus[targetfile] << endl
+      << "  STATS:    " << SM << ": median insert length .: " << median                      << endl
+      << "  STATS:    " << SM << ": sd insert length .....: " << insertDists.sds[targetfile] << endl
+      << "  STATS:    " << SM << ": lower insert cutoff ..: " << insertDists.low[targetfile]   << endl
+      << "  STATS:    " << SM << ": upper insert cutoff ..: " << insertDists.upr[targetfile]   << endl
+      << "  STATS:    " << SM << ": average base quality .: " << double(qsum)/double(qnum) << endl
+      << "  STATS:    " << SM << ": number of reads used .: " << n  << endl << endl;
 
  if(globalOpts.statsOnly){
    cout << whereTo.str();
@@ -2627,10 +2507,10 @@ int main( int argc, char** argv)
 #pragma omp parallel for schedule(dynamic, 3)
       for(unsigned int i = 0 ; i < globalTrees.size(); i++){
           if((i % 10000) == 0){
-              omp_set_lock(&glock);
+              omp_set_lock(&lock);
               cerr << "INFO: Processed " << i
                    << "/" << globalTrees.size() << " graphs" << endl;
-              omp_unset_lock(&glock);
+              omp_unset_lock(&lock);
           }
           findPairs(globalTrees[i], allBreakpoints[i], breakpointLookup);
 

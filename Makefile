@@ -6,7 +6,7 @@
 CC=gcc
 CXX=g++
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS= -fstack-protector-all -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x  -Wno-sign-compare
+CFLAGS= -fstack-protector-all -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x  -Wno-sign-compare -O3
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/ -Isrc/fastahack -Isrc/Complete-Striped-Smith-Waterman-Library/src/
 INCLUDE_PLUS := $(INCLUDE) -Isrc/seqan/core/include/ -Isrc/seqan/extras/include -Isrc/Complete-Striped-Smith-Waterman-Library/src/
 
@@ -40,4 +40,4 @@ bin/whamg: src/bamtools/lib/libbamtools.a $(OBJ_FILES)
 bin/wham: src/bamtools/lib/libbamtools.a $(OBJ_FILES)
 	$(CXX) $(CFLAGS) $(INCLUDE_PLUS) src/bin/wham.cpp $(LBAMTOOLS) $(OBJ_FILES) -o bin/wham $(LIBS)
 clean:
-	rm -rf bin && rm -rf obj/*
+	rm -rf bin && rm -rf src/obj/*

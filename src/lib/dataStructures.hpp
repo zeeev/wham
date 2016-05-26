@@ -255,6 +255,9 @@ public:
     double getTraCount(void){
         return this->traCount;
     }
+    double getInsCount(void){
+        return this->insCount;
+    }
     double getClustFrac(void){
         return this->clusterFrac;
     }
