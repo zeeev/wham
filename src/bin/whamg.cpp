@@ -350,8 +350,8 @@ void printHelp(void){
   cerr << " Required:  " << endl;
 //------------------------------- XXXXXXXXXX --------------------------------
 
-  cerr << "          -f  <STRING>  A sorted and indexed bam file or a list            " << endl;
-  cerr << "                          of bams: a.bam,b.bam,...                         " << endl;
+  cerr << "          -f  <STRING>  Comma separated list of bam files or a file with   " << endl;
+  cerr << "                        one bam (full path) per line.                      " << endl;
   cerr << "          -a  <STRING>  The reference genome (indexed fasta).              " << endl;
   cerr << endl;
   cerr << " Optional:  Recommended flags are noted with : *                           " << endl;
@@ -1466,6 +1466,33 @@ void loadBam(string & bamFile){
       delete rps->second;
   }
 }
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : string
+ Function does   : loads filenames for bam files
+ Function returns: bool
+*/
+
+bool loadTargetBamFileNames(std::string fns){
+
+    std::string line;
+
+    std::vector<std::string> ext = split(fns, ".");
+    if(ext.back() == "bam"){
+            globalOpts.targetBams  = split(fns, ",");
+    }
+    else{
+        ifstream myfile(fns.c_str());
+
+        if(myfile){
+            while (getline( myfile, line )){
+                globalOpts.targetBams.push_back(line);
+            }
+        }
+    }
+    return true;
+}
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
 {
@@ -1474,136 +1501,135 @@ int parseOpts(int argc, char** argv)
   while(opt != -1){
     switch(opt){
     case 'i':
-      {
-    globalOpts.saT = optarg;
+        {
+            globalOpts.saT = optarg;
 
-    if(globalOpts.saT != "XP" && globalOpts.saT != "XP"){
-      cerr << "FATAL: only SA and XP optional tags are supported for split reads" << endl;
-      exit(1);
-    }
+            if(globalOpts.saT != "XP" && globalOpts.saT != "XP"){
+                cerr << "FATAL: only SA and XP optional tags are supported for split reads" << endl;
+                exit(1);
+            }
 
-    cerr << "INFO: You are using a non standard split-read tag: " << globalOpts.saT << endl;
-    break;
-      }
+            cerr << "INFO: You are using a non standard split-read tag: " << globalOpts.saT << endl;
+            break;
+        }
     case 'u':
-      {
-      cerr << "INFO: You are using a hidden flag." << endl;
-      globalOpts.lastSeqid =  atoi(((string)optarg).c_str());
-      cerr << "INFO: Random sampling will only go up to: " << globalOpts.lastSeqid << endl;
-      break;
-      }
+        {
+            cerr << "INFO: You are using a hidden flag." << endl;
+            globalOpts.lastSeqid =  atoi(((string)optarg).c_str());
+            cerr << "INFO: Random sampling will only go up to: " << globalOpts.lastSeqid << endl;
+            break;
+        }
     case 'z':
-      {
-    globalOpts.keepTrying = true;
-    cerr << "INFO: WHAM-GRAPHENING will not give up sampling reads: -z set" << globalOpts.svs << endl;
-    break;
-      }
+        {
+            globalOpts.keepTrying = true;
+            cerr << "INFO: WHAM-GRAPHENING will not give up sampling reads: -z set" << globalOpts.svs << endl;
+            break;
+        }
     case 'k':
-      {
-    globalOpts.skipGeno = true;
-    break;
-      }
+        {
+            globalOpts.skipGeno = true;
+            break;
+        }
     case 'b':
-      {
-    globalOpts.svs = optarg;
-    cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
-    break;
-      }
+        {
+            globalOpts.svs = optarg;
+            cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
+            break;
+        }
     case 's':
-      {
-    globalOpts.statsOnly = true;
-    break;
-      }
+        {
+            globalOpts.statsOnly = true;
+            break;
+        }
     case 'g':
-      {
-    globalOpts.graphOut = optarg;
-    cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut
-         << endl;
-    break;
-      }
+        {
+            globalOpts.graphOut = optarg;
+            cerr << "INFO: graphs will be written to: " <<  globalOpts.graphOut
+                 << endl;
+            break;
+        }
     case 'a':
-      {
-    globalOpts.fasta = optarg;
-    cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
+        {
+            globalOpts.fasta = optarg;
+            cerr << "INFO: fasta file: " << globalOpts.fasta << endl;
     break;
-      }
+        }
     case 'e':
-      {
-          vector<string> seqidsToSkip = split(optarg, ",");
-          cerr << "INFO: WHAM will skip seqid: " << optarg << endl;
-          for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
-              globalOpts.toSkip[seqidsToSkip[i]] = 1;
-          }
-          break;
-      }
+        {
+            vector<string> seqidsToSkip = split(optarg, ",");
+            cerr << "INFO: WHAM will skip seqid: " << optarg << endl;
+            for(unsigned int i = 0; i < seqidsToSkip.size(); i++){
+                globalOpts.toSkip[seqidsToSkip[i]] = 1;
+            }
+            break;
+        }
     case 'c':
-      {
-    vector<string> seqidsToInclude = split(optarg, ",");
-    for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
-      globalOpts.toInclude[seqidsToInclude[i]] = 1;
-      cerr << "INFO: WHAM will analyze seqid: " << seqidsToInclude[i] << endl;
-    }
-    break;
-      }
+        {
+            vector<string> seqidsToInclude = split(optarg, ",");
+            for(unsigned int i = 0; i < seqidsToInclude.size(); i++){
+                globalOpts.toInclude[seqidsToInclude[i]] = 1;
+                cerr << "INFO: WHAM will analyze seqid: " << seqidsToInclude[i] << endl;
+            }
+            break;
+        }
 
     case 'f':
-      {
-    globalOpts.targetBams     = split(optarg, ",");
-    cerr << "INFO: target bams:\n" << joinReturn(globalOpts.targetBams) ;
-    break;
-      }
+        {
+            loadTargetBamFileNames(string(optarg));
+            cerr << "INFO: target bams:\n" << joinReturn(globalOpts.targetBams) ;
+            break;
+        }
     case 'h':
-      {
-    printHelp();
-    exit(1);
-    break;
-      }
+        {
+            printHelp();
+            exit(1);
+            break;
+        }
     case '?':
-      {
-    break;
+        {
+            break;
       }
     case 'm':
-      {
-    globalOpts.MQ = atoi(((string)optarg).c_str());
-    cerr << "INFO: Reads with mapping quality below " << globalOpts.MQ << " will be filtered. " << endl;
-    break;
-      }
+        {
+            globalOpts.MQ = atoi(((string)optarg).c_str());
+            cerr << "INFO: Reads with mapping quality below " << globalOpts.MQ << " will be filtered. " << endl;
+            break;
+        }
     case 'x':
-      {
-      globalOpts.nthreads = atoi(((string)optarg).c_str());
-      cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads
-           << " threads" << endl;
-      break;
-    }
+        {
+            globalOpts.nthreads = atoi(((string)optarg).c_str());
+            cerr << "INFO: OpenMP will roughly use " << globalOpts.nthreads
+                 << " threads" << endl;
+            break;
+        }
     case 'r':
-      {
-    vector<string> tmp_region = split(optarg, ":");
-    if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
-      cerr << "FATAL: region was not set correctly" << endl;
-      cerr << "INFO:  region format: seqid:start-end" << endl;
-      exit(1);
-    }
+        {
+            vector<string> tmp_region = split(optarg, ":");
+            if(tmp_region.size() != 2 || tmp_region[1].empty() || tmp_region[0].empty()){
+                cerr << "FATAL: region was not set correctly" << endl;
+                cerr << "INFO:  region format: seqid:start-end" << endl;
+                exit(1);
+            }
 
-    vector<string> start_end = split(tmp_region[1], "-");
-    globalOpts.seqid = tmp_region[0];
-    globalOpts.region.push_back(atoi(start_end[0].c_str()));
-    globalOpts.region.push_back(atoi(start_end[1].c_str()));
+            vector<string> start_end = split(tmp_region[1], "-");
+            globalOpts.seqid = tmp_region[0];
+            globalOpts.region.push_back(atoi(start_end[0].c_str()));
+            globalOpts.region.push_back(atoi(start_end[1].c_str()));
 
-    if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
-      cerr << "FATAL: region was not set correctly" << endl;
-      cerr << "INFO:  region format: seqid:start-end" << endl;
-      exit(1);
-    }
-    cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
+            if(start_end.size() !=2 || start_end[0].empty() || start_end[1].empty()){
+                cerr << "FATAL: region was not set correctly" << endl;
+                cerr << "INFO:  region format: seqid:start-end" << endl;
+                exit(1);
+            }
+            cerr << "INFO: region set to: " <<   globalOpts.seqid << ":" <<   globalOpts.region[0] << "-" <<  globalOpts.region[1] << endl;
 
-    if(globalOpts.region.size() != 2){
-      cerr << "FATAL: incorrectly formatted region." << endl;
-      cerr << "FATAL: wham is now exiting."          << endl;
-      exit(1);
-    }
-    break;
+            if(globalOpts.region.size() != 2){
+                cerr << "FATAL: incorrectly formatted region." << endl;
+                cerr << "FATAL: wham is now exiting."          << endl;
+                exit(1);
+            }
+            break;
       }
-
     }
     opt = getopt( argc, argv, optString );
   }
