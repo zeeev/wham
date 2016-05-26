@@ -49,8 +49,8 @@ struct edge{
 struct node{
   int   seqid                  ;
   int   pos                    ;
-  std::vector <edge *>     eds ;
-  std::map<std::string,int> sm ;
+  std::vector <edge *>      eds;
+  std::map<std::string, int> sm;
 };
 
 struct graph{
@@ -103,6 +103,7 @@ private:
     bool bnd      ;
     bool masked   ;
     bool clustered;
+    bool print    ;
 
     long int length;
 
@@ -132,6 +133,8 @@ private:
 
             if((*ed)->L->seqid == (*ed)->R->seqid){
                 ssCount  += (*ed)->support['M'] ;
+                ssCount  += (*ed)->support['A'] ;
+                ssCount  += (*ed)->support['R'] ;
                 splitCount  += (*ed)->support['S'] ;
                 splitCount  += (*ed)->support['V'] ;
                 splitCount  += (*ed)->support['Z'] ;
@@ -147,6 +150,7 @@ private:
                 insCount += (*ed)->support['L'] ;
                 invCount += (*ed)->support['M'] ;
                 invCount += (*ed)->support['A'] ;
+                invCount += (*ed)->support['R'] ;
                 invCount += (*ed)->support['V'] ;
                 dupCount += (*ed)->support['Z'] ;
                 dupCount += (*ed)->support['S'] ;
@@ -164,6 +168,7 @@ private:
                 traCount += (*ed)->support['V'] ;
                 traCount += (*ed)->support['S'] ;
                 traCount += (*ed)->support['X'] ;
+                traCount += (*ed)->support['Z'] ;
             }
             totalCount += (*ed)->support['H'];
             totalCount += (*ed)->support['D'];
@@ -177,6 +182,7 @@ private:
             totalCount += (*ed)->support['V'];
             totalCount += (*ed)->support['S'];
             totalCount += (*ed)->support['X'];
+            totalCount += (*ed)->support['Z'];
         }
     }
 
@@ -207,6 +213,7 @@ public:
 
     breakpoint(void): type('D')
                     , totalGraphWeight(0)
+                    , print(true)
                     , paired(false)
                     , bnd(false)
                     , masked(false)
@@ -285,11 +292,17 @@ public:
     bool IsMasked(void){
         return this->masked;
     }
+    bool IsPrint(void){
+        return this->print;
+    }
     void unsetMasked(void){
         this->masked = false;
     }
     void setMasked(void){
         this->masked = true;
+    }
+    void unSetPrint(void){
+        this->print = false;
     }
     void setBadPair(void){
         this->paired = true;
@@ -706,31 +719,63 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
         len = -1*len;
     }
 
+    double sum = foo.delCount + foo.dupCount + foo.traCount + foo.invCount + foo.insCount;
+
+    std::map<std::string, int> sms;
+
+    for(std::map<std::string, int>::iterator sm = foo.nodeL->sm.begin();
+        sm!=foo.nodeL->sm.end(); sm++){
+        sms[sm->first] = 1;
+    }
+    for(std::map<std::string, int>::iterator sm = foo.nodeR->sm.begin();
+        sm!=foo.nodeR->sm.end(); sm++){
+        sms[sm->first] = 1;
+    }
+
+    stringstream ss;
+    int index = 0;
+    for(std::map<std::string, int>::iterator sm = sms.begin();
+        sm != sms.end(); sm++){
+        if(index == 0){
+            ss << sm->first;
+        }
+        else{
+            ss << "," << sm->first;
+        }
+        index += 1;
+    }
+
+
     if(foo.type != 'T' && (foo.nodeL->seqid == foo.nodeR->seqid)){
         out << foo.seqNames.front() << "\t"
-            << start << "\t"
-            << end   << "\t"
-            << "D="  << foo.delCount
-            << ";U=" << foo.dupCount
-            << ";V=" << foo.invCount
-            << ";I=" << foo.insCount
-            << ";T=" << foo.traCount
-            << ";TF=" << foo.tooFarCount
-            << ";SR=" << foo.splitCount
-            << ";EV=" << foo.evertCount
-            << ";SS=" << foo.ssCount
-            << ";A=" << foo.totalCount
-            << ";CF=" << foo.clusterFrac
-            << ";DI=" << foo.avgDist
-            << ";REF=" << foo.refs.front();
-
-
-        out << ";SVTYPE=" << foo.typeName << ";SVLEN=" << len ;
-
-
-        out << ";BW=" << double(getSupport(foo.nodeL)
-                                + getSupport(foo.nodeR))
-            / double(foo.totalCount);
+            << start + 1            << "\t"
+            << "."              << "\t"
+            << foo.refs.front() << "\t"
+            << "<" << foo.typeName << ">\t"
+            << "."              << "\t"
+            << "PASS"           << "\t"
+            << "A="             << foo.totalCount
+            << ";CIEND=-10,10;CIPOS=-10,10"
+            << ";CF="           << foo.clusterFrac
+            << ";CW="           << (foo.delCount / sum) << ","
+            << (foo.dupCount / sum) << ","
+            << (foo.invCount / sum) << ","
+            << (foo.insCount / sum) << ","
+            << (foo.traCount / sum)
+            << ";D="            << foo.delCount
+            << ";DI="           << foo.avgDist
+            << ";END="          << end + 1
+            << ";EV="           << foo.evertCount
+            << ";I="            << foo.insCount
+            << ";SR="           << foo.splitCount
+            << ";SS="           << foo.ssCount
+            << ";SVLEN="        << len
+            << ";SVTYPE="       << foo.typeName
+            << ";T="            << foo.traCount
+            << ";TAGS="         << ss.str()
+            << ";TF="           << foo.tooFarCount
+            << ";U="            << foo.dupCount
+            << ";V="            << foo.invCount;
     }
     else{
         out << foo.seqNames.front() << "\t"

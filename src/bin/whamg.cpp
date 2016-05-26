@@ -45,7 +45,6 @@ THE SOFTWARE.
 #include "dataStructures.hpp"
 
 #include "fastahack/Fasta.h"
-#include "ssw_cpp.h"
 
 // openMP - swing that hammer
 #include <omp.h>
@@ -54,9 +53,9 @@ THE SOFTWARE.
 #include "api/BamMultiReader.h"
 #include "readPileUp.h"
 
-// paired-like hmm
+// phred scaling
 #include "phredUtils.h"
-#include "alignHMM.h"
+
 
 using namespace std;
 using namespace BamTools;
@@ -428,198 +427,124 @@ void printHelp(void){
 }
 
 //------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : vector of pointers to breakpoints and a bamtools RefVector
- Function does   : prints a vcf format
- Function returns: nada
+bool breakSort(breakpoint * L, breakpoint * R){
 
-void printVCF(vector<breakpoints *> & calls, RefVector & seqs){
-
-  int index = 0;
-
-  sort(calls.begin(), calls.end(), sortBreak);
-
-  stringstream header;
-
-  header << "##fileformat=VCFv4.2" << endl;
-  header << "##source=WHAM-GRAPHENING:" << VERSION << endl;
-  header << "##reference=" << globalOpts.fasta << endl;
-  header << "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">" << endl;
-  header << "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between REF and ALT alleles\">" << endl;
-  header << "##INFO=<ID=ID,Number=1,Type=String,Description=\"Unique hexadecimal identifier\">" << endl;
-  header << "##INFO=<ID=SUPPORT,Number=2,Type=Integer,Description=\"Number of reads supporting POS and END breakpoints\">" << endl;
-  header << "##INFO=<ID=MERGED,Number=1,Type=Integer,Description=\"SV breakpoints were joined without split read support 0=false 1=true\">" << endl;
-  header << "##INFO=<ID=REFINED,Number=1,Type=Integer,Description=\"SV breakpoints were refined based on SW alignment 0=false 1=true\">" << endl;
-
-  header << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">" << endl;
-  header << "##INFO=<ID=POS,Number=2,Type=String,Description=\"POS and END\">" << endl;
-  header << "##INFO=<ID=FIVE,Number=.,Type=Integer,Description=\"collapsed POS\">" << endl;
-  header << "##INFO=<ID=THREE,Number=.,Type=Integer,Description=\"collapsed END\">" << endl;
-  header << "##INFO=<ID=LID,Number=.,Type=String,Description=\"POS breakpoint support came from SM, independent of genotype\">" << endl;
-  header << "##INFO=<ID=RID,Number=.,Type=String,Description=\"END breakpoint support came from SM, independent of genotype\">" << endl;
-  header << "##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"Confidence interval around POS for imprecise variants\">" << endl;
-  header << "##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"Confidence interval around END for imprecise variants\">" << endl;
-  header << "##INFO=<ID=COLLAPSED,Number=1,Type=Integer,Description=\"Number of SV calls merged into record\">" << endl;
-  header << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << endl;
-  header << "##FORMAT=<ID=GL,Number=.,Type=Float,Description=\"Genotype likelihoods comprised of comma separated floating point log10-scaled likelihoods for all possible genotypes given the set of alleles defined in the REF and ALT fields.\">" << endl;
-  header << "##FORMAT=<ID=AS,Number=1,Type=Integer,Description=\"Number of reads that align better to ALT allele\">" << endl;
-  header << "##FORMAT=<ID=RS,Number=1,Type=Integer,Description=\"Number of reads that align better to REF allele\">" << endl;
-  header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
-
-  for(vector<string>::iterator iz = globalOpts.targetBams.begin();
-      iz !=  globalOpts.targetBams.end(); iz++){
-
-    if(globalOpts.SMTAGS.find(*iz) == globalOpts.SMTAGS.end()){
-      cerr << "FATAL: could not find SM tag for: " << *iz << endl;
-      exit(1);
-    }
-    header << "\t" << globalOpts.SMTAGS[*iz];
-  }
-
-  cout << header.str() << endl;
-
-  for(vector<breakpoints *>::iterator c = calls.begin(); c != calls.end(); c++){
-
-    int svlen = (*c)->svlen;
-
-    if(svlen < 5){
-      (*c)->fail = true;
+    if(L->IsMasked() || R->IsMasked()){
+        return false;
     }
 
-    if((*c)->fail){
-      continue;
-    }
-
-    index += 1;
-
-
-    stringstream ss;
-
-    string type = "BND";
-    switch((*c)->type){
-    case 'D':
-      type = "DEL";
-      svlen = -svlen;
-      break;
-    case 'U':
-      type = "DUP";
-      break;
-    case 'I':
-      type = "INS";
-      break;
-    case 'V':
-      type = "INV";
-      break;
-    default:
-      break;
-    }
-
-    ss << seqs[(*c)->seqidIndexL].RefName
-       << "\t"
-       << ((*c)->five + 1)
-       << "\t"
-       << "WG:" << type << ":" << (*c)->id
-       << "\t"
-       << (*c)->refBase
-       << "\t"
-       << "<" << type << ">"
-       << "\t"
-       << "."
-       << "\t"
-       << ".";
-
-    ss << "\tSVTYPE=" << type << ";SVLEN=" << svlen << ";ID=" << (*c)->id << ";"
-       << "SUPPORT=" << (*c)->supports[0] << "," << (*c)->supports[1] << ";"
-       << "MERGED=" << (*c)->merged << ";"
-       << "REFINED=" << (*c)->refined << ";"
-       << "END=" << ((*c)->three +1) << ";"
-       << "POS=" << ((*c)->five + 1) << "," << ((*c)->three +1) << ";" ;
-
-    stringstream tmp1;
-    stringstream tmp2;
-
-    if((*c)->fives.empty()){
-      tmp1 << (*c)->five  + 1;
-      tmp2 << (*c)->three + 1;
-
-      (*c)->fives = tmp1.str();
-      (*c)->threes = tmp2.str();
-    }
-    ss << "FIVE=" << (*c)->fives << ";";
-    ss << "THREE=" << (*c)->threes << ";";
-
-    string SML = ".";
-    string SMR = ".";
-
-    if((*c)->sml.size() > 1){
-      SML = join((*c)->sml, ",");
+    if(L->nodeL->seqid == R->nodeL->seqid){
+        if(L->nodeL->pos <= R->nodeL->pos){
+            return true;
+        }
+        else{
+            return false;
+        }
     }
     else{
-      SML = (*c)->sml.front();
+        if(L->nodeL->seqid < R->nodeL->seqid){
+            return true;
+        }
+        else{
+            return false;
+        }
     }
-
-    if((*c)->smr.size() > 1){
-      SMR = join((*c)->smr, ",");
-    }
-    else{
-      SMR = (*c)->smr.front();
-    }
-
-    ss << "LID=" << SML << ";" ;
-    ss << "RID=" << SMR << ";" ;
-    ss << "CIPOS=" << (*c)->posCIL << "," << (*c)->posCIH << ";";
-    ss << "CIEND=" << (*c)->endCIL << "," << (*c)->endCIH << ";";
-    ss << "COLLAPSED=" << (*c)->collapsed ;
-    ss << "\tGT:GL:AS:RS";
-
-    if((*c)->genotypeIndex.size() != globalOpts.SMTAGS.size()){
-
-      for(int gi = 0; gi < globalOpts.SMTAGS.size(); gi++){
-    ss << "\t" << ".:.:.:." ;
-      }
-      ss << endl;
-      cout << ss.str();
-    }
-    else{
-      for(unsigned int i = 0; i < (*c)->genotypeIndex.size(); i++){
-    if((*c)->genotypeIndex[i] == -1){
-      ss << "\t" << "./.:" << "."
-         << ":" << (*c)->nalt[i]
-         << ":" << (*c)->nref[i];
-    }
-    else if((*c)->genotypeIndex[i] == 0){
-      ss << "\t" << "0/0:" << (*c)->genotypeLikelhoods[i][0]
-         << "," << (*c)->genotypeLikelhoods[i][1]
-         << "," << (*c)->genotypeLikelhoods[i][2]
-         << ":" << (*c)->nalt[i]
-         << ":" << (*c)->nref[i];
-    }
-    else if((*c)->genotypeIndex[i] == 1){
-      ss << "\t" << "0/1:" << (*c)->genotypeLikelhoods[i][0]
-         << "," << (*c)->genotypeLikelhoods[i][1]
-         << "," << (*c)->genotypeLikelhoods[i][2]
-         << ":" << (*c)->nalt[i]
-         << ":" << (*c)->nref[i];
-    }
-    else if((*c)->genotypeIndex[i] == 2){
-      ss << "\t" << "1/1:" << (*c)->genotypeLikelhoods[i][0]
-         << "," << (*c)->genotypeLikelhoods[i][1]
-         << "," << (*c)->genotypeLikelhoods[i][2]
-         << ":" << (*c)->nalt[i]
-         << ":" << (*c)->nref[i];
-    }
-    else{
-    cerr << "FATAL: printVCF: unknown genotype." << endl;
-    exit(1);
-    }
-      }
-      ss << endl;
-      cout << ss.str();
-    }
-  }
+    return false;
 }
 
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : NA
+ Function does   : prints vcf header
+ Function returns: NA
 */
+void printVCF(std::vector<breakpoint*> & bp){
+
+    std::vector<breakpoint*> scrubbed;
+
+    for(std::vector<breakpoint*>::iterator it = bp.begin();
+        it != bp.end(); it++){
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if(!(*it)->IsPrint()){
+            continue;
+        }
+        if((*it)->nodeL->seqid != (*it)->nodeR->seqid){
+            continue;
+        }
+
+        if((*it)->getType() == 'T'){
+            continue;
+        }
+        if((*it)->getTotalSupport() < 3){
+            continue;
+        }
+        scrubbed.push_back(*it);
+    }
+
+
+    sort(scrubbed.begin(), scrubbed.end(), breakSort);
+
+    stringstream header;
+
+    header << "##fileformat=VCFv4.2"      << std::endl;
+    header << "##source=WHAM-GRAPHENING:" << VERSION << std::endl;
+    header << "##reference=" << globalOpts.fasta << std::endl;
+    header << "##INFO=<ID=A,Number=1,Type=Integer,Description=\"Total pieces of evidence\">" << std::endl;
+    header << "##INFO=<ID=CIEND,Number=2,Type=Integer,Description=\"Confidence interval around END for imprecise variants\">" << std::endl;
+    header << "##INFO=<ID=CIPOS,Number=2,Type=Integer,Description=\"Confidence interval around POS for imprecise variants\">" << std::endl;
+    header << "##INFO=<ID=CF,Number=1,Type=Float,Description=\"Fraction of reads in graph that cluster with SVTYPE pattern\">" << std::endl;
+    header << "##INFO=<ID=CW,Number=5,Type=Float,Description=\"SVTYPE weight 0-1; DEL,DUP,INV,INS,BND\">" << std::endl;
+    header << "##INFO=<ID=D,Number=1,Type=Integer,Description=\"Number of reads supporting a deletion\">" << std::endl;
+    header << "##INFO=<ID=DI,Number=1,Type=Float,Description=\"Average distance of mates to breakpoint\">" << std::endl;
+    header << "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">" << std::endl;
+    header << "##INFO=<ID=EV,Number=1,Type=Integer,Description=\"Number everted mate-pairs\">" << std::endl;
+    header << "##INFO=<ID=I,Number=1,Type=Integer,Description=\"Number of reads supporting an insertion\">" << endl;
+    header << "##INFO=<ID=SR,Number=1,Type=Integer,Description=\"Number of split-reads supporing SV\">" << std::endl;
+    header << "##INFO=<ID=SS,Number=1,Type=Integer,Description=\"Number of split-reads supporing SV\">" << std::endl;
+    header << "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between REF and ALT alleles\">" << std::endl;
+    header << "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">" << std::endl;
+    header << "##INFO=<ID=T,Number=1,Type=Integer,Description=\"Number of reads supporting a BND\">" << std::endl;
+    header << "##INFO=<ID=TAGS,Number=.,Type=Integer,Description=\"SM tags with breakpoint support\">" << std::endl;
+    header << "##INFO=<ID=TF,Number=1,Type=Integer,Description=\"Number of reads mapped too far\">" << std::endl;
+    header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
+    header << "##INFO=<ID=V,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
+    header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
+
+    for(vector<string>::iterator iz = globalOpts.targetBams.begin();
+        iz !=  globalOpts.targetBams.end(); iz++){
+
+        if(globalOpts.SMTAGS.find(*iz) == globalOpts.SMTAGS.end()){
+            cerr << "FATAL: could not find SM tag for: " << *iz << endl;
+            exit(1);
+        }
+        header << "\t" << globalOpts.SMTAGS[*iz];
+    }
+
+    cout << header.str() << endl;
+
+    for(std::vector<breakpoint*>::iterator it = scrubbed.begin();
+        it != scrubbed.end(); it++){
+        if((*it)->IsMasked()){
+            continue;
+        }
+        if((*it)->getType() == 'T'){
+            continue;
+        }
+        else{
+            std::cout << **it << "\tGT:DP";
+            for(vector<string>::iterator iz = globalOpts.targetBams.begin();
+                iz !=  globalOpts.targetBams.end(); iz++){
+                std::cout << "\t.:.";
+            }
+            std::cout << std::endl;
+        }
+    }
+
+
+}
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : node pointer, vector of node pointers
@@ -1959,10 +1884,9 @@ void doubleCheckInv(std::vector<breakpoint *> & bks){
         if((*it)->getClustFrac() > 0.1
            && (*it)->getSameStrandCount() > 1
            && (*it)->getInvCount() > 1 ){
-            std::cout << **it << std::endl;
         }
         else{
-            std::cerr << **it << std::endl;
+            (*it)->unSetPrint();
         }
     }
 }
@@ -1989,10 +1913,9 @@ void doubleCheckDup(std::vector<breakpoint *> & bks){
            (*it)->getEvertCount()  > 1
             && (*it)->getDupCount() > 1) || ((*it)->getSplitReadCount() > 3 && (*it)->getLength() < 500)
            ){
-            std::cout << **it << std::endl;
         }
         else{
-            std::cerr << **it << std::endl;
+            (*it)->unSetPrint();
         }
     }
 }
@@ -2021,15 +1944,12 @@ void doubleCheckDel(std::vector<breakpoint *> & bks){
            && (*it)->getDelCount() > 1 )
            || ((*it)->getInternalDelCount() > 2 && (*it)->getSplitReadCount() > 2)
            ){
-            std::cout << **it << std::endl;
         }
         else{
-            std::cerr << **it << std::endl;
+            (*it)->unSetPrint();
         }
     }
 }
-
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -2535,7 +2455,7 @@ void gatherBamStats(string & targetfile){
  insertDists.avgD[ targetfile ] = mud;
 
  insertDists.low[ targetfile ] = insertDists.mus[targetfile]
-   - (1.5*insertDists.sds[targetfile]);
+   - (2*insertDists.sds[targetfile]);
 
  if(insertDists.low[ targetfile ] < 0 ){
    insertDists.low[ targetfile ] = 0;
@@ -2730,18 +2650,7 @@ int main( int argc, char** argv)
       doubleCheckDup(allBreakpoints);
       doubleCheckInv(allBreakpoints);
 
-      for(unsigned int i = 0; i < globalTrees.size(); i++){
-          if(allBreakpoints[i]->IsMasked() ){
-              continue;
-          }
-          if(allBreakpoints[i]->IsBadPair()){
-              continue;
-          }
-          if(allBreakpoints[i]->getTotalSupport() < 3){
-              continue;
-          }
-          //          std::cout << *allBreakpoints[i] << std::endl;
-      }
+      printVCF(allBreakpoints);
 
       std::cerr << "done processing trees" << std::endl;
 
