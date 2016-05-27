@@ -70,261 +70,8 @@ static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
 omp_lock_t lock;
 // omp lock for the graph
 omp_lock_t glock;
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : bam alignment, pos
- Function does   : adds soft clip length to end of read to see if it overlaps
-           end pos
- Function returns: bool
-*/
-
-inline bool endsBefore(BamAlignment & r, int & pos, int b){
-  if(!r.IsMapped()){
-    return false;
-  }
-  int end = r.GetEndPosition();
-
-  if(r.CigarData.back().Type == 'S'){
-    end  += r.CigarData.back().Length;
-  }
-  if((end) < pos+b){
-    return true;
-  }
-  else{
-    return false;
-  }
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : bam alignemnt, pos
- Function does   : substracts soft clip length from start to see if it overlaps
-           start pos
- Function returns: bool=
-*/
-
-inline bool startsAfter(BamAlignment & r, int & pos, int b){
-  if(!r.IsMapped()){
-    return false;
-  }
-  int start = r.Position;
-
-  if(r.CigarData.front().Type == 'S'){
-    start  -= r.CigarData.front().Length;
-  }
-  if((start+b) > pos){
-    return true;
-  }
-  else{
-    return false;
-  }
-}
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : reads and a breakpoint
- Function does   : aligns the reads to the breakpoint to get the sum of SW
- Function returns: double
-
-
-double totalAlignmentScore(map< string, vector<BamAlignment> > & reads,
-               breakpoints * br){
-
-  int sum = 0;
-  int n   = 0;
-
-  // Declares a default Aligner
-  StripedSmithWaterman::Aligner aligner;
-  // Declares a default filter
-  StripedSmithWaterman::Filter filter;
-  // Declares an alignment that stores the result
-  StripedSmithWaterman::Alignment alignment;
-  // Aligns the query to the ref
-
-  for(map<string, vector<BamAlignment> >::iterator it = reads.begin();
-      it != reads.end(); it++){
-    for(vector<BamAlignment>::iterator r = it->second.begin();
-    r != it->second.end(); r++){
-
-      if(endsBefore((*r), br->five,10) || startsAfter((*r), br->three,10)){
-    continue;
-      }
-
-      if((*r).IsMapped()){
-    if(((*r).CigarData.front().Type != 'S'
-        && (*r).CigarData.front().Length < 10) &&
-       ((*r).CigarData.back().Type  != 'S' &&
-        (*r).CigarData.back().Length  < 10)){
-      continue;
-    }
-      }
-      n += 1;
-
-      aligner.Align((*r).QueryBases.c_str(), br->alleles.back().c_str(),
-            br->alleles.back().size(),  filter, &alignment);
-      sum +=  alignment.sw_score;
-    }
-  }
-  if(sum > 0){
-    return double(sum) / double(n);
-  }
-  else{
-    return 0;
-  }
-}
-*/
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : breakpoint pointer
- Function does   : loads up the reads
- Function returns: total number of reads
-
-int getPopAlignments(vector<string> & bamFiles,
-              breakpoints * br,
-              map< string, vector<BamAlignment> > & reads,
-              int buffer){
-
-  int nreads = 0;
-
-
-  for(vector<string>::iterator fs = bamFiles.begin();
-      fs != bamFiles.end(); fs++){
-
-    reads[*fs];
-
-    BamReader bamR;
-    if(! bamR.Open(*fs)){
-      cerr << "FATAL: unable to open bamfile: " << *fs << endl;
-      cerr << "INFO: if you have a large number of files, check ulimit: NCPU*NBAM. " << endl;
-      exit(1);
-    }
-
-    if(!bamR.LocateIndex()){
-      vector<string> fileName = split(*fs, ".");
-      fileName.back() = "bai";
-      string indexName = join(fileName, ".");
-      if(! bamR.OpenIndex(indexName) ){
-    cerr << "FATAL: cannot find bam index." << endl;
-    cerr << "INFO: If you have a large number of files, check ulimit: NCPU*NBAM "
-         << endl;
-      }
-    }
-
-    if(!bamR.SetRegion(br->seqidIndexL, br->five -buffer,
-               br->seqidIndexL, br->five +buffer)){
-      cerr << "FATAL: cannot set region for breakpoint refinement." << endl;
-      exit(1);
-    }
-
-    BamAlignment al;
-
-    while(bamR.GetNextAlignment(al)){
-      if((al.AlignmentFlag & 0x0800) != 0 ){
-    continue;
-      }
-      if(! al.IsPaired()){
-    continue;
-      }
-      if(! al.IsMapped() && ! al.IsMateMapped()){
-    continue;
-      }
-      if(al.IsDuplicate()){
-    continue;
-      }
-      if(! al.IsPrimaryAlignment()){
-    continue;
-      }
-      if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
-    continue;
-      }
-
-      reads[*fs].push_back(al);
-      nreads += 1;
-    }
-    if(br->two){
-      if(!bamR.SetRegion(br->seqidIndexL,
-             br->three-buffer,
-             br->seqidIndexL,
-             br->three+buffer)){
-    cerr << "FATAL: cannot set region for genotyping." << endl;
-    exit(1);
-      }
-      while(bamR.GetNextAlignment(al)){
-    if((al.AlignmentFlag & 0x0800) != 0 ){
-      continue;
-    }
-    if(! al.IsPaired()){
-      continue;
-    }
-    if(! al.IsMapped() && ! al.IsMateMapped()){
-    continue;
-    }
-    if(al.IsDuplicate()){
-    continue;
-    }
-    if(! al.IsPrimaryAlignment()){
-    continue;
-    }
-    if(al.IsMapped() && al.MapQuality < globalOpts.MQ){
-      continue;
-    }
-    reads[*fs].push_back(al);
-    nreads += 1;
-      }
-    }
-
-    bamR.Close();
-  }
-
-  return true;
-}
-*/
-
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : string reference
- Function does   : revcomp
- Function returns: string
-
-*/
-inline void Comp(string & seq){
-
-  locale loc;
-
-  for (size_t i = 0; i < seq.size(); ++i)
-    {
-      switch (toupper(seq[i], loc))
-    {
-    case 'A':
-      {
-        seq[i] = 'T';
-        break;
-      }
-    case 'T':
-      {
-        seq[i] = 'A';
-        break;
-      }
-    case 'G':
-      {
-        seq[i] = 'C';
-        break;
-      }
-    case 'C':
-      {
-        seq[i] = 'G';
-        break;
-      }
-    default:
-      {
-        seq[i] = 'N';
-        break;
-      }
-    }
-    }
-}
-
+// omp lock for the pairstor
+omp_lock_t pslock;
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -1210,6 +957,9 @@ bool runRegion(string filename,
     if((al.AlignmentFlag & 0x0800) != 0 ){
       continue;
     }
+    if((al.AlignmentFlag & 0x0100) != 0 ){
+        continue;
+    }
     if(! al.IsPaired()){
       continue;
     }
@@ -1259,7 +1009,7 @@ bool runRegion(string filename,
 
   // load lonely reads into the global struct;
   // if it finds a mate in the global store it processes and deletes
-  omp_set_lock(&lock);
+  omp_set_lock(&pslock);
 
   for(map<string, readPair *>::iterator rps = pairStoreLocal.begin();
       rps != pairStoreLocal.end(); rps++){
@@ -1288,7 +1038,7 @@ bool runRegion(string filename,
       globalPairStore[rps->first] = pairStoreLocal[rps->first];
     }
   }
-  omp_unset_lock(&lock);
+  omp_unset_lock(&pslock);
   return true;
 }
 
@@ -1461,10 +1211,13 @@ void loadBam(string & bamFile){
        << endl;
 
   // cleanup remaining reads
+  omp_set_lock(&pslock);
   for(map<string, readPair*>::iterator rps = globalPairStore.begin();
       rps != globalPairStore.end(); rps++){
       delete rps->second;
   }
+  globalPairStore.clear();
+  omp_unset_lock(&pslock);
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1989,9 +1742,7 @@ void gatherTrees(vector<vector<node *> > & trees){
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : nothing
-
  Function does   : dumps and shrinks graph
-
  Function returns: NA
 
 */
@@ -2013,140 +1764,6 @@ void dump(vector< vector< node *> > & allTrees){
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  : vector of reads for an individual
- Function does   : genotype the individual with pairHMM
- Function returns: NA
-
-
-void genotype(vector<BamAlignment> & reads,
-          string & bamF, breakpoints * br){
-
-
-  bool toohigh = false;
-
-  int max = insertDists.avgD[bamF] + (4 * sqrt(insertDists.avgD[bamF]));
-
-  if(reads.size() > max ){
-    toohigh = true;
-  }
-
-  double aal = 0;
-  double abl = 0;
-  double bbl = 0;
-
-  int nref   = 0;
-  int nalt   = 0;
-
-  int nReads = 0;
-
-  phredUtils pu;
-
-  // currently no illumina reads greater than 300
-  // single allocation for alignment object
-
-  alignHMM refHMM(300,int(br->alleles.front().size()) +1);
-  alignHMM altHMM(300,int(br->alleles.back().size())  +1);
-
-  for(vector<BamAlignment>::iterator it = reads.begin();
-      it != reads.end(); it++){
-
-    if(endsBefore(*it, br->five,20) || startsAfter(*it, br->three,20)
-       || toohigh || (*it).MapQuality < 10){
-      continue;
-    }
-
-    refHMM.clear(int((*it).Length) +1, int(br->alleles.front().size()) +1);
-    altHMM.clear(int((*it).Length) +1, int(br->alleles.back().size())  +1);
-
-    nReads += 1;
-
-    refHMM.initPriors(br->alleles.front(), it->QueryBases, it->Qualities);
-    refHMM.initTransProbs();
-    refHMM.initializeDelMat();
-    refHMM.updatecells();
-
-    double pR = refHMM.finalLikelihoodCalculation();
-
-    double div2 = log10(2);
-
-    altHMM.initPriors(br->alleles.back(), it->QueryBases, it->Qualities);
-    altHMM.initTransProbs();
-    altHMM.initializeDelMat();
-    altHMM.updatecells();
-    double pA = altHMM.finalLikelihoodCalculation();
-
-    if(br->type == 'V'){
-
-      string revcomp = string((*it).QueryBases.rbegin(),
-                  (*it).QueryBases.rend());
-      Comp(revcomp);
-      string revqual = string((*it).Qualities.rbegin(),
-                  (*it).Qualities.rend());
-
-      altHMM.initPriors(br->alleles.back(), revcomp, revqual);
-      altHMM.initTransProbs();
-      altHMM.initializeDelMat();
-      altHMM.updatecells();
-
-      double pA1 =  altHMM.finalLikelihoodCalculation();
-
-      refHMM.initPriors(br->alleles.front(), revcomp, revqual);
-      refHMM.initTransProbs();
-      refHMM.initializeDelMat();
-      refHMM.updatecells();
-
-      double pR1 = refHMM.finalLikelihoodCalculation();
-
-      if(pA1 > pA){
-    pA = pA1;
-      }
-      if(pR1 > pR){
-    pR = pR1;
-      }
-    }
-
-    if(pR > pA){
-      nref += 1;
-    }
-    else{
-      nalt += 1;
-    }
-
-    aal  += pu.log10Add((pR - div2), (pR - div2));
-    abl  += pu.log10Add((pR - div2), (pA - div2));
-    bbl  += pu.log10Add((pA - div2), (pA - div2));
-
-  }
-
-  vector<double> gl;
-  gl.push_back(aal);
-  gl.push_back(abl);
-  gl.push_back(bbl);
-
-  int index = -1;
-
-  if(nref > 0 || nalt > 0){
-    index = 0;
-  }
-
-  if(abl > aal && abl > bbl){
-    index = 1;
-  }
-  if(bbl > aal && bbl > abl){
-    index = 2;
-  }
-
-  br->genotypeLikelhoods.push_back(gl);
-  br->genotypeIndex.push_back(index);
-  br->nref.push_back(nref);
-  br->nalt.push_back(nalt);
-
-  br->lref += aal + (abl/2);
-  br->lalt += bbl + (abl/2);
-}
-*/
-//------------------------------- SUBROUTINE --------------------------------
-/*
  Function input  : bam file
  Function does   : generates stats for bam file
  Function returns: NA
@@ -2165,6 +1782,7 @@ void gatherBamStats(string & targetfile){
   vector<double> alIns        ;
   vector<double> nReads       ;
   vector<double> randomSWScore;
+  vector<int>    mapQuality   ;
 
   BamReader bamR;
   if(!bamR.Open(targetfile)   ){
@@ -2261,7 +1879,7 @@ void gatherBamStats(string & targetfile){
     }
       }
       else{
-    exclude = false;
+          exclude = false;
       }
     }
 
@@ -2301,43 +1919,42 @@ void gatherBamStats(string & targetfile){
     continue;
       }
 
-
-
       string squals = al.Qualities;
 
       // summing base qualities (quals is the lookup)
 
       for(unsigned int q = 0 ; q < squals.size(); q++){
-    qsum += quals[ int(squals[q]) ];
-    qnum += 1;
+          qsum += quals[ int(squals[q]) ];
+          qnum += 1;
 
-    if(quals[int(squals[q])] < 0){
-      omp_set_lock(&lock);
-      cerr << endl;
-      cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
-      cerr << "INFO : offending qual string   : " << squals << endl;
-      cerr << "INFO : offending qual char     : " << squals[q] << endl;
-      cerr << "INFO : -1 qual ; qual ; qual +1: " << quals[ int(squals[q]) -1 ] << " " << quals[ int(squals[q])  ] << " " << quals[ int(squals[q]) +1 ] << endl;
-      cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
-      cerr << endl;
-      omp_unset_lock(&lock);
-      exit(1);
-    }
+          if(quals[int(squals[q])] < 0){
+              omp_set_lock(&lock);
+              cerr << endl;
+              cerr << "FATAL: base quality is not sanger or illumina 1.8+ (0,41) in file : " << targetfile << endl;
+              cerr << "INFO : offending qual string   : " << squals << endl;
+              cerr << "INFO : offending qual char     : " << squals[q] << endl;
+              cerr << "INFO : -1 qual ; qual ; qual +1: " << quals[ int(squals[q]) -1 ] << " " << quals[ int(squals[q])  ] << " " << quals[ int(squals[q]) +1 ] << endl;
+              cerr << "INFO : rescale qualities or contact author for additional quality ranges" << endl;
+              cerr << endl;
+              omp_unset_lock(&lock);
+              exit(1);
+          }
       }
 
       if(al.Position > cp){
-    allPileUp.purgePast(&cp);
-    cp = al.GetEndPosition(false,true);
-    nReads.push_back(allPileUp.currentData.size());
+          allPileUp.purgePast(&cp);
+          cp = al.GetEndPosition(false,true);
+          nReads.push_back(allPileUp.currentData.size());
       }
       if(al.IsMapped()
-     && al.IsMateMapped()
-     && abs(double(al.InsertSize)) < 10000
-     && al.RefID == al.MateRefID
-     ){
-    allPileUp.processAlignment(al);
-    alIns.push_back(abs(double(al.InsertSize)));
-    n++;
+         && al.IsMateMapped()
+         && abs(double(al.InsertSize)) < 10000
+         && al.RefID == al.MateRefID
+         ){
+          allPileUp.processAlignment(al);
+          alIns.push_back(abs(double(al.InsertSize)));
+          mapQuality.push_back(al.MapQuality);
+          n++;
       }
     }
   }
@@ -2360,12 +1977,15 @@ void gatherBamStats(string & targetfile){
   double variance = var(alIns, mu     );
   double sd       = sqrt(variance     );
   double sdd      = sqrt(var(nReads, mud ));
+  double muQ      = mean(mapQuality);
 
   omp_set_lock(&lock);
 
  insertDists.mus[  targetfile ] = mu;
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
+
+ // for(std::vector<int>::iterator it = mapQuality.begin(); it != )
 
  insertDists.low[ targetfile ] = insertDists.mus[targetfile]
    - (2*insertDists.sds[targetfile]);
@@ -2374,7 +1994,6 @@ void gatherBamStats(string & targetfile){
    insertDists.low[ targetfile ] = 0;
  }
 
-
  insertDists.upr[ targetfile ] = insertDists.mus[targetfile]
    + (2.5*insertDists.sds[targetfile]);
 
@@ -2382,15 +2001,16 @@ void gatherBamStats(string & targetfile){
  stringstream whereTo;
 
  whereTo << "INFO: for Sample:" << SM << endl
-      << "  STATS:    " << SM << ": mean depth ...........: " << mud << endl
-      << "  STATS:    " << SM << ": sd depth .............: " << sdd << endl
-      << "  STATS:    " << SM << ": mean insert length: ..: " << insertDists.mus[targetfile] << endl
-      << "  STATS:    " << SM << ": median insert length .: " << median                      << endl
-      << "  STATS:    " << SM << ": sd insert length .....: " << insertDists.sds[targetfile] << endl
-      << "  STATS:    " << SM << ": lower insert cutoff ..: " << insertDists.low[targetfile]   << endl
-      << "  STATS:    " << SM << ": upper insert cutoff ..: " << insertDists.upr[targetfile]   << endl
-      << "  STATS:    " << SM << ": average base quality .: " << double(qsum)/double(qnum) << endl
-      << "  STATS:    " << SM << ": number of reads used .: " << n  << endl << endl;
+         << "  STATS:    " << SM << ": mean depth ..............: " << mud << std::endl
+         << "  STATS:    " << SM << ": sd depth ................: " << sdd << std::endl
+         << "  STATS:    " << SM << ": mean insert length: .....: " << insertDists.mus[targetfile] << std::endl
+         << "  STATS:    " << SM << ": median insert length ....: " << median                      << std::endl
+         << "  STATS:    " << SM << ": sd insert length ........: " << insertDists.sds[targetfile] << std::endl
+         << "  STATS:    " << SM << ": lower insert cutoff .....: " << insertDists.low[targetfile] << std::endl
+         << "  STATS:    " << SM << ": upper insert cutoff .....: " << insertDists.upr[targetfile] << std::endl
+         << "  STATS:    " << SM << ": average base quality ....: " << muQ                         << std::endl
+         << "  STATS:    " << SM << ": average mapping quality .: " << insertDists.sds[targetfile] << std::endl
+         << "  STATS:    " << SM << ": number of reads used ....: " << n  << std::endl << std::endl;
 
  if(globalOpts.statsOnly){
    cout << whereTo.str();

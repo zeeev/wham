@@ -832,14 +832,15 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
 
 
 struct libraryStats{
-  std::map<std::string, double> mus ; // mean of insert length for each indvdual across 1e6 reads
-  std::map<std::string, double> sds ;  // standard deviation
-  std::map<std::string, double> low ;  // 25% of data
-  std::map<std::string, double> upr ;  // 75% of the data
-  std::map<std::string, double> swm ;
-  std::map<std::string, double> sws ;
-  std::map<std::string, double> avgD;
-  double overallDepth;
+    std::map<std::string, double> mus ; // mean of insert length for each indvdual across 1e6 reads
+    std::map<std::string, double> sds ; // standard deviation
+    std::map<std::string, double> low ; // 25% of data
+    std::map<std::string, double> upr ; // 75% of the data
+    std::map<std::string, double> swm ;
+    std::map<std::string, double> sws ;
+    std::map<std::string, double> avgD;
+    std::map<std::string, std::map<int, long int> > mqD;
+    double overallDepth;
 } ;
 
 //------------------------------- SUBROUTINE --------------------------------
