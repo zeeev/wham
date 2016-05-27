@@ -6,7 +6,7 @@
 CC=gcc
 CXX=g++
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
-CFLAGS= -fstack-protector-all -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x  -Wno-sign-compare -O3
+CFLAGS= -fstack-protector-all -Wall -DVERSION=\"$(GIT_VERSION)\" -std=c++0x -Wno-sign-compare -O3
 INCLUDE=-Isrc/lib -Isrc/bamtools/include -Isrc/bamtools/src -Isrc/ -Isrc/fastahack -Isrc/Complete-Striped-Smith-Waterman-Library/src/
 INCLUDE_PLUS := $(INCLUDE) -Isrc/seqan/core/include/ -Isrc/seqan/extras/include -Isrc/Complete-Striped-Smith-Waterman-Library/src/
 

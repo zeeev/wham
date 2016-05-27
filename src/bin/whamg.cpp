@@ -2008,8 +2008,8 @@ void gatherBamStats(string & targetfile){
          << "  STATS:    " << SM << ": sd insert length ........: " << insertDists.sds[targetfile] << std::endl
          << "  STATS:    " << SM << ": lower insert cutoff .....: " << insertDists.low[targetfile] << std::endl
          << "  STATS:    " << SM << ": upper insert cutoff .....: " << insertDists.upr[targetfile] << std::endl
-         << "  STATS:    " << SM << ": average base quality ....: " << muQ                         << std::endl
-         << "  STATS:    " << SM << ": average mapping quality .: " << insertDists.sds[targetfile] << std::endl
+         << "  STATS:    " << SM << ": average base quality ....: " <<  double(qsum)/double(qnum)  << std::endl
+         << "  STATS:    " << SM << ": average mapping quality .: " << muQ                         << std::endl
          << "  STATS:    " << SM << ": number of reads used ....: " << n  << std::endl << std::endl;
 
  if(globalOpts.statsOnly){
