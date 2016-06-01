@@ -91,8 +91,9 @@ class breakpoint{
 private:
 
     std::map<char, std::string > typeMap;
-    std::vector<std::string> refs       ;
-    std::vector<std::string> seqNames   ;
+    std::vector<std::string>        refs;
+    std::vector<std::string>    seqNames;
+    std::map<std::string, int>       sms;
 
     char type;
     std::string typeName;
@@ -242,6 +243,14 @@ public:
         typeMap['I'] = "INS";
         typeMap['V'] = "INV";
 
+    }
+    double getSMSupport(std::string & s){
+        if(sms.find(s) == sms.end()){
+            return 0;
+        }
+        else{
+            return sms[s];
+        }
     }
     double getDelCount(void){
         return this->delCount;
@@ -620,6 +629,32 @@ public:
         return false;
     }
 
+    void loadSMSupport(void){
+
+        for(std::map<std::string, int>::iterator sm = nodeL->sm.begin();
+            sm!= nodeL->sm.end(); sm++){
+
+            if(sms.find(sm->first) == sms.end() ){
+                sms[sm->first] = sm->second;
+            }
+            else{
+                sms[sm->first] += sm->second;
+            }
+        }
+        for(std::map<std::string, int>::iterator sm = nodeR->sm.begin();
+            sm!=nodeR->sm.end(); sm++){
+
+            if(sms.find(sm->first) == sms.end() ){
+                sms[sm->first] = sm->second;
+            }
+            else{
+                sms[sm->first] += sm->second;
+            }
+
+        }
+    }
+
+
     bool delClusterCheck(node * left, node * right){
 
         if(left == NULL || right == NULL){
@@ -722,23 +757,14 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
         len = -1*len;
     }
 
-    double sum = foo.delCount + foo.dupCount + foo.traCount + foo.invCount + foo.insCount;
+    double sum = foo.delCount + foo.dupCount
+        + foo.traCount + foo.invCount + foo.insCount;
 
-    std::map<std::string, int> sms;
-
-    for(std::map<std::string, int>::iterator sm = foo.nodeL->sm.begin();
-        sm!=foo.nodeL->sm.end(); sm++){
-        sms[sm->first] = 1;
-    }
-    for(std::map<std::string, int>::iterator sm = foo.nodeR->sm.begin();
-        sm!=foo.nodeR->sm.end(); sm++){
-        sms[sm->first] = 1;
-    }
 
     stringstream ss;
     int index = 0;
-    for(std::map<std::string, int>::iterator sm = sms.begin();
-        sm != sms.end(); sm++){
+    for(std::map<std::string, int>::const_iterator sm = foo.sms.begin();
+        sm != foo.sms.end(); sm++){
         if(index == 0){
             ss << sm->first;
         }

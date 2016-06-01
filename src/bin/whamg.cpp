@@ -225,6 +225,9 @@ void printVCF(std::vector<breakpoint*> & bp){
     header << "##INFO=<ID=TF,Number=1,Type=Integer,Description=\"Number of reads mapped too far\">" << std::endl;
     header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
     header << "##INFO=<ID=V,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
+    header << "##FORMAT=<GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
+    header << "##FORMAT=<DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
+    header << "##FORMAT=<SP,Number=1,Type=Integer,Description=\"Per sample SV support\">" << std::endl;
     header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
 
     for(vector<string>::iterator iz = globalOpts.targetBams.begin();
@@ -248,10 +251,11 @@ void printVCF(std::vector<breakpoint*> & bp){
             continue;
         }
         else{
-            std::cout << **it << "\tGT:DP";
+            std::cout << **it << "\tGT:DP:SP";
+            (*it)->loadSMSupport();
             for(vector<string>::iterator iz = globalOpts.targetBams.begin();
                 iz !=  globalOpts.targetBams.end(); iz++){
-                std::cout << "\t.:.";
+                std::cout << "\t.:.:" << (*it)->getSMSupport(globalOpts.SMTAGS[*iz]);
             }
             std::cout << std::endl;
         }
