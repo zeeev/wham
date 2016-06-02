@@ -67,7 +67,7 @@ map<int, string> forward_lookup;
 
 // options
 
-static const char *optString = "c:i:u:b:m:r:a:g:x:f:e:hskz";
+static const char *optString = "c:i:u:m:r:a:g:x:f:e:hsz";
 
 // omp lock
 omp_lock_t lock;
@@ -92,9 +92,9 @@ void printVersion(void){
 
 void printHelp(void){
 //------------------------------- XXXXXXXXXX --------------------------------
-  cerr << " Usage:  " << endl;
-  cerr << "       WHAM-GRAPHENING -k -f my.bam -a my.fasta \\ " << endl;
-  cerr << "       -g my.graph.out.txt -e M,GL000207.1 2> wham.err > wham.vcf"
+  cerr << " Basic usage:  " << endl;
+  cerr << "       whamg -f my.bam -a my.fasta \\ " << endl;
+  cerr << "             -e M,GL000207.1 2> wham.err > wham.vcf"
        << endl;
   cerr << endl;
   cerr << " Required:  " << endl;
@@ -107,33 +107,25 @@ void printHelp(void){
   cerr << " Optional:  Recommended flags are noted with : *                           " << endl;
   cerr << "          -s  <FLAG>    Exits the program after the stats are              " << endl;
   cerr << "                        gathered. [false]                                  " << endl;
-  cerr << "  *       -k  <FLAG>    Skip genotyping (much faster). [false]             " << endl;
   cerr << "          -g  <STRING>  File to write graph to (very large output). [false]" << endl;
   cerr << "  *|-c    -e  <STRING>  Comma sep. list of seqids to skip [false].         " << endl;
   cerr << "  *|-e    -c  <STRING>  Comma sep. list of seqids to keep [false].         " << endl;
   cerr << "          -r  <STRING>  Region in format: seqid:start-end [whole genome]   " << endl;
   cerr << "  *       -x  <INT>     Number of CPUs to use [all cores].                 " << endl;
   cerr << "          -m  <INT>     Mapping quality filter [20].                       " << endl;
-  cerr << "          -b  <STRING>  External file to genotype [false].                 " << endl;
   cerr << "          -i  <STRING>  non standard split read tag [SA]                   " << endl;
   cerr << "          -z  <FLAG>    Sample reads until success. [false]                " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
-  cerr << "        STDERR: Run statistics and bam stats                        " << endl;
-  cerr << "        STOUT : SV calls in VCF or BEDPE format                     " << endl;
+  cerr << "        STDERR: Run statistics and bam stats                               " << endl;
+  cerr << "        STOUT : SV calls in VCF                                            " << endl;
   cerr << endl;
   cerr << " Details:  " << endl;
   cerr << "        -z  <FLAG>    WHAM-GRAPHENING can fail if does not sample        " << endl;
   cerr << "                      enough reads. This flag prevents WHAM-GRAPHENING   " << endl;
   cerr << "                      from exiting. If your bam header has seqids not in " << endl;
   cerr << "                      the bam (e.g. split by region) use -z.             " << endl;
-  cerr << "        -k  <FLAG>    The WHAM-GRAPHENING pipeline can genotype after    " << endl;
-  cerr << "                      samples are merged (-b).  This will save time for  " << endl;
-  cerr << "                      population level calling.                          " << endl;
-  cerr << "        -b  <STRING>  The VCF output of WHAM-GRAPHENING for genotyping.  " << endl;
-  cerr << "                      WHAM-GRAPHENING will genotype any BAM file at the  " << endl;
-  cerr << "                      positions in the -b file.                          " << endl;
   cerr << "        -i  <STRING>  WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
   cerr << "                      Older version of bwa-mem used XP.                  " << endl;
   cerr << "     -e|-c  <STRING>  A list of seqids to include or exclude while       " << endl;
@@ -226,7 +218,7 @@ void printVCF(std::vector<breakpoint*> & bp){
     header << "##INFO=<ID=T,Number=1,Type=Integer,Description=\"Number of reads supporting a BND\">" << std::endl;
     header << "##INFO=<ID=TAGS,Number=.,Type=Integer,Description=\"SM tags with breakpoint support\">" << std::endl;
     header << "##INFO=<ID=TF,Number=1,Type=Integer,Description=\"Number of reads mapped too far\">" << std::endl;
-    header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
+    header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting a duplication\">" << std::endl;
     header << "##INFO=<ID=V,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
     header << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
     header << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
@@ -1268,7 +1260,6 @@ int parseOpts(int argc, char** argv)
                 cerr << "FATAL: only SA and XP optional tags are supported for split reads" << endl;
                 exit(1);
             }
-
             cerr << "INFO: You are using a non standard split-read tag: " << globalOpts.saT << endl;
             break;
         }
@@ -1283,17 +1274,6 @@ int parseOpts(int argc, char** argv)
         {
             globalOpts.keepTrying = true;
             cerr << "INFO: WHAM-GRAPHENING will not give up sampling reads: -z set" << globalOpts.svs << endl;
-            break;
-        }
-    case 'k':
-        {
-            globalOpts.skipGeno = true;
-            break;
-        }
-    case 'b':
-        {
-            globalOpts.svs = optarg;
-            cerr << "INFO: WHAM-GRAPHENING will only genotype input: " << globalOpts.svs << endl;
             break;
         }
     case 's':
