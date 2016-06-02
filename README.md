@@ -48,7 +48,7 @@ whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_
 In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  It is not recommended that this option is used on a genome-wide run.
 
 
-### Explanation on options 
+### Explanation of options 
  **-f** : A comma separated list of indexed bam files or a sample text file that looks like:
 ```
 NA12878.sort.bam
