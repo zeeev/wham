@@ -1,5 +1,9 @@
-The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  For general structural variant discovery use whamg. 
+The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  For general structural variant discovery use whamg.
 
+This README contains the basics of running whamg.  Important sections are highlighted in bold text. 
+
+
+![alt tag](https://github.com/zeeev/wham/blob/master/docs/ github-figure.png)
 
 ###Installing whamg
 
