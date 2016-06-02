@@ -60,8 +60,11 @@ INFO: for Sample:CHM1
   STATS:    CHM1: number of reads used ....: 100405
 ``` 
 **-g**: The file to write the graphs to.
+
 **-e**: A comma separated list of seqids to skip.  
+
 **-c**: A comma sepearted list of seqids to use for estimating the insert size distribution.
+
 **-r**: Region in format: seqid:start-end.
 
 **-x**: The number of CPUs wham will attempt to use.  During the first step whamg reads the entire bam file.  If you notice CPU usage dropping IO might be swamping out.  After the bam files are read there are several 1CPU steps before whamg finishes. The right number of CPUs  to use really depends on IO speeds.
