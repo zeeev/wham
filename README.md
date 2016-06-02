@@ -63,7 +63,9 @@ INFO: for Sample:CHM1
 **-e**: A comma separated list of seqids to skip.  
 **-c**: A comma sepearted list of seqids to use for estimating the insert size distribution.
 **-r**: Region in format: seqid:start-end.
+
 **-x**: The number of CPUs wham will attempt to use.  During the first step whamg reads the entire bam file.  If you notice CPU usage dropping IO might be swamping out.  After the bam files are read there are several 1CPU steps before whamg finishes. The right number of CPUs  to use really depends on IO speeds.
+
 **-i**:  Whamg uses the bwa-mem SA tag (default).   Older versions of bwa-mem used a different tag: XP.
 **-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …).  The –z flag forces whamg to keep sampling random regions  until it succeeds
 
@@ -77,4 +79,3 @@ WHole-genome Alignment Metrics (wham) is a structural variant (SV) caller that i
 
 WHAM can be easily run as a stand alone tool or as part of gkno (http://gkno.me) or bcbio-nextgen (http://bcbio-nextgen.readthedocs.org) pipelines.  
 
-s
