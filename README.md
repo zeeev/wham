@@ -70,6 +70,7 @@ INFO: for Sample:CHM1
 **-x**: The number of CPUs wham will attempt to use.  During the first step whamg reads the entire bam file.  If you notice CPU usage dropping IO might be swamping out.  After the bam files are read there are several 1CPU steps before whamg finishes. The right number of CPUs  to use really depends on IO speeds.
 
 **-i**:  Whamg uses the bwa-mem SA tag (default).   Older versions of bwa-mem used a different tag: XP.
+
 **-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …).  The –z flag forces whamg to keep sampling random regions  until it succeeds
 
 ### wham [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
