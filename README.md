@@ -1,5 +1,8 @@
+###Intro
+
 The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  **For general structural variant discovery use whamg**.  This **README** contains the basics of running whamg.  **Important sections are highlighted in bold text. **  Please cite the wham paper if you use wham or whamg. 
 
+###Some basics info
 
 http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
