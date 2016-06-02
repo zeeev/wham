@@ -43,7 +43,7 @@ In the example above each putative structural variant will be written to a flat 
 
 ### Explanation on options 
  -f : A comma separated list of indexed bam files or a sample text file that looks like:
-	```
+```
 NA12878.sort.bam
 NA12776.sort.bam
 ```
