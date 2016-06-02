@@ -10,7 +10,7 @@ git clone --recursive  https://github.com/zeeev/wham.git ; cd wham ; checkout de
 
 ###Running whamg
 
-Whamg uses paired alignments generated from bwa-mem.  Whamg uses the same bams as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  Whamg is agnostic regarding the bwa-mem –M flag (if you don’t know what that means don’t worry).  **It is important that the –R flag in bwa mem is used.  Whamg requires read group information. Currently, Whamg assumes one library per bam file.**
+Whamg uses paired alignments generated with bwa-mem.  Whamg uses the same bams as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  Whamg is agnostic regarding the bwa-mem –M flag (if you don’t know what that means don’t worry).  **It is important that the –R flag in bwa mem is used.  Whamg requires read group information. Currently, Whamg assumes one library per bam file.**
 
 
 ####Example 
@@ -72,6 +72,128 @@ INFO: for Sample:CHM1
 **-i**:  Whamg uses the bwa-mem SA tag (default).   Older versions of bwa-mem used a different tag: XP.
 
 **-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …).  The –z flag forces whamg to keep sampling random regions  until it succeeds
+
+
+
+### VCF 4.2 output
+
+In this section each INFO and FORMAT field will be covered. Here is an example whamg VCF header:
+
+```
+##fileformat=VCFv4.2
+##source=WHAM-GRAPHENING:v1.7.0-225-g1e35-dirty
+##reference=/net/eichler/vol8/home/zevk/shared_resources/assemblies/hg19/genomestrip_metadata/Homo_sapiens_assembly19/Homo_sapiens_assembly19.fasta
+##INFO=<ID=A,Number=1,Type=Integer,Description="Total pieces of evidence">
+##INFO=<ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
+##INFO=<ID=CF,Number=1,Type=Float,Description="Fraction of reads in graph that cluster with SVTYPE pattern">
+##INFO=<ID=CW,Number=5,Type=Float,Description="SVTYPE weight 0-1; DEL,DUP,INV,INS,BND">
+##INFO=<ID=D,Number=1,Type=Integer,Description="Number of reads supporting a deletion">
+##INFO=<ID=DI,Number=1,Type=Float,Description="Average distance of mates to breakpoint">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record">
+##INFO=<ID=EV,Number=1,Type=Integer,Description="Number everted mate-pairs">
+##INFO=<ID=I,Number=1,Type=Integer,Description="Number of reads supporting an insertion">
+##INFO=<ID=SR,Number=1,Type=Integer,Description="Number of split-reads supporing SV">
+##INFO=<ID=SS,Number=1,Type=Integer,Description="Number of split-reads supporing SV">
+##INFO=<ID=SVLEN,Number=.,Type=Integer,Description="Difference in length between REF and ALT alleles">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=T,Number=1,Type=Integer,Description="Number of reads supporting a BND">
+##INFO=<ID=TAGS,Number=.,Type=Integer,Description="SM tags with breakpoint support">
+##INFO=<ID=TF,Number=1,Type=Integer,Description="Number of reads mapped too far">
+##INFO=<ID=U,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
+##INFO=<ID=V,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read Depth">
+##FORMAT=<ID=SP,Number=1,Type=Integer,Description="Per sample SV support">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	CHM1
+```
+
+#### A
+
+Each pair of reads count as a piece of evidence.  The total evidence is summed across the whamg graph structure.  Since whamg does not initially cluster similar graph structures you may see several SVs with low total support that are off by a couple base pairs.  Merging SVs is a good idea.
+
+#### CIEND and CIPOS
+
+This field is fixed at -10,10.  Most whamg calls are accurate to within a couple base pairs.  However, this field is updated during SV merging. 
+
+#### CF
+
+Larger SVs (greater than average insert size of the library) generate mate pair patterns.  For example,  The mates of reads overlapping the 5’ of a deletion should map downstream of the 3’ breakpoint.  Each SV class generates a different pattern.  CF is the fraction of the reads in the graph structure that cluster according to SVTYPE.
+
+#### CW
+
+Each mate pair and split read can contribute evidence to one or more SVTYPES.  The CW field describes what fraction of the total support belongs to each SVTYPE.  In the case of inverted deletions you might find that both inversion and deletion have high weights.  This field sums to one.
+
+#### D  
+
+The number of mate pairs in the graph that support a deletion
+
+#### DI
+
+This field relates to the CF field.  This measures the average distance of the mate pairs to the alternative breakpoint.  Inversions can have large DI scores, but deletions should not. 
+
+
+#### END
+
+This is a standard VCF field.  Insertions start and end at the same position.
+
+#### EV 
+
+The number of everted mate pairs ← →
+
+#### I  
+
+The number of reads supporting and inversion
+
+#### SR
+
+The number of split reads in the graph.  This is not necessarily the same as the number of split reads between the breakpoints.
+
+
+####SS
+
+The number of reads on the same strand → → or ← ←.
+
+####SVLEN
+
+This is a standard VCF field.  
+
+####SVTYPE
+
+This is a standard VCF field.  
+
+#### T
+
+The number of reads supporting and interchomosmal event. 
+
+
+#### TAGS
+
+Which individuals (SMs) that are in the graph.
+
+#### TF
+
+The number of mate pairs that map too far away
+
+#### U
+
+The number of reads that support duplication
+
+#### V
+
+The number of reads that support an inversion
+
+#### GT
+
+Genotype.  Currently, there is no genotype provided.  We are working on a fast and accurate genotyper.
+
+#### DP
+
+Depth.  Currently no depth is provided.
+
+#### SP
+
+This is the number of reads in each individual that supports the exact breakpoint.  Because of breakpoint variability this number might be lower than expected. **Be cautious when filtering on SP.**
 
 ### wham [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
 
