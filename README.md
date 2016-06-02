@@ -9,7 +9,7 @@ http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
 
 
-![alt tag](https://github.com/zeeev/wham/blob/devel/docs/ github-figure.png)
+![alt tag](https://github.com/zeeev/wham/blob/devel/docs/github-figure.png)
 
 ###Installing whamg
 
