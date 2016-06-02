@@ -20,7 +20,7 @@ export EXCLUDE=GL000207.1,GL000226.1,GL000229.1,GL000231.1,GL000210.1,GL000239.1
 whamg -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above we are running whamg on the whole CHM1 genome.  The standard error is written to chm1.err, this includes progress updates.  The standard output contains the VCF.  If you have a trio or a quad and want to joint call you can pass the bam files as a comma separated list or a simple text file with the full path to each bam file on each line.  **It is very important  that the –e flag is used.**  If –e or –c are not specified the mate-pair insert size distribution can be incorrect. 
+In the example above we are running whamg on the whole CHM1 genome.  The standard error is written to chm1.err, this includes progress updates.  The standard output contains the VCF.  If you have a trio or a quad and want to joint call you can pass the bam files as a comma separated list or a simple text file with the full path to each bam file on each line.  **It is very important  that the –e or -c flags are used.**  If –e or –c are not specified there is a chance that whamg will incorrectly estimate the insert sizes of the library.
 
 #### Example 2
 ```
