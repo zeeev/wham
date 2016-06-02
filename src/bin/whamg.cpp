@@ -28,6 +28,9 @@
 using namespace std;
 using namespace BamTools;
 
+typedef map< char, map< int, map< int, breakpoint * > > >  unpairedSVs;
+
+
 struct options{
     std::vector<string> targetBams;
     bool statsOnly                ;
@@ -225,9 +228,9 @@ void printVCF(std::vector<breakpoint*> & bp){
     header << "##INFO=<ID=TF,Number=1,Type=Integer,Description=\"Number of reads mapped too far\">" << std::endl;
     header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
     header << "##INFO=<ID=V,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
-    header << "##FORMAT=<GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
-    header << "##FORMAT=<DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
-    header << "##FORMAT=<SP,Number=1,Type=Integer,Description=\"Per sample SV support\">" << std::endl;
+    header << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
+    header << "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth\">" << std::endl;
+    header << "##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Per sample SV support\">" << std::endl;
     header << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT" ;
 
     for(vector<string>::iterator iz = globalOpts.targetBams.begin();
@@ -251,8 +254,8 @@ void printVCF(std::vector<breakpoint*> & bp){
             continue;
         }
         else{
-            std::cout << **it << "\tGT:DP:SP";
             (*it)->loadSMSupport();
+            std::cout << **it << "\tGT:DP:SP";
             for(vector<string>::iterator iz = globalOpts.targetBams.begin();
                 iz !=  globalOpts.targetBams.end(); iz++){
                 std::cout << "\t.:.:" << (*it)->getSMSupport(globalOpts.SMTAGS[*iz]);
@@ -1514,7 +1517,7 @@ olor=orange,penwidth=" << (*iz)->support['A'] << "];\n";
  Function returns: NA
 */
 
-void doubleCheckIns(std::vector<breakpoint *> & bks){
+void doubleCheckIns(std::vector<breakpoint *> & bks, unpairedSVs & up){
 
     for(std::vector<breakpoint *>::iterator it = bks.begin();
         it != bks.end(); it++){
@@ -1530,6 +1533,10 @@ void doubleCheckIns(std::vector<breakpoint *> & bks){
         }
         else{
             (*it)->unSetPrint();
+
+            up[(*it)->getType()][(*it)->nodeL->seqid][(*it)->nodeL->pos] = *it;
+            up[(*it)->getType()][(*it)->nodeR->seqid][(*it)->nodeR->pos] = *it;
+
         }
     }
 }
@@ -1541,7 +1548,7 @@ void doubleCheckIns(std::vector<breakpoint *> & bks){
  Function returns: NA
 */
 
-void doubleCheckInv(std::vector<breakpoint *> & bks){
+void doubleCheckInv(std::vector<breakpoint *> & bks, unpairedSVs & up){
 
     for(std::vector<breakpoint *>::iterator it = bks.begin();
         it != bks.end(); it++){
@@ -1575,7 +1582,7 @@ void doubleCheckInv(std::vector<breakpoint *> & bks){
  Function returns: string
 */
 
-void doubleCheckDup(std::vector<breakpoint *> & bks){
+void doubleCheckDup(std::vector<breakpoint *> & bks, unpairedSVs & up){
 
     for(std::vector<breakpoint *>::iterator it = bks.begin();
         it != bks.end(); it++){
@@ -1605,7 +1612,7 @@ void doubleCheckDup(std::vector<breakpoint *> & bks){
  Function returns: string
 */
 
-void doubleCheckDel(std::vector<breakpoint *> & bks){
+void doubleCheckDel(std::vector<breakpoint *> & bks, unpairedSVs & up){
 
     for(std::vector<breakpoint *>::iterator it = bks.begin();
         it != bks.end(); it++){
@@ -1697,19 +1704,7 @@ void findPairs(vector<node*> & tree,
             bp->setBadPair();
         }
     }
-
-
     int totalGraphCount = 0;
-
-//     for(vector<node *>::iterator lit = tree.begin();
-//         lit != tree.end(); lit++){
-//         totalGraphCount += getSupport(*lit);
-//     }
-//     bp->setTotalSupport(totalGraphCount);
-
-//    lookup[finalL->seqid][finalL->pos] = bp;
-//    lookup[finalR->seqid][finalR->pos] = bp;
-
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -1748,9 +1743,7 @@ void gatherTrees(vector<vector<node *> > & trees){
  Function input  : nothing
  Function does   : dumps and shrinks graph
  Function returns: NA
-
 */
-
 
 void dump(vector< vector< node *> > & allTrees){
 
@@ -2005,16 +1998,26 @@ void gatherBamStats(string & targetfile){
  stringstream whereTo;
 
  whereTo << "INFO: for Sample:" << SM << endl
-         << "  STATS:    " << SM << ": mean depth ..............: " << mud << std::endl
-         << "  STATS:    " << SM << ": sd depth ................: " << sdd << std::endl
-         << "  STATS:    " << SM << ": mean insert length: .....: " << insertDists.mus[targetfile] << std::endl
-         << "  STATS:    " << SM << ": median insert length ....: " << median                      << std::endl
-         << "  STATS:    " << SM << ": sd insert length ........: " << insertDists.sds[targetfile] << std::endl
-         << "  STATS:    " << SM << ": lower insert cutoff .....: " << insertDists.low[targetfile] << std::endl
-         << "  STATS:    " << SM << ": upper insert cutoff .....: " << insertDists.upr[targetfile] << std::endl
-         << "  STATS:    " << SM << ": average base quality ....: " <<  double(qsum)/double(qnum)  << std::endl
-         << "  STATS:    " << SM << ": average mapping quality .: " << muQ                         << std::endl
-         << "  STATS:    " << SM << ": number of reads used ....: " << n  << std::endl << std::endl;
+         << "  STATS:    " << SM << ": mean depth ..............: " << mud
+         << std::endl
+         << "  STATS:    " << SM << ": sd depth ................: " << sdd
+         << std::endl
+         << "  STATS:    " << SM << ": mean insert length: .....: " << insertDists.mus[targetfile]
+         << std::endl
+         << "  STATS:    " << SM << ": median insert length ....: " << median
+         << std::endl
+         << "  STATS:    " << SM << ": sd insert length ........: " << insertDists.sds[targetfile]
+         << std::endl
+         << "  STATS:    " << SM << ": lower insert cutoff .....: " << insertDists.low[targetfile]
+         << std::endl
+         << "  STATS:    " << SM << ": upper insert cutoff .....: " << insertDists.upr[targetfile]
+         << std::endl
+         << "  STATS:    " << SM << ": average base quality ....: " <<  double(qsum)/double(qnum)
+         << std::endl
+         << "  STATS:    " << SM << ": average mapping quality .: " << muQ
+         << std::endl
+         << "  STATS:    " << SM << ": number of reads used ....: " << n
+         << std::endl << std::endl;
 
  if(globalOpts.statsOnly){
    cout << whereTo.str();
@@ -2085,7 +2088,6 @@ void loadReads(std::vector<RefData> & sequences){
     cerr << "INFO: Finished loading reads." << endl;
   }
 }
-
 
 //-------------------------------    MAIN     --------------------------------
 /*
@@ -2182,9 +2184,12 @@ int main( int argc, char** argv)
       }
       cerr << "INFO: Printing." << endl;
 
-      doubleCheckDel(allBreakpoints);
-      doubleCheckDup(allBreakpoints);
-      doubleCheckInv(allBreakpoints);
+      unpairedSVs unMatched;
+
+      doubleCheckDel(allBreakpoints, unMatched );
+      doubleCheckDup(allBreakpoints, unMatched );
+      doubleCheckInv(allBreakpoints, unMatched );
+      doubleCheckIns(allBreakpoints, unMatched );
 
       printVCF(allBreakpoints);
 
