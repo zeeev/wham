@@ -77,3 +77,4 @@ WHole-genome Alignment Metrics (wham) is a structural variant (SV) caller that i
 
 WHAM can be easily run as a stand alone tool or as part of gkno (http://gkno.me) or bcbio-nextgen (http://bcbio-nextgen.readthedocs.org) pipelines.  
 
+s
