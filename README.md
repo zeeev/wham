@@ -10,7 +10,7 @@ git clone --recursive  https://github.com/zeeev/wham.git ; cd wham ; checkout de
 
 ###Running whamg
 
-Whamg uses paired alignments generated from bwa-mem.  Whamg uses the same bams as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  Whamg is agnostic regarding the bwa-mem –M flag (if you don’t know what that means don’t worry). 
+Whamg uses paired alignments generated from bwa-mem.  Whamg uses the same bams as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  Whamg is agnostic regarding the bwa-mem –M flag (if you don’t know what that means don’t worry).  **It is important that the –R flag in bwa mem is used.  Whamg requires read group information. Currently, Whamg assumes one library per bam file.**
 
 
 ####Example 
@@ -20,7 +20,7 @@ export EXCLUDE=GL000207.1,GL000226.1,GL000229.1,GL000231.1,GL000210.1,GL000239.1
 whamg -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above we are running whamg on the whole CHM1 genome.  The standard error is written to chm1.err, this includes progress updates.  The standard output contains the VCF.  If you have a trio or a quad and want to joint call you can pass the bam files as a comma separated list or a simple text file with the full path to each bam file on each line.
+In the example above we are running whamg on the whole CHM1 genome.  The standard error is written to chm1.err, this includes progress updates.  The standard output contains the VCF.  If you have a trio or a quad and want to joint call you can pass the bam files as a comma separated list or a simple text file with the full path to each bam file on each line.  **It is very important  that the –e flag is used.**  If –e or –c are not specified the mate-pair insert size distribution can be incorrect. 
 
 #### Example 2
 ```
@@ -35,17 +35,17 @@ In the example above we are telling whamg to only use two CPUs.
 whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls, or complex structural variants.  
+In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  It is not recommended that this option is used on a genome-wide run.
 
 
 ### Explanation on options 
- -f : A comma separated list of indexed bam files or a sample text file that looks like:
+ **-f** : A comma separated list of indexed bam files or a sample text file that looks like:
 ```
 NA12878.sort.bam
 NA12776.sort.bam
 ```
--a: The matched reference genome.  It is important that the bams were aligned to the same reference sequence.
--s: whamg will exit after collecting the basic statistics:
+**-a**: The matched reference genome.  It is important that the bams were aligned to the same reference sequence.
+**-s**: whamg will exit after collecting the basic statistics:
 ```
 INFO: for Sample:CHM1
   STATS:    CHM1: mean depth ..............: 38.5064
@@ -59,7 +59,11 @@ INFO: for Sample:CHM1
   STATS:    CHM1: average mapping quality .: 57.9975
   STATS:    CHM1: number of reads used ....: 100405
 ``` 
-
+**-g**: The file to write the graphs to.
+**-e**: A comma separated list of seqids to skip.  
+**-c**: A comma sepearted list of seqids to use for estimating the insert size distribution.
+**-r** Region in format: seqid:start-end.
+**-
 
 ### wham [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
 
