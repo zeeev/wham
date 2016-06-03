@@ -108,6 +108,8 @@ private:
 
     long int length;
 
+    int nClustered       ;
+
     double totalCount    ;
     double tooFarCount   ;
     double tooCloseCount ;
@@ -222,6 +224,7 @@ public:
                     , length(0)
                     , nodeL(NULL)
                     , nodeR(NULL)
+                    , nClustered(0)
                     , totalCount(0)
                     , internalDCount(0)
                     , tooFarCount(0)
@@ -243,6 +246,9 @@ public:
         typeMap['I'] = "INS";
         typeMap['V'] = "INV";
 
+    }
+    int getNClustered(void){
+        return this->nClustered;
     }
     double getSMSupport(std::string & s){
         if(sms.find(s) == sms.end()){
@@ -736,6 +742,7 @@ public:
         }
 
         if(sum > 0 && distCount > 0){
+            nClustered = countY;
             return true;
         }
         return false;
@@ -743,7 +750,6 @@ public:
 };
 
 std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
-
 
     long int start = foo.nodeL->pos ;
     long int end   = foo.nodeR->pos ;
@@ -805,52 +811,6 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
             << ";TF="           << foo.tooFarCount
             << ";U="            << foo.dupCount
             << ";V="            << foo.invCount;
-    }
-    else{
-        out << foo.seqNames.front() << "\t"
-            << foo.nodeL->pos   << "\t"
-            << foo.nodeL->pos   << "\t"
-            << "D="  << foo.delCount
-            << ";U=" << foo.dupCount
-            << ";V=" << foo.invCount
-            << ";I=" << foo.insCount
-            << ";T=" << foo.traCount
-            << ";A=" << foo.totalCount
-            << ";CF=" << foo.clusterFrac
-            << ";DI=" << foo.avgDist
-            << ";REF=" << foo.refs.front();
-
-        out << ";SVTYPE=" << foo.typeName << ";SVLEN=." ;
-        out << ";BW=" << double(getSupport(foo.nodeL)
-                                + getSupport(foo.nodeR))
-            / double(foo.totalCount) ;
-
-        out << ";ALT=" << foo.refs.front() << "]"
-            << foo.seqNames.back() << ":"
-            << foo.nodeR->pos << "]";
-
-        out << std::endl;
-
-        out << foo.seqNames.back() << "\t"
-            << foo.nodeR->pos      << "\t"
-            << foo.nodeR->pos      << "\t"
-            << "D="  << foo.delCount
-            << ";U=" << foo.dupCount
-            << ";V=" << foo.invCount
-            << ";I=" << foo.insCount
-            << ";T=" << foo.traCount
-            << ";A=" << foo.totalCount
-            << ";CF=" << foo.clusterFrac
-            << ";DI=" << foo.avgDist
-            << ";REF=" << foo.refs.back();
-
-        out << ";SVTYPE=" << foo.typeName << ";SVLEN=.";
-        out << ";BW=" << double(getSupport(foo.nodeL)
-                                + getSupport(foo.nodeR))
-            / double(foo.totalCount);
-        out << ";ALT=" << foo.refs.back() << "]"
-            << foo.seqNames.front() << ":"
-            << foo.nodeL->pos << "]";
     }
 
     return out;

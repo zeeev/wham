@@ -29,6 +29,8 @@ using namespace std;
 using namespace BamTools;
 
 typedef map< char, map< int, map< int, breakpoint * > > >  unpairedSVs;
+typedef map< int, map< int, breakpoint * > > unpairedSVsChr;
+typedef map< int, breakpoint * > unpairedSVsTypePos;
 
 
 struct options{
@@ -463,14 +465,14 @@ void addIndelToGraph(int refIDL,
    uint hit = 0;
 
    if(globalGraph.nodes[refIDL][l]->sm.find(SM)
-      != globalGraph.nodes[refIDL][l]->sm.end()){
+      == globalGraph.nodes[refIDL][l]->sm.end()){
      globalGraph.nodes[refIDL][l]->sm[SM] = 1;
    }
    else{
      globalGraph.nodes[refIDL][l]->sm[SM] += 1;
    }
    if(globalGraph.nodes[refIDR][r]->sm.find(SM)
-      != globalGraph.nodes[refIDR][r]->sm.end()){
+      == globalGraph.nodes[refIDR][r]->sm.end()){
      globalGraph.nodes[refIDR][r]->sm[SM] = 1;
    }
    else{
@@ -1514,9 +1516,6 @@ void doubleCheckIns(std::vector<breakpoint *> & bks, unpairedSVs & up){
         else{
             (*it)->unSetPrint();
 
-            // up[(*it)->getType()][(*it)->nodeL->seqid][(*it)->nodeL->pos] = *it;
-            // up[(*it)->getType()][(*it)->nodeR->seqid][(*it)->nodeR->pos] = *it;
-
         }
     }
 }
@@ -1575,7 +1574,8 @@ void doubleCheckDup(std::vector<breakpoint *> & bks, unpairedSVs & up){
         }
         if(((*it)->getClustFrac()   > 0.1 &&
            (*it)->getEvertCount()  > 1
-            && (*it)->getDupCount() > 1) || ((*it)->getSplitReadCount() > 3 && (*it)->getLength() < 500)
+            && (*it)->getDupCount() > 1)
+           || ((*it)->getSplitReadCount() > 3 && (*it)->getLength() < 500)
            ){
         }
         else{
@@ -1583,7 +1583,6 @@ void doubleCheckDup(std::vector<breakpoint *> & bks, unpairedSVs & up){
         }
     }
 }
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -1611,6 +1610,56 @@ void doubleCheckDel(std::vector<breakpoint *> & bks, unpairedSVs & up){
         }
         else{
             (*it)->unSetPrint();
+
+            up[(*it)->getType()][(*it)->nodeL->seqid][(*it)->nodeL->pos] = *it;
+            up[(*it)->getType()][(*it)->nodeR->seqid][(*it)->nodeR->pos] = *it;
+        }
+    }
+}
+
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : unpairedSVs & up, type char
+ Function does   : tries to cluster and link deletions
+ Function returns: NA
+*/
+void clusterUnlinked(unpairedSVs & up, char type){
+
+    for(unpairedSVsChr::iterator it = up[type].begin();
+        it != up[type].end(); it++ ){
+
+        for(unpairedSVsTypePos::iterator iz = it->second.begin();
+            iz != it->second.end(); iz++){
+
+            unpairedSVsTypePos::iterator forwardScan = iz;
+            forwardScan++;
+            for(; forwardScan != it->second.end(); forwardScan++){
+
+
+                if(iz->second->delClusterCheck(iz->second->nodeL,
+                                       forwardScan->second->nodeR)){
+
+                    std::cerr << "R hit " << iz->second->nodeL->pos
+                              << " " << forwardScan->second->nodeR->pos
+                              << " " << iz->second->getClustFrac()
+                              << " " << iz->second->getNClustered()
+                              << " " << iz->second->getAvgDist() << std::endl;
+
+                }
+                if(iz->second->delClusterCheck(iz->second->nodeL,
+                                               forwardScan->second->nodeL)){
+
+                    std::cerr << "L hit " << iz->second->nodeL->pos
+                              << " " << forwardScan->second->nodeL->pos
+                              << " " << iz->second->getClustFrac()
+                              << " " << iz->second->getNClustered()
+                              << " " << iz->second->getAvgDist() << std::endl;
+
+
+                }
+
+            }
         }
     }
 }
@@ -2169,9 +2218,14 @@ int main( int argc, char** argv)
       doubleCheckInv(allBreakpoints, unMatched );
       doubleCheckIns(allBreakpoints, unMatched );
 
+
+      //      std::cerr << "INFO: clustering unlinked deletions." << std::endl;
+      //      clusterUnlinked(unMatched, 'D');
+
+
       printVCF(allBreakpoints);
 
-      std::cerr << "done processing trees" << std::endl;
+      std::cerr << "INFO: done processing trees" << std::endl;
 
       if(!globalOpts.graphOut.empty()){
           dump(globalTrees);
