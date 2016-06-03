@@ -4,7 +4,7 @@ The wham suite consists of two programs, wham and whamg.  Wham, has the highest 
 
 http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
-###Some basics info
+###Whamg workflow
 
 
 
