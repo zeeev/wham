@@ -111,7 +111,7 @@ void printHelp(void){
   cerr << "  *|-c    -e  <STRING>  Comma sep. list of seqids to skip [false].         " << endl;
   cerr << "  *|-e    -c  <STRING>  Comma sep. list of seqids to keep [false].         " << endl;
   cerr << "          -r  <STRING>  Region in format: seqid:start-end [whole genome]   " << endl;
-  cerr << "  *       -x  <INT>     Number of CPUs to use [all cores].                 " << endl;
+  cerr << "  *       -x  <INT>     Number of CPUs to use [1 CPU].                 " << endl;
   cerr << "          -m  <INT>     Mapping quality filter [20].                       " << endl;
   cerr << "          -i  <STRING>  non standard split read tag [SA]                   " << endl;
   cerr << "          -z  <FLAG>    Sample reads until success. [false]                " << endl;
@@ -597,7 +597,7 @@ inline bool pairFailed(readPair * rp){
        && rp->al2.CigarData[0].Type == 'M' ){
         return true;
     }
-    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 75){
+    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
       return true;
     }
 
@@ -1508,14 +1508,14 @@ void doubleCheckIns(std::vector<breakpoint *> & bks, unpairedSVs & up){
         if((*it)->getType() != 'I'){
             continue;
         }
-        if((*it)->getTooCloseCount() > 2
-           &&  (*it)->getInsCount()  > 2){
+        if(((*it)->getTooCloseCount() > 2 && (*it)->getInsCount() > 2)
+           ||  (*it)->getInsCount()  > 4){
         }
         else{
             (*it)->unSetPrint();
 
-            up[(*it)->getType()][(*it)->nodeL->seqid][(*it)->nodeL->pos] = *it;
-            up[(*it)->getType()][(*it)->nodeR->seqid][(*it)->nodeR->pos] = *it;
+            // up[(*it)->getType()][(*it)->nodeL->seqid][(*it)->nodeL->pos] = *it;
+            // up[(*it)->getType()][(*it)->nodeR->seqid][(*it)->nodeR->pos] = *it;
 
         }
     }
@@ -1962,10 +1962,8 @@ void gatherBamStats(string & targetfile){
  insertDists.sds[  targetfile ] = sd;
  insertDists.avgD[ targetfile ] = mud;
 
- // for(std::vector<int>::iterator it = mapQuality.begin(); it != )
-
  insertDists.low[ targetfile ] = insertDists.mus[targetfile]
-   - (2*insertDists.sds[targetfile]);
+   - (1.6*insertDists.sds[targetfile]);
 
  if(insertDists.low[ targetfile ] < 0 ){
    insertDists.low[ targetfile ] = 0;
