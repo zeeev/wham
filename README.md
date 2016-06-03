@@ -1,4 +1,4 @@
-###Intro
+###Wham intro [![Analytics](https://ga-beacon.appspot.com/UA-50580904-4/welcome-page)](https://github.com/igrigorik/ga-beacon)
 
 The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  **For general structural variant discovery use whamg**.  This **README** contains the basics of running whamg.  **Important sections are highlighted in bold text.**  Please cite the wham paper if you use wham or whamg. 
 
