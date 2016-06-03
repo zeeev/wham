@@ -4,7 +4,7 @@ The wham suite consists of two programs, wham and whamg.  Wham, has the highest 
 
 http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
- [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)  [![Analytics](https://ga-beacon.appspot.com/UA-50580904-4/welcome-page)](https://github.com/igrigorik/ga-beacon)  [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
+ [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)  [![Analytics](https://ga-beacon.appspot.com/UA-50580904-4/welcome-page)](https://github.com/zeeev/wham)  [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
 ###Whamg workflow
 
