@@ -23,7 +23,7 @@ http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
 Whamg depends on CMAKE and OPENMP.  These dependances are commonly found preinstalled on linux systems. 
 ```
-git clone --recursive  https://github.com/zeeev/wham.git ; cd wham ; checkout devel ; make 
+git clone --recursive  https://github.com/zeeev/wham.git ; cd wham ; git checkout devel ; make 
 ```
 
 ###Running whamg
@@ -118,7 +118,7 @@ In this section each INFO and FORMAT field will be covered. Here is an example w
 ##INFO=<ID=T,Number=1,Type=Integer,Description="Number of reads supporting a BND">
 ##INFO=<ID=TAGS,Number=.,Type=Integer,Description="SM tags with breakpoint support">
 ##INFO=<ID=TF,Number=1,Type=Integer,Description="Number of reads mapped too far">
-##INFO=<ID=U,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
+##INFO=<ID=U,Number=1,Type=Integer,Description="Number of reads supporting a duplication">
 ##INFO=<ID=V,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read Depth">
