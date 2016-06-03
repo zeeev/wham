@@ -53,7 +53,7 @@ In the example above we are telling whamg to only use two CPUs.
 whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  It is not recommended that this option is used on a genome-wide run.
+In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  Do not use this option on a genome-wide run.
 
 
 ### Explanation of options 
