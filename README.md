@@ -1,5 +1,23 @@
-The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  For general structural variant discovery use whamg. 
+###Wham intro 
 
+The wham suite consists of two programs, wham and whamg.  Wham, the original tool, is a very sensitive method with a high false discovery rate. The second program Whamg, more accurate and therefore better suited for general structural variant (SV) discovery.
+**For most studies we strongly recommend using whamg**. In this README we outline the basics of running whamg. **Important sections are highlighted in bold text.** Please cite the wham paper if you use wham or whamg.
+
+http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
+
+ [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)  [![Analytics](https://ga-beacon.appspot.com/UA-50580904-5/welcome-page)](https://github.com/zeeev/wham)  [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
+
+###Whamg workflow
+
+
+
+
+
+
+
+
+
+![alt tag](https://github.com/zeeev/wham/blob/devel/docs/github-figure.png)
 
 ###Installing whamg
 
@@ -38,7 +56,7 @@ whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_
 In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  It is not recommended that this option is used on a genome-wide run.
 
 
-### Explanation on options 
+### Explanation of options 
  **-f** : A comma separated list of indexed bam files or a sample text file that looks like:
 ```
 NA12878.sort.bam
@@ -195,7 +213,7 @@ Depth.  Currently no depth is provided.
 
 This is the number of reads in each individual that supports the exact breakpoint.  Because of breakpoint variability this number might be lower than expected. **Be cautious when filtering on SP.**
 
-### wham [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
+### wham
 
 All wham documents can be found on the wiki:
 
