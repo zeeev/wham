@@ -1,8 +1,10 @@
-###Wham intro [![Analytics](https://ga-beacon.appspot.com/UA-50580904-4/welcome-page)](https://github.com/igrigorik/ga-beacon)
+###Wham intro 
 
 The wham suite consists of two programs, wham and whamg.  Wham, has the highest sensitivity, but a much higher false discovery rate.  **For general structural variant discovery use whamg**.  This **README** contains the basics of running whamg.  **Important sections are highlighted in bold text.**  Please cite the wham paper if you use wham or whamg. 
 
 http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
+
+ [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)[![Analytics](https://ga-beacon.appspot.com/UA-50580904-4/welcome-page)](https://github.com/igrigorik/ga-beacon)
 
 ###Whamg workflow
 
@@ -210,7 +212,7 @@ Depth.  Currently no depth is provided.
 
 This is the number of reads in each individual that supports the exact breakpoint.  Because of breakpoint variability this number might be lower than expected. **Be cautious when filtering on SP.**
 
-### wham [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)
+### wham
 
 All wham documents can be found on the wiki:
 
