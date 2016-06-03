@@ -118,7 +118,7 @@ In this section each INFO and FORMAT field will be covered. Here is an example w
 ##INFO=<ID=T,Number=1,Type=Integer,Description="Number of reads supporting a BND">
 ##INFO=<ID=TAGS,Number=.,Type=Integer,Description="SM tags with breakpoint support">
 ##INFO=<ID=TF,Number=1,Type=Integer,Description="Number of reads mapped too far">
-##INFO=<ID=U,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
+##INFO=<ID=U,Number=1,Type=Integer,Description="Number of reads supporting a duplication">
 ##INFO=<ID=V,Number=1,Type=Integer,Description="Number of reads supporting an inversion">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read Depth">
