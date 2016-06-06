@@ -203,7 +203,10 @@ Depth.  Currently no depth is provided.
 #### SP
 
 This is the number of reads in each individual that supports the exact breakpoint.  Because of breakpoint variability this number might be lower than expected. **Be cautious when filtering on SP.**
+
+
 ---
+
 ### wham
 
 All wham documents can be found on the wiki:
