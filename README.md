@@ -12,7 +12,7 @@ Below, we outline the basics of running whamg. **Important sections are highligh
 
 ###Installing whamg
 
-whamg depends on ```CMake``` and ```OpenMP```.  These dependances are commonly found preinstalled on linux systems. 
+whamg depends on ```CMake``` and ```OpenMP```.  These dependances are commonly found preinstalled on linux systems. The following command should install wham into your current working directory. 
 ```
 git clone --recursive  https://github.com/zeeev/wham.git; cd wham; make 
 ```
@@ -29,14 +29,14 @@ export EXCLUDE=GL000207.1,GL000226.1,GL000229.1,GL000231.1,GL000210.1,GL000239.1
 whamg -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above, whamg will process all chomosomes in the CHM1 genome. The standard error is written to chm1.err, including progress updates. The standard output contains the SV calls. If you have a trio or a quad and want to joint call, you can pass the bam files as a comma-separated list or a simple text file with the full path to each bam file on each line. **It is very important that the –e or -c flags are used.** If –e or –c are not specified, there is a chance that whamg will incorrectly estimate the insert sizes of the library.
+In the example above, whamg will process all chomosomes in the CHM1 genome. The export statement allows you to mask certain chromosomes/contigs; it may be useful to mask certain chromosomes that are either problematic for read mapping (i.e. rDNA) or short contigs from de novo genome assemblies. The provided example masks human contigs that we have found to be problematic in SV calling. The standard output contains the SV calls and is written to chm1.vcf. The standard error is written to chm1.err, and includes progress updates that can be useful to track runtimes and errors. If you have a trio or a quad and want to joint call, you can pass the bam files as a comma-separated list or a simple text file with the full path to each bam file on each line. **PLEASE NOTE: It is very important that the –e or -c flags are used.** If –e or –c are not specified, there is a chance that whamg will incorrectly estimate the insert sizes of the library.
 
 #### Example 2
 ```
 whamg -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above, we are telling whamg to only use two CPUs.
+In the example above, we are telling whamg to only use two CPUs (-x).
 
 #### Example 3
 
@@ -44,7 +44,7 @@ In the example above, we are telling whamg to only use two CPUs.
 whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above, each putative structural variant will be written to a flat text file. Individual graphs can be visualized with dotviz or gephi. This output can be helpful for interrogating missing calls or complex structural variants. Do not use this option on a genome-wide run.
+In the example above, each putative structural variant will be written to a flat text file. Individual graphs can be visualized with dotviz or gephi. This output can be helpful for interrogating missing calls or complex structural variants. Do not use this option on a genome-wide run as the file sizes can be extremely large.
 
 
 ### Explanation of options 
@@ -54,6 +54,7 @@ NA12878.sort.bam
 NA12776.sort.bam
 ```
 **-a**: The matched reference genome. It is important that the bams were aligned to the same reference sequence.
+
 **-s**: whamg will exit after collecting the basic statistics:
 ```
 INFO: for Sample:CHM1
@@ -68,25 +69,25 @@ INFO: for Sample:CHM1
   STATS:    CHM1: average mapping quality .: 57.9975
   STATS:    CHM1: number of reads used ....: 100405
 ``` 
-**-g**: The file to write the graphs to.
+**-g**: The file to write the graphs to. Not recommended for whole genome runs.
 
 **-e**: A comma-separated list of seqids to skip.  
 
 **-c**: A comma-sepearted list of seqids to use for estimating the insert size distribution.
 
-**-r**: Region in ``seqid:start-end`` format.
+**-r**: Region in ```seqid:start-end`` format. Runs whamg on a specific genomic region.
 
 **-x**: The number of CPUs whamg will attempt to use.  During the first step, whamg reads the entire bam file. If you notice CPU usage dropping, I/O might be swamping out. After the bam files are read, there are several single CPU steps before whamg finishes. The optimal number of CPUs to use really depends on I/O speeds.
 
-**-i**:  whamg uses the BWA-MEM SA tag (default). Older versions of BWA-MEM used a different tag, XP.
+**-i**:  whamg uses the BWA-MEM SA tag (default). Older versions of BWA-MEM used a different tag, XP (-i XP).
 
-**-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …). The –z flag forces whamg to keep sampling random regions until it succeeds
+**-z**:  Sometimes whamg can fail to sample enough reads (low fold-coverage, exome, …). The –z flag forces whamg to keep sampling random regions until it succeeds
 
 
 
 ### VCF 4.2 output
 
-In this section, each INFO and FORMAT field will be covered. Here is an example whamg VCF header:
+In this section each INFO and FORMAT field will be covered. Here is an example whamg VCF header:
 
 ```
 ##fileformat=VCFv4.2
@@ -117,38 +118,103 @@ In this section, each INFO and FORMAT field will be covered. Here is an example 
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	CHM1
 ```
 
-| FIELD | DESCRIPTION |
-|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| A | Each pair of reads counts as a piece of evidence. The total evidence is summed across the whamg graph structure. Since whamg does not initially cluster similar graph structures, you may see several SVs with low total support that are off by a couple base pairs. Merging SVs is a good idea. |
-| CIEND and CIPOS | This field is fixed at [-10, 10]. Most whamg calls are accurate to within a couple base pairs. However, this field is updated during SV merging. |
-| CF | Larger SVs (greater than average insert size of the library) generate mate pair patterns. For example, the mates of reads overlapping the 5’ end of a deletion should map downstream of the 3’ breakpoint. Each SV class generates a different pattern. CF is the fraction of the reads in the graph structure that cluster according to SVTYPE. |
-| CW | Each mate pair and split read can contribute evidence to one or more SVTYPES. The CW field describes what fraction of the total support belongs to each SVTYPE. In the case of inverted deletions, you might find that both the inversion and deletion have high weights. This field sums to one. |
-| D | The number of mate pairs in the graph that support a deletion. |
-| DI | This field is related to the CF field. This measures the average distance of the mate pairs to the alternative breakpoint. Inversions can have large DI scores, but deletions should not |
-| END | This is a standard VCF field. Insertions start and end at the same position. |
-| EV | The number of everted mate pairs (← →). |
-| I | The number of reads supporting and inversion. |
-| SR | The number of split reads in the graph. This is not necessarily the same as the number of split reads between the breakpoints. |
-| SS | The number of reads on the same strand (→ → or ← ←). |
-| SVLEN | This is a standard VCF field. |
-| SVTYPE | This is a standard VCF field. |
-| T | The number of reads supporting and interchomosmal event. |
-| TAGS | The individuals (SMs) that are in the graph. |
-| TF | The number of mate pairs that map too far away. |
-| U | The number of reads that support duplication. |
-| V | The number of reads that support an inversion. |
-| GT | Genotype. Currently, there is no genotype provided. We are working on a fast and accurate genotyper. |
-| DP | Depth. Currently, no depth is provided. |
-| SP | This is the number of reads in each individual that supports the exact breakpoint. Because of breakpoint variability, this number might be lower than expected. **Be cautious when filtering on SP.** |
+#### A
+
+Each pair of reads count as a piece of evidence.  The total evidence is summed across the whamg graph structure.  Since whamg does not initially cluster similar graph structures you may see several SVs with low total support that are off by a couple base pairs.  Merging SVs is a good idea.
+
+#### CIEND and CIPOS
+
+This field is fixed at -10,10.  Most whamg calls are accurate to within a couple base pairs.  However, this field is updated during SV merging. 
+
+#### CF
+
+Larger SVs (greater than average insert size of the library) generate mate pair patterns.  For example,  The mates of reads overlapping the 5’ of a deletion should map downstream of the 3’ breakpoint.  Each SV class generates a different pattern.  CF is the fraction of the reads in the graph structure that cluster according to SVTYPE.
+
+#### CW
+
+Each mate pair and split read can contribute evidence to one or more SVTYPES.  The CW field describes what fraction of the total support belongs to each SVTYPE.  In the case of inverted deletions you might find that both inversion and deletion have high weights.  This field sums to one.
+
+#### D  
+
+The number of mate pairs in the graph that support a deletion
+
+#### DI
+
+This field relates to the CF field.  This measures the average distance of the mate pairs to the alternative breakpoint.  Inversions can have large DI scores, but deletions should not. 
+
+
+#### END
+
+This is a standard VCF field.  Insertions start and end at the same position.
+
+#### EV 
+
+The number of everted mate pairs ← →
+
+#### I  
+
+The number of reads supporting and inversion
+
+#### SR
+
+The number of split reads in the graph.  This is not necessarily the same as the number of split reads between the breakpoints.
+
+
+####SS
+
+The number of reads on the same strand → → or ← ←.
+
+####SVLEN
+
+This is a standard VCF field.  
+
+####SVTYPE
+
+This is a standard VCF field.  
+
+#### T
+
+The number of reads supporting and interchomosmal event. 
+
+
+#### TAGS
+
+Which individuals (SMs) that are in the graph.
+
+#### TF
+
+The number of mate pairs that map too far away
+
+#### U
+
+The number of reads that support duplication
+
+#### V
+
+The number of reads that support an inversion
+
+#### GT
+
+Genotype.  Currently, there is no genotype provided.  We are actively developing on a fast and accurate genotyper.
+
+#### DP
+
+Depth.  Currently no depth is provided.
+
+#### SP
+
+This is the number of reads in each individual that supports the exact breakpoint.  Because of breakpoint variability this number might be lower than expected. **Be cautious when filtering on SP.**
+
 
 ---
 
 ### wham
 
-All wham documents can be found on the wiki:
+wham is the other SV caller provided in the repository and represents the codebase published in our PLoS Comp Bio paper. All wham documents can be found on the wiki:
 
 http://zeeev.github.io/wham/
 
-WHole-genome Alignment Metrics (wham) is a structural variant (SV) caller that integrates several sources of mapping information to identify SVs. wham classifies SVs using a flexible and extendable machine-learning algorithm (random forest). wham is not only accurate at identifying SVs, but its association test can identify shared SVs enriched in a cohort of diseased individuals compared to a background of healthy individuals.   
+WHole-genome Alignment Metrics (wham) is a structural variant (SV) caller that integrates several sources of mapping information to identify SVs.  Wham classifies SVs using a flexible and extendable machine-learning algorithm (random forest).  WHAM is not only accurate at identifying SVs, but its association test can identify shared SVs enriched in a cohort of diseased individuals compared to a background of healthy individuals.   
 
-wham can be easily run as a stand-alone tool or as part of gkno (http://gkno.me) or bcbio-nextgen (http://bcbio-nextgen.readthedocs.org) pipelines.
+WHAM can be easily run as a stand alone tool or as part of gkno (http://gkno.me) or bcbio-nextgen (http://bcbio-nextgen.readthedocs.org) pipelines.  
+
