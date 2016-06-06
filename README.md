@@ -11,19 +11,13 @@ http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
 
 
 
-
-
-
-
-
-
-![alt tag](https://github.com/zeeev/wham/blob/devel/docs/github-figure.png)
+![alt tag](https://github.com/zeeev/wham/blob/master/docs/github-figure.png)
 
 ###Installing whamg
 
 Whamg depends on CMAKE and OPENMP.  These dependances are commonly found preinstalled on linux systems. 
 ```
-git clone --recursive  https://github.com/zeeev/wham.git ; cd wham ; git checkout devel ; make 
+git clone --recursive  https://github.com/zeeev/wham.git ; cd wham  ; make 
 ```
 
 ###Running whamg
