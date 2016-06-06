@@ -100,7 +100,7 @@ In this section each INFO and FORMAT field will be covered. Here is an example w
 ```
 ##fileformat=VCFv4.2
 ##source=WHAM-GRAPHENING:v1.7.0-225-g1e35-dirty
-##reference=/net/eichler/vol8/home/zevk/shared_resources/assemblies/hg19/genomestrip_metadata/Homo_sapiens_assembly19/Homo_sapiens_assembly19.fasta
+##reference=Homo_sapiens_assembly19.fasta
 ##INFO=<ID=A,Number=1,Type=Integer,Description="Total pieces of evidence">
 ##INFO=<ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
 ##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
