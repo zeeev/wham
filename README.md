@@ -1,6 +1,6 @@
 ###wham
 The wham suite consists of two programs, wham and whamg. wham, the original tool, is a very sensitive method with a high false discovery rate. The second program, whamg, is more accurate and better suited for general structural variant (SV) discovery.
-**For most studies we strongly recommend using whamg**.
+**For most studies, we strongly recommend using whamg**.
 
 Below, we outline the basics of running whamg. **Important sections are highlighted in bold text.** Please cite the [wham paper](http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572) if you use wham or whamg.
 
@@ -12,14 +12,14 @@ Below, we outline the basics of running whamg. **Important sections are highligh
 
 ###Installing whamg
 
-Whamg depends on CMAKE and OPENMP.  These dependances are commonly found preinstalled on linux systems. 
+whamg depends on ```CMake``` and ```OpenMP```.  These dependances are commonly found preinstalled on linux systems. 
 ```
-git clone --recursive  https://github.com/zeeev/wham.git ; cd wham  ; make 
+git clone --recursive  https://github.com/zeeev/wham.git; cd wham; make 
 ```
 
 ###Running whamg
 
-Whamg uses paired alignments generated with bwa-mem.  Whamg uses the same bams as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  Whamg is agnostic regarding the bwa-mem –M flag (if you don’t know what that means don’t worry).  **It is important that the –R flag in bwa mem is used.  Whamg requires read group information. Currently, Whamg assumes one library per bam file.**
+whamg uses paired alignments generated with BWA-MEM.  whamg uses the same BAMs as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  whamg is agnostic regarding the BWA-MEM –M flag (if you don’t know what that means, don’t worry). **It is important that the –R flag in BWA-MEM is used.  whamg requires read-group information. Currently, whamg assumes one library per bam file.**
 
 
 ####Example 
@@ -29,14 +29,14 @@ export EXCLUDE=GL000207.1,GL000226.1,GL000229.1,GL000231.1,GL000210.1,GL000239.1
 whamg -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above whamg will process all chomosomes in the CHM1 genome.  The standard error is written to chm1.err, this includes progress updates.  The standard output contains the SV calls.  If you have a trio or a quad and want to joint call you can pass the bam files as a comma separated list or a simple text file with the full path to each bam file on each line.  **It is very important  that the –e or -c flags are used.**  If –e or –c are not specified there is a chance that whamg will incorrectly estimate the insert sizes of the library.
+In the example above, whamg will process all chomosomes in the CHM1 genome. The standard error is written to chm1.err, including progress updates. The standard output contains the SV calls. If you have a trio or a quad and want to joint call, you can pass the bam files as a comma-separated list or a simple text file with the full path to each bam file on each line. **It is very important that the –e or -c flags are used.** If –e or –c are not specified, there is a chance that whamg will incorrectly estimate the insert sizes of the library.
 
 #### Example 2
 ```
 whamg -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above we are telling whamg to only use two CPUs.
+In the example above, we are telling whamg to only use two CPUs.
 
 #### Example 3
 
@@ -44,16 +44,16 @@ In the example above we are telling whamg to only use two CPUs.
 whamg  -g graph.txt -x 2 -e $EXCLUDE -a Homo_sapiens_assembly19.fasta –f CHM1_1.bam > chm1.vcf  2> chm1.err
 ```
 
-In the example above each putative structural variant will be written to a flat text file.  Individual graphs can be visualized with dotviz or gephi.  This output can be helpful for interrogating missing calls or complex structural variants.  Do not use this option on a genome-wide run.
+In the example above, each putative structural variant will be written to a flat text file. Individual graphs can be visualized with dotviz or gephi. This output can be helpful for interrogating missing calls or complex structural variants. Do not use this option on a genome-wide run.
 
 
 ### Explanation of options 
- **-f** : A comma separated list of indexed bam files or a sample text file that looks like:
+ **-f** : A comma-separated list of indexed bam files or a sample text file that looks like:
 ```
 NA12878.sort.bam
 NA12776.sort.bam
 ```
-**-a**: The matched reference genome.  It is important that the bams were aligned to the same reference sequence.
+**-a**: The matched reference genome. It is important that the bams were aligned to the same reference sequence.
 **-s**: whamg will exit after collecting the basic statistics:
 ```
 INFO: for Sample:CHM1
@@ -70,17 +70,17 @@ INFO: for Sample:CHM1
 ``` 
 **-g**: The file to write the graphs to.
 
-**-e**: A comma separated list of seqids to skip.  
+**-e**: A comma-separated list of seqids to skip.  
 
-**-c**: A comma sepearted list of seqids to use for estimating the insert size distribution.
+**-c**: A comma-sepearted list of seqids to use for estimating the insert size distribution.
 
-**-r**: Region in format: seqid:start-end.
+**-r**: Region in ```seqid:start-end`` format.
 
-**-x**: The number of CPUs wham will attempt to use.  During the first step whamg reads the entire bam file.  If you notice CPU usage dropping IO might be swamping out.  After the bam files are read there are several 1CPU steps before whamg finishes. The right number of CPUs  to use really depends on IO speeds.
+**-x**: The number of CPUs whamg will attempt to use.  During the first step, whamg reads the entire bam file. If you notice CPU usage dropping, I/O might be swamping out. After the bam files are read, there are several single CPU steps before whamg finishes. The optimal number of CPUs to use really depends on I/O speeds.
 
-**-i**:  Whamg uses the bwa-mem SA tag (default).   Older versions of bwa-mem used a different tag: XP.
+**-i**:  whamg uses the BWA-MEM SA tag (default). Older versions of BWA-MEM used a different tag, XP.
 
-**-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …).  The –z flag forces whamg to keep sampling random regions  until it succeeds
+**-z**:  Sometimes whamg can fail to sample enough reads (low coverage, exome, …). The –z flag forces whamg to keep sampling random regions until it succeeds
 
 
 
