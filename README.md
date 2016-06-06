@@ -1,15 +1,12 @@
-###Wham intro 
+###wham
+The wham suite consists of two programs, wham and whamg. wham, the original tool, is a very sensitive method with a high false discovery rate. The second program, whamg, is more accurate and better suited for general structural variant (SV) discovery.
+**For most studies we strongly recommend using whamg**.
 
-The wham suite consists of two programs, wham and whamg.  Wham, the original tool, is a very sensitive method with a high false discovery rate. The second program Whamg, more accurate and therefore better suited for general structural variant (SV) discovery.
-**For most studies we strongly recommend using whamg**. In this README we outline the basics of running whamg. **Important sections are highlighted in bold text.** Please cite the wham paper if you use wham or whamg.
-
-http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572
+Below, we outline the basics of running whamg. **Important sections are highlighted in bold text.** Please cite the [wham paper](http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004572) if you use wham or whamg.
 
  [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)  [![Analytics](https://ga-beacon.appspot.com/UA-50580904-5/welcome-page)](https://github.com/zeeev/wham)  [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
-###Whamg workflow
-
-
+###whamg workflow
 
 ![alt tag](https://github.com/zeeev/wham/blob/master/docs/github-figure.png)
 
