@@ -1733,7 +1733,6 @@ void findPairs(vector<node*> & tree,
             bp->setBadPair();
         }
     }
-    int totalGraphCount = 0;
 }
 
 //------------------------------- SUBROUTINE --------------------------------

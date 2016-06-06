@@ -216,19 +216,17 @@ public:
 
     breakpoint(void): type('D')
                     , totalGraphWeight(0)
-                    , print(true)
                     , paired(false)
                     , bnd(false)
                     , masked(false)
                     , clustered(false)
+                    , print(true)
                     , length(0)
-                    , nodeL(NULL)
-                    , nodeR(NULL)
                     , nClustered(0)
                     , totalCount(0)
-                    , internalDCount(0)
                     , tooFarCount(0)
                     , tooCloseCount(0)
+                    , internalDCount(0)
                     , splitCount(0)
                     , evertCount(0)
                     , ssCount(0)
@@ -238,7 +236,9 @@ public:
                     , invCount(0)
                     , traCount(0)
                     , clusterFrac(0)
-                    , avgDist(0){
+                    , avgDist(0)
+                    , nodeL(NULL)
+                    , nodeR(NULL){
 
         typeMap['D'] = "DEL";
         typeMap['U'] = "DUP";
