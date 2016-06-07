@@ -754,7 +754,7 @@ std::ostream& operator<<(std::ostream& out, const breakpoint & foo){
     long int start = foo.nodeL->pos ;
     long int end   = foo.nodeR->pos ;
 
-    long int len = foo.length;
+    long int len = abs(foo.nodeR->pos - foo.nodeL->pos);
 
     if(foo.type == 'I'){
         end = start;

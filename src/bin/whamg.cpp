@@ -1512,6 +1512,16 @@ void doubleCheckIns(std::vector<breakpoint *> & bks, unpairedSVs & up){
         }
         if(((*it)->getTooCloseCount() > 2 && (*it)->getInsCount() > 2)
            ||  (*it)->getInsCount()  > 4){
+
+            // switching starts because one is a terminal node
+            if((*it)->nodeR->eds.size() > (*it)->nodeL->eds.size()){
+                node * tmp;
+                tmp = (*it)->nodeR;
+                (*it)->nodeR = (*it)->nodeL;
+                (*it)->nodeL = tmp;
+            }
+
+
         }
         else{
             (*it)->unSetPrint();
