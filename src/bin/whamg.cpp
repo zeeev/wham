@@ -43,6 +43,7 @@ struct options{
     int NM                        ;
     int nthreads                  ;
     int lastSeqid                 ;
+    int minPairMatch              ;
     string fasta                  ;
     string graphOut               ;
     map<string, int> toSkip       ;
@@ -69,7 +70,7 @@ map<int, string> forward_lookup;
 
 // options
 
-static const char *optString = "c:i:u:m:r:a:g:x:f:e:hsz";
+static const char *optString = "c:i:u:m:r:a:g:x:f:e:d:hsz";
 
 // omp lock
 omp_lock_t lock;
@@ -102,37 +103,38 @@ void printHelp(void){
   cerr << " Required:  " << endl;
 //------------------------------- XXXXXXXXXX --------------------------------
 
-  cerr << "          -f  <STRING>  Comma separated list of bam files or a file with   " << endl;
-  cerr << "                        one bam (full path) per line.                      " << endl;
-  cerr << "          -a  <STRING>  The reference genome (indexed fasta).              " << endl;
+  cerr << "          -f  <STRING>  Comma separated list of bam files or a file with    " << endl;
+  cerr << "                        one bam (full path) per line.                       " << endl;
+  cerr << "          -a  <STRING>  The reference genome (indexed fasta).               " << endl;
   cerr << endl;
-  cerr << " Optional:  Recommended flags are noted with : *                           " << endl;
-  cerr << "          -s  <FLAG>    Exits the program after the stats are              " << endl;
-  cerr << "                        gathered. [false]                                  " << endl;
-  cerr << "          -g  <STRING>  File to write graph to (very large output). [false]" << endl;
-  cerr << "  *|-c    -e  <STRING>  Comma sep. list of seqids to skip [false].         " << endl;
-  cerr << "  *|-e    -c  <STRING>  Comma sep. list of seqids to keep [false].         " << endl;
-  cerr << "          -r  <STRING>  Region in format: seqid:start-end [whole genome]   " << endl;
-  cerr << "  *       -x  <INT>     Number of CPUs to use [1 CPU].                 " << endl;
-  cerr << "          -m  <INT>     Mapping quality filter [20].                       " << endl;
-  cerr << "          -i  <STRING>  non standard split read tag [SA]                   " << endl;
-  cerr << "          -z  <FLAG>    Sample reads until success. [false]                " << endl;
+  cerr << " Optional:  Recommended flags are noted with : *                            " << endl;
+  cerr << "          -s  <FLAG>    Exits the program after the stats are               " << endl;
+  cerr << "                        gathered. [false]                                   " << endl;
+  cerr << "          -g  <STRING>  File to write graph to (very large output). [false] " << endl;
+  cerr << "  *|-c    -e  <STRING>  Comma sep. list of seqids to skip [false].          " << endl;
+  cerr << "  *|-e    -c  <STRING>  Comma sep. list of seqids to keep [false].          " << endl;
+  cerr << "          -r  <STRING>  Region in format: seqid:start-end [whole genome]    " << endl;
+  cerr << "  *       -x  <INT>     Number of CPUs to use [1 CPU].                      " << endl;
+  cerr << "          -m  <INT>     Mapping quality filter [20].                        " << endl;
+  cerr << "          -i  <STRING>  non standard split read tag [SA]                    " << endl;
+  cerr << "          -z  <FLAG>    Sample reads until success. [false]                 " << endl;
+  cerr << "          -d  <INT>     Minimum number of matching bases (both reads).[100] " << endl;
 
   cerr << endl;
   cerr << " Output:  " << endl;
-  cerr << "        STDERR: Run statistics and bam stats                               " << endl;
-  cerr << "        STOUT : SV calls in VCF                                            " << endl;
+  cerr << "        STDERR: Run statistics and bam stats                                " << endl;
+  cerr << "        STOUT : SV calls in VCF                                             " << endl;
   cerr << endl;
   cerr << " Details:  " << endl;
-  cerr << "        -z  <FLAG>    WHAM-GRAPHENING can fail if does not sample        " << endl;
-  cerr << "                      enough reads. This flag prevents WHAM-GRAPHENING   " << endl;
-  cerr << "                      from exiting. If your bam header has seqids not in " << endl;
-  cerr << "                      the bam (e.g. split by region) use -z.             " << endl;
-  cerr << "        -i  <STRING>  WHAM-GRAPHENING uses the optional bwa-mem SA tag.  " << endl;
-  cerr << "                      Older version of bwa-mem used XP.                  " << endl;
-  cerr << "     -e|-c  <STRING>  A list of seqids to include or exclude while       " << endl;
-  cerr << "                      sampling insert and depth.  For humans you should  " << endl;
-  cerr << "                      use the standard chromosomes 1,2,3...X,Y.          " << endl;
+  cerr << "        -z  <FLAG>    WHAM-GRAPHENING can fail if does not sample           " << endl;
+  cerr << "                      enough reads. This flag prevents whamg                " << endl;
+  cerr << "                      from exiting. If your bam header has seqids not in    " << endl;
+  cerr << "                      the bam (e.g. split by region) use -z.                " << endl;
+  cerr << "        -i  <STRING>  WHAM-GRAPHENING uses the optional bwa-mem SA tag.     " << endl;
+  cerr << "                      Older version of bwa-mem used XP.                     " << endl;
+  cerr << "     -e|-c  <STRING>  A list of seqids to include or exclude while          " << endl;
+  cerr << "                      sampling insert and depth.  For humans you should     " << endl;
+  cerr << "                      use the standard chromosomes 1,2,3...X,Y.             " << endl;
   cerr << endl;
 
   printVersion();
@@ -599,7 +601,7 @@ inline bool pairFailed(readPair * rp){
        && rp->al2.CigarData[0].Type == 'M' ){
         return true;
     }
-    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < 100){
+    if((match(rp->al1.CigarData) + match(rp->al2.CigarData)) < globalOpts.minPairMatch){
       return true;
     }
 
@@ -1254,6 +1256,12 @@ int parseOpts(int argc, char** argv)
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
+    case 'd':
+        {
+            globalOpts.minPairMatch = atoi(((string)optarg).c_str());
+            cerr << "INFO: whamg will keep read pairs with " << globalOpts.minPairMatch << " matching bases." << endl;
+            break;
+        }
     case 'i':
         {
             globalOpts.saT = optarg;
@@ -1371,7 +1379,12 @@ int parseOpts(int argc, char** argv)
                 exit(1);
             }
             break;
-      }
+        }
+    default:
+        {
+            cerr << "FATAL: unknown command line option" << endl;
+            exit(1);
+        }
     }
     opt = getopt( argc, argv, optString );
   }
@@ -2136,6 +2149,7 @@ int main( int argc, char** argv)
   globalOpts.lastSeqid    = 0    ;
   globalOpts.MQ           = 20   ;
   globalOpts.NM           = 10   ;
+  globalOpts.minPairMatch = 100  ;
   globalOpts.saT          = "SA" ;
   globalOpts.keepTrying   = false;
   globalOpts.statsOnly    = false;
