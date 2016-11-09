@@ -166,6 +166,7 @@ Whamg emits calls with a wide range of sizes; where larger and smaller events sh
 
 For a high coverage human genome (~ 50X), filtering calls with less than 5 supporting reads is wise.  Below is a plot of the total support for a joint called trio broken into high and low support bins.  Using a cutoff of 5 removes 20% of the calls (22,955/38,735 remain), which is reasonable given a joint called high coverage trio.
 
+![alt tag](https://github.com/zeeev/wham/blob/master/docs/whamg_total_support.png)
  
 
 #### Cross chromosomal mappings
