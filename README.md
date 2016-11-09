@@ -141,6 +141,64 @@ In this section, each INFO and FORMAT field will be covered. Here is an example 
 | DP | Depth. Currently, no depth is provided. |
 | SP | This is the number of reads in each individual that supports the exact breakpoint. Because of breakpoint variability, this number might be lower than expected. **Be cautious when filtering on SP.** |
 
+
+### Filtering
+
+To balance sensitivity and specificity it is wise to filter the raw whamg output.  Filtering always depends on your dataset;  i.e. high depth datasets should be treated differently than low depth datasets.  Similarly, joint calling/family calling should be filtered differently than individual level calling.  Here are some tricks to help guide you.  There are many different tools and strategies that will work for filtering, below are just a few ways you could filter whamg calls.
+
+ 
+
+The discussion below covers filtering a high coverage trio, but the concepts will be the same for a single genome.
+
+ 
+
+#### Size filtering
+
+ 
+
+Whamg emits calls with a wide range of sizes; where larger and smaller events should be subject to more scrutiny.  As a rough rule, we remove calls smaller than 50bp and larger than 2Mbs.  This will discard real calls, but will improve the overall accuracy.
+
+ 
+
+#### Total support (INFO field “A”)
+
+ 
+
+For a high coverage human genome (~ 50X), filtering calls with less than 5 supporting reads is wise.  Below is a plot of the total support for a joint called trio broken into high and low support bins.  Using a cutoff of 5 removes 20% of the calls (22,955/38,735 remain), which is reasonable given a joint called high coverage trio.
+
+ 
+
+#### Cross chromosomal mappings
+
+ 
+
+Whamg does not call BNDs/translocations, but it is aware of this type of evidence.  We filter out events that have high cross-chromosome mappings.  Pull out the “CW” info field shown below.  In it you will find, listed in order, the fraction of reads supporting  each SV Type.  Remove SVs that have a “BND CW” greater than 0.2.
+
+ 
+
+```
+
+##INFO=<ID=CW,Number=5,Type=Float,Description="SVTYPE weight 0-1; DEL,DUP,INV,INS,BND">
+
+```
+
+ 
+
+#### Low support across jointly called SVs
+
+ 
+
+For joint called variants, low support coming from each individual can sum up to moderate total support.  [We want to remove calls where no individual has significant support?] From the format field, shown below, pull out the “SP” field.  This enumerates the evidence in each individual.  We remove calls where none of the individuals reach an arbitrary level.  This filter is similar to the “Total support filter”
+
+ 
+
+```
+
+##FORMAT=<ID=SP,Number=1,Type=Integer,Description="Per sample SV support">
+
+
+
+
 ---
 
 ### wham
