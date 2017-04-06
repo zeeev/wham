@@ -1,4 +1,5 @@
-###wham
+### wham
+
 The wham suite consists of two programs, wham and whamg. wham, the original tool, is a very sensitive method with a high false discovery rate. The second program, whamg, is more accurate and better suited for general structural variant (SV) discovery.
 **For most studies, we strongly recommend using whamg**.
 
@@ -6,23 +7,23 @@ Below, we outline the basics of running whamg. **Important sections are highligh
 
  [![Build Status](https://travis-ci.org/zeeev/wham.svg?branch=master)](https://travis-ci.org/zeeev/wham)  [![Analytics](https://ga-beacon.appspot.com/UA-50580904-5/wham/blob/master/README.md)](https://github.com/zeeev/wham)  [![Code Climate](https://codeclimate.com/github/zeeev/wham/badges/gpa.svg)](https://codeclimate.com/github/zeeev/wham)
 
-###whamg workflow
+### whamg workflow
 
 ![alt tag](https://github.com/zeeev/wham/blob/master/docs/github-figure.png)
 
-###Installing whamg
+### Installing whamg
 
 whamg depends on ```CMake``` and ```OpenMP```.  These dependances are commonly preinstalled on various Linux distributions. The following command should install wham into your current working directory:
 ```
 git clone --recursive  https://github.com/zeeev/wham.git; cd wham; make 
 ```
 
-###Running whamg
+### Running whamg
 
 whamg uses paired alignments generated with BWA-MEM.  whamg uses the same BAMs as SNV and INDEL calling tools.  Duplicates should be marked or removed, and indel realignment is helpful.  whamg is agnostic regarding the BWA-MEM –M flag (if you don’t know what that means, don’t worry). **It is important that the –R flag in BWA-MEM is used.  whamg requires read-group information. Currently, whamg assumes one library per bam file.**
 
 
-####Example 1
+#### Example 1
 
 ```
 export EXCLUDE=GL000207.1,GL000226.1,GL000229.1,GL000231.1,GL000210.1,GL000239.1,GL000235.1,GL000201.1,GL000247.1,GL000245.1,GL000197.1,GL000203.1,GL000246.1,GL000249.1,GL000196.1,GL000248.1,GL000244.1,GL000238.1,GL000202.1,GL000234.1,GL000232.1,GL000206.1,GL000240.1,GL000236.1,GL000241.1,GL000243.1,GL000242.1,GL000230.1,GL000237.1,GL000233.1,GL000204.1,GL000198.1,GL000208.1,GL000191.1,GL000227.1,GL000228.1,GL000214.1,GL000221.1,GL000209.1,GL000218.1,GL000220.1,GL000213.1,GL000211.1,GL000199.1,GL000217.1,GL000216.1,GL000215.1,GL000205.1,GL000219.1,GL000224.1,GL000223.1,GL000195.1,GL000212.1,GL000222.1,GL000200.1,GL000193.1,GL000194.1,GL000225.1,GL000192.1,NC_007605
