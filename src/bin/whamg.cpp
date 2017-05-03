@@ -220,7 +220,7 @@ void printVCF(std::vector<breakpoint*> & bp){
     header << "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between REF and ALT alleles\">" << std::endl;
     header << "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">" << std::endl;
     header << "##INFO=<ID=T,Number=1,Type=Integer,Description=\"Number of reads supporting a BND\">" << std::endl;
-    header << "##INFO=<ID=TAGS,Number=.,Type=Integer,Description=\"SM tags with breakpoint support\">" << std::endl;
+    header << "##INFO=<ID=TAGS,Number=.,Type=String,Description=\"SM tags with breakpoint support\">" << std::endl;
     header << "##INFO=<ID=TF,Number=1,Type=Integer,Description=\"Number of reads mapped too far\">" << std::endl;
     header << "##INFO=<ID=U,Number=1,Type=Integer,Description=\"Number of reads supporting a duplication\">" << std::endl;
     header << "##INFO=<ID=V,Number=1,Type=Integer,Description=\"Number of reads supporting an inversion\">" << std::endl;
