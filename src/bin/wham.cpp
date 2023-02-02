@@ -2768,7 +2768,7 @@ int main(int argc, char** argv) {
 
   omp_init_lock(&lock);
 
-  srand((unsigned)time(NULL));
+  srand(10);
 
   globalOpts.nthreads = -1;
 
